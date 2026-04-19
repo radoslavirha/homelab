@@ -70,7 +70,7 @@ Follow the rules below, then verify each doc against the codebase.
 | Doc | What to update |
 |-----|----------------|
 | `AGENTS.md` | "Adding a new ArgoCD app" section if steps changed |
-| `docs/architecture.md` | Technology stack table: add row with component, "ArgoCD", and notes |
+| `docs/architecture.md` | Technology stack table: add/remove row with all seven columns — Component (linked), Purpose, Clusters, Managed by, Artifact Hub link (or `—`), Local values links for every cluster file, Upstream `values.yaml` link (or `—`). Use `—` for all chart columns if the app has no Helm chart. |
 
 ---
 

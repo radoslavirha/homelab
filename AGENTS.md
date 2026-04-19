@@ -80,9 +80,10 @@ To apply a version change: `cd iac/clusters/<cluster>/<stage> && terraform apply
 
 ### 2. ArgoCD-managed (GitOps)
 
-All other apps use the **app-of-apps** pattern with two stages per cluster:
+All other apps use the **app-of-apps** pattern with three stages per cluster:
 - **infra** stage: ESO + supporting K8s resources (ClusterSecretStore, OpenBao HTTPRoute)
 - **gateway** stage: Traefik + ExternalDNS + ExternalSecret for Unifi credentials
+- **ui** stage: Headlamp, Hubble UI, Longhorn UI
 
 Root Application CRDs live in `gitops/argocd-manifests/<cluster>/` as `RootInfra.yaml` / `RootGateway.yaml` / `RootUI.yaml`.
 They discover child Applications from `gitops/argocd-manifests/<cluster>/apps/<stage>/`.
@@ -102,8 +103,23 @@ Raw Kubernetes manifests live in `gitops/k8s-manifests/<cluster>/<app>/`.
 ## Version sync rules — MUST follow
 
 When changing any component version:
-1. Update the version in the relevant `iac/clusters/<cluster>/<stage>/main.tf` or Application CRD
-2. Update the `Upstream values.yaml` link if the component has one in a README table
+1. Update the version in the relevant `iac/clusters/<cluster>/<stage>/main.tf` or Application CRD (`targetRevision`)
+2. Review the diff between old and new upstream `values.yaml` against your local override files to catch removed or renamed keys
+
+## App documentation rules
+
+- Every app deployed in any cluster **must have a row** in the technology stack table in `docs/architecture.md`.
+- Every row must have: Purpose, Clusters (which clusters run it), Managed by, Artifact Hub link (or `—`), Local values links for every cluster-specific file that exists, and Upstream `values.yaml` link (or `—`).
+- If an app has no Helm chart (e.g. Gateway API CRDs, Hubble UI built into Cilium), use `—` for Artifact Hub, Local values, and Upstream columns.
+- If an app is removed from all clusters, remove its row from the table.
+- Apps with per-cluster helm overrides must list all local values files in one row as `shared · server3` or `server1 · server2 · server3`.
+
+## Upgrading a chart
+
+1. **ArgoCD-managed**: update `targetRevision` in the Application CRD under `gitops/argocd-manifests/<cluster>/apps/<stage>/<Name>.yaml`
+2. **Terraform-managed**: update the `*_version` variable in `iac/clusters/<cluster>/<stage>/main.tf`, then run `terraform apply -auto-approve`
+3. Review the diff between old and new upstream `values.yaml` against local override files to catch removed or renamed keys
+4. Upstream `values.yaml` links in `docs/architecture.md` point to the `main` branch — no link update needed on upgrade
 
 ## Vault
 
@@ -185,6 +201,7 @@ rm -rf / any deletion of credentials
 1. Create `gitops/argocd-manifests/server3/<Name>.yaml` — copy an existing Application as template, set `destination.server` for the target cluster
 2. Add helm values at `gitops/helm-values/<cluster>/<name>.yaml`
 3. Add raw manifests to `gitops/k8s-manifests/<cluster>/<name>/` if needed
+4. Add a row to the technology stack table in `docs/architecture.md` with all required columns (see App documentation rules above)
 
 ## State backend migration (MinIO)
 

@@ -12,22 +12,21 @@ Multi-cluster Kubernetes homelab: three Talos Linux nodes managed with a shared 
 
 ## Technology stack
 
-| Component | Managed by | Notes |
-|-----------|-----------|-------|
-| Talos Linux | Terraform bootstrap | All three clusters |
-| Cilium CNI | Terraform platform | kube-proxy replacement, Gateway API controller |
-| Gateway API CRDs | Terraform platform | Installed before Cilium |
-| Longhorn | Terraform platform | Single-replica on server3; multi-replica on server1 |
-| OpenBao | Terraform secrets (server3 only) | Central secrets backend for all clusters |
-| ArgoCD | Terraform apps (server3 only) | Installed on server3; manages workloads on all three clusters via registered external clusters |
-| External Secrets Operator | ArgoCD | Per cluster; ClusterSecretStore points to server3 OpenBao |
-| Traefik | ArgoCD (server3) | hostNetwork bare-metal ingress; Gateway API provider; externalIPs |
-| ExternalDNS | ArgoCD (server3) | Unifi webhook; sources: gateway-httproute, traefik-proxy, crd |
-| Headlamp | ArgoCD (server3) | Kubernetes dashboard UI; HTTPRoute headlamp.server3.home |
-| Hubble UI | ArgoCD (server3) | Cilium network observability UI; HTTPRoute hubble.server3.home |
-| Longhorn UI | ArgoCD (server3) | Longhorn storage dashboard; HTTPRoute longhorn.server3.home |
-| MinIO | ArgoCD (server3) | S3-compatible storage for Terraform state and Longhorn backups |
-| All other apps | ArgoCD | See gitops/argocd-manifests/<cluster>/ |
+| Component | Purpose | Clusters | Managed by | Artifact Hub | Local values | Upstream `values.yaml` |
+|-----------|---------|:--------:|------------|:------------:|-------------|------------------------|
+| [Talos Linux](https://www.talos.dev/) | Immutable Kubernetes OS | all | Terraform `bootstrap` | — | — | — |
+| [Cilium](https://docs.cilium.io/) | eBPF CNI, kube-proxy replacement, Hubble, Gateway API controller | all | Terraform `platform` | [cilium](https://artifacthub.io/packages/helm/cilium/cilium) | [shared](../iac/clusters/helm-values/cilium.yaml) · [server1](../iac/clusters/server1/helm-values/cilium.yaml) · [server2](../iac/clusters/server2/helm-values/cilium.yaml) · [server3](../iac/clusters/server3/helm-values/cilium.yaml) | [values.yaml](https://github.com/cilium/cilium/blob/main/install/kubernetes/cilium/values.yaml) |
+| [Gateway API](https://gateway-api.sigs.k8s.io/) | Standard Kubernetes ingress/routing CRDs; installed before Cilium | all | Terraform `platform` | — | — | — |
+| [Longhorn](https://longhorn.io/) | Distributed block storage | all | Terraform `platform` | [longhorn](https://artifacthub.io/packages/helm/longhorn/longhorn) | [shared](../iac/clusters/helm-values/longhorn.yaml) · [server1](../iac/clusters/server1/helm-values/longhorn.yaml) · [server2](../iac/clusters/server2/helm-values/longhorn.yaml) · [server3](../iac/clusters/server3/helm-values/longhorn.yaml) | [values.yaml](https://github.com/longhorn/longhorn/blob/master/chart/values.yaml) |
+| [OpenBao](https://openbao.org/) | Secrets management; central backend for all clusters | server3 | Terraform `vault` | [openbao](https://artifacthub.io/packages/helm/openbao/openbao) | [server3](../iac/clusters/server3/helm-values/openbao.yaml) | [values.yaml](https://github.com/openbao/openbao-helm/blob/main/charts/openbao/values.yaml) |
+| [ArgoCD](https://argoproj.github.io/cd/) | GitOps CD; manages workloads on all three clusters | server3 | Terraform `apps` | [argo-cd](https://artifacthub.io/packages/helm/argo/argo-cd) | [server3](../gitops/helm-values/server3/argocd.yaml) | [values.yaml](https://github.com/argoproj/argo-helm/blob/main/charts/argo-cd/values.yaml) |
+| [External Secrets Operator](https://external-secrets.io/) | Sync secrets from OpenBao; ClusterSecretStore per cluster | server3 | ArgoCD | [external-secrets](https://artifacthub.io/packages/helm/external-secrets-operator/external-secrets) | [shared](../gitops/helm-values/external-secrets.yaml) · [server3](../gitops/helm-values/server3/external-secrets.yaml) | [values.yaml](https://github.com/external-secrets/external-secrets/blob/main/deploy/charts/external-secrets/values.yaml) |
+| [Traefik](https://traefik.io/) | Ingress / Gateway API proxy; hostNetwork bare-metal LB | server3 | ArgoCD | [traefik](https://artifacthub.io/packages/helm/traefik/traefik) | [shared](../gitops/helm-values/traefik.yaml) · [server3](../gitops/helm-values/server3/traefik.yaml) | [values.yaml](https://github.com/traefik/traefik-helm-chart/blob/master/traefik/values.yaml) |
+| [ExternalDNS](https://kubernetes-sigs.github.io/external-dns/) | Automatic DNS via UniFi webhook; sources: gateway-httproute, traefik-proxy, crd | server3 | ArgoCD | [external-dns](https://artifacthub.io/packages/helm/external-dns/external-dns) | [shared](../gitops/helm-values/external-dns.yaml) · [server3](../gitops/helm-values/server3/external-dns.yaml) | [values.yaml](https://github.com/kubernetes-sigs/external-dns/blob/master/charts/external-dns/values.yaml) |
+| [Headlamp](https://headlamp.dev/) | Kubernetes web UI | server3 | ArgoCD | [headlamp](https://artifacthub.io/packages/helm/headlamp/headlamp) | [shared](../gitops/helm-values/headlamp.yaml) · [server3](../gitops/helm-values/server3/headlamp.yaml) | [values.yaml](https://github.com/kubernetes-sigs/headlamp/blob/main/charts/headlamp/values.yaml) |
+| [Hubble UI](https://docs.cilium.io/en/stable/observability/hubble/) | Cilium network observability UI | server3 | ArgoCD | — | — | — |
+| [Longhorn UI](https://longhorn.io/) | Distributed storage dashboard | server3 | ArgoCD | — | — | — |
+| [MinIO](https://min.io/) | S3 storage for Terraform state and Longhorn backups | server3 | ArgoCD | — | — | — |
 
 ## Multi-cluster design decisions
 

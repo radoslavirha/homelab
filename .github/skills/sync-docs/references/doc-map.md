@@ -26,7 +26,7 @@ Maps each documentation section to its authoritative source so the agent knows e
 | Section | Source of Truth |
 |---------|----------------|
 | Cluster roles table (`Cluster / Machine / Role`) | Hardware is fixed; role assignments are design decisions |
-| Technology stack table (`Component / Managed by / Notes`) | Terraform stages in `iac/` + ArgoCD manifests in `gitops/argocd-manifests/` |
+| Technology stack table (`Component / Purpose / Clusters / Managed by / Artifact Hub / Local values / Upstream values.yaml`) | Terraform stages in `iac/` + ArgoCD manifests in `gitops/argocd-manifests/`; local values files in `iac/clusters/` (Terraform-managed) and `gitops/helm-values/` (ArgoCD-managed); upstream links point to chart repo `main` branch |
 | Bootstrap sequence diagram (ASCII boxes) | `docs/iac.md` bootstrap sequences — must stay in sync |
 | "ArgoCD hub-spoke" description | `gitops/argocd-manifests/server3/` — which clusters are registered |
 | "Secret management" — OpenBao KV path layout | `docs/iac.md` SOPS section + actual ESO manifests in `gitops/k8s-manifests/` |
