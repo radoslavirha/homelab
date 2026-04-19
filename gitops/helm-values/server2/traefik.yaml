@@ -1,0 +1,19 @@
+# Traefik — server2 cluster overrides
+# Shared base values: gitops/helm-values/traefik.yaml
+
+ingressRoute:
+  dashboard:
+    enabled: true
+    matchRule: "Host(`traefik.server2.home`) && (PathPrefix(`/dashboard`) || PathPrefix(`/api`))"
+    entryPoints: [web]
+    annotations:
+      external-dns.alpha.kubernetes.io/target: "192.168.1.201"
+
+service:
+  externalIPs:
+    - 192.168.1.201
+
+providers:
+  kubernetesGateway:
+    statusAddress:
+      ip: "192.168.1.201"

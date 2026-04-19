@@ -43,6 +43,11 @@ gitops/
       external-secrets.yaml  cluster-specific overrides (currently empty)
       headlamp.yaml          hostname: headlamp.server3.home
       traefik.yaml           dashboard, externalIPs, statusAddress.ip
+    server2/
+      external-dns.yaml      domainFilters, txtOwnerId
+      external-secrets.yaml  cluster-specific overrides (currently empty)
+      headlamp.yaml          hostname: headlamp.server2.home
+      traefik.yaml           dashboard, externalIPs, statusAddress.ip
   argocd-manifests/
     ArgoCD.yaml              ArgoCD self-management
     RootInfra.yaml           App-of-Apps → apps/infra/
@@ -63,6 +68,11 @@ gitops/
       external-secrets/    ClusterSecretStore → local OpenBao
       longhorn/            HTTPRoute: longhorn.server3.home → longhorn-frontend:80
       openbao/             HTTPRoute: vault.server3.home → openbao:8200
+    server2/
+      cilium/              HTTPRoute: hubble.server2.home → hubble-dashboard:80
+      external-dns/        ExternalSecret (unifi-credentials), DNSEndpoint (server2.home)
+      external-secrets/    ClusterSecretStore → OpenBao on server3 (via vault.server3.home)
+      longhorn/            HTTPRoute: longhorn.server2.home → longhorn-frontend:80
 ```
 
 Each `iac/clusters/<name>/<stage>/main.tf` contains:
@@ -233,12 +243,20 @@ bao kv put secret/<cluster>/external-dns api-key=<unifi-api-key>
 argocd cluster add <context-name> --name <cluster>
 argocd cluster list   # note the SERVER URL; matches clusterServer in ApplicationSet elements
 
-# 5. Add this cluster to each ApplicationSet's list generator.
-#    Start with infra only (ESO + ClusterSecretStore); add gateway/dashboards later.
-#    In gitops/argocd-manifests/apps/infra/ESO.yaml add under spec.generators[0].list.elements:
+# 5. Add this cluster to each ApplicationSet's list generator and commit + push.
+#    ArgoCD auto-generates Applications as each stage is added.
+#
+#    Infra (ESO + ClusterSecretStore) — gitops/argocd-manifests/apps/infra/ESO.yaml
+#    Gateway (Traefik + ExternalDNS)  — gitops/argocd-manifests/apps/gateway/Traefik.yaml
+#                                       gitops/argocd-manifests/apps/gateway/ExternalDNS.yaml
+#    Dashboards (Headlamp, Hubble, Longhorn UI)
+#                                     — gitops/argocd-manifests/apps/dashboards/*.yaml
+#
+#    Add under spec.generators[0].list.elements in each file:
 #      - cluster: <cluster>
 #        clusterServer: <server-url>  # from: argocd cluster list
-#    Commit and push — server3 ArgoCD auto-generates the ESO Application for this cluster.
+#
+#    Recommended order: infra first (wait for ClusterSecretStore Ready), then gateway, then dashboards.
 ```
 
 ## Module variable reference
