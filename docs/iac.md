@@ -77,8 +77,24 @@ export VAULT_ADDR=http://127.0.0.1:8200
 export VAULT_TOKEN=$(cat ~/.vault-token)   # set after: bao login <root-token>
 cd iac/clusters/server3/apps && terraform init && terraform apply -auto-approve
 
-# 5. Apply Root Application manifests
-kubectl apply -f gitops/argocd-manifests/server3/
+# 5. Apply ArgoCD self-management + infra stage
+kubectl apply -f gitops/argocd-manifests/ArgoCD.yaml
+kubectl apply -f gitops/argocd-manifests/server3/RootInfra.yaml
+# Wait for ESO + ClusterSecretStore to become ready before continuing:
+kubectl wait --for=condition=Ready clusterSecretStore/openbao -n external-secrets --timeout=120s
+
+# 5.a Seed secrets in OpenBao before applying the gateway stage.
+#     The ExternalDNS ExternalSecret will pull these on its first sync.
+#     OpenBao is not yet exposed via Traefik at this point — use port-forward.
+kubectl port-forward -n openbao svc/openbao 8200:8200 &
+export BAO_ADDR=http://127.0.0.1:8200
+bao login                                                            # enter root token
+bao kv put secret/server3/external-dns api-key=<unifi-api-key>
+# Verify: bao kv get secret/server3/external-dns
+
+# 6. Apply gateway stage
+kubectl apply -f gitops/argocd-manifests/server3/RootGateway.yaml
+# ArgoCD auto-syncs Traefik + ExternalDNS from that point on.
 ```
 
 ### Server1 / Server2 cluster (managed by server3 ArgoCD)
@@ -97,9 +113,17 @@ talosctl get disks -n 192.168.1.20X
 cd iac/clusters/<cluster>/platform && terraform init && terraform apply -auto-approve
 
 # 3. Register the cluster in server3 ArgoCD
-argocd cluster add <context-name>
+export KUBECONFIG=iac/clusters/<cluster>/credentials/kubeconfig
+argocd cluster add <context-name> --name <cluster>
+argocd cluster list   # note the SERVER URL; check destination.server in leaf Applications
 
-# 4. server3 ArgoCD deploys all apps (ESO → OpenBao, Traefik, ...)
+# 4. Store the cluster's ExternalDNS Unifi API key in OpenBao:
+bao kv put secret/<cluster>/external-dns api-key=<unifi-api-key>
+
+# 5. Apply Root Application manifests for this cluster
+kubectl apply -f gitops/argocd-manifests/<cluster>/RootInfra.yaml
+kubectl apply -f gitops/argocd-manifests/<cluster>/RootGateway.yaml
+# ArgoCD auto-syncs ESO + Traefik + ExternalDNS from that point on.
 ```
 
 ## Module variable reference

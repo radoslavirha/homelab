@@ -24,7 +24,7 @@ variable "argocd_vault_secret_path" {
 }
 
 # Raw YAML of the ArgoCD self-management Application manifest.
-# Pass: file("${path.root}/../../../gitops/argocd-manifests/server3/ArgoCD.yaml")
+# Pass: file("${path.root}/../../../gitops/argocd-manifests/ArgoCD.yaml")
 # Leave empty ("") to skip (only if the manifest does not exist yet).
 variable "argocd_self_manage_yaml" {
   type        = string

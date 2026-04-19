@@ -77,5 +77,5 @@ module "apps" {
 
   # ArgoCD self-management Application — ArgoCD will manage its own Helm release from git.
   # Chart version in this manifest must match argocd_chart_version above.
-  argocd_self_manage_yaml = file("${path.root}/../../../../gitops/argocd-manifests/server3/ArgoCD.yaml")
+  argocd_self_manage_yaml = file("${path.root}/../../../../gitops/argocd-manifests/ArgoCD.yaml")
 }

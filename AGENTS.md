@@ -18,15 +18,28 @@ iac/
     server3/      bootstrap/ platform/ vault/ apps/ helm-values/
 gitops/
   helm-values/
-    server1/      app helm value overrides
-    server2/      app helm value overrides
-    server3/      argocd.yaml (and future app overrides)
+    external-dns.yaml       shared: Unifi webhook provider, sources, policy
+    external-secrets.yaml   shared: installCRDs: true
+    traefik.yaml            shared: hostNetwork, Gateway API provider, listeners, bare-metal service
+    server1/      cluster overrides (empty until server1 is onboarded)
+    server3/
+      argocd.yaml           ArgoCD helm overrides
+      external-dns.yaml     domainFilters, txtOwnerId
+      external-secrets.yaml cluster-specific overrides (currently empty)
+      traefik.yaml          dashboard hostname/IP, externalIPs, statusAddress.ip
   argocd-manifests/
-    server3/      ArgoCD Application CRDs (targeting server3, server1, and server2)
+    ArgoCD.yaml             ArgoCD self-management (cluster-agnostic)
+    server3/
+      RootInfra.yaml        App-of-Apps → server3/apps/infra/
+      RootGateway.yaml      App-of-Apps → server3/apps/gateway/
+      apps/
+        infra/    ESO.yaml, OpenBaoRoute.yaml
+        gateway/  Traefik.yaml, ExternalDNS.yaml
   k8s-manifests/
-    server1/
-    server2/
-    server3/      HTTPRoutes, ExternalSecrets, ConfigMaps, etc.
+    server3/
+      external-dns/        ExternalSecret (unifi-credentials)
+      external-secrets/    ClusterSecretStore → local OpenBao
+      openbao/             HTTPRoute: vault.server3.home → openbao:8200
   shared/
     helm-charts/  Custom Helm charts used across clusters
 docs/             Architecture decisions, IaC guide, secrets guide
@@ -61,11 +74,22 @@ To apply a version change: `cd iac/clusters/<cluster>/<stage> && terraform apply
 
 ### 2. ArgoCD-managed (GitOps)
 
-All other apps. Each app has an Application CRD under `gitops/argocd-manifests/server3/`.
-`destination.server` in each Application selects which cluster the app deploys to.
+All other apps use the **app-of-apps** pattern with two stages per cluster:
+- **infra** stage: ESO + supporting K8s resources (ClusterSecretStore, OpenBao HTTPRoute)
+- **gateway** stage: Traefik + ExternalDNS + ExternalSecret for Unifi credentials
+
+Root Application CRDs live in `gitops/argocd-manifests/<cluster>/` as `RootInfra.yaml` / `RootGateway.yaml`.
+They discover child Applications from `gitops/argocd-manifests/<cluster>/apps/<stage>/`.
+`destination.server` in each leaf Application selects which cluster the workload deploys to.
 Version is `targetRevision` in that file. ArgoCD auto-syncs on commit.
 
-Helm values overrides live in `gitops/helm-values/<cluster>/<name>.yaml` and are referenced via `$values` multi-source in the Application manifest.
+`ArgoCD.yaml` (self-management) lives at `gitops/argocd-manifests/ArgoCD.yaml` — not under any cluster subdirectory.
+
+Helm values use a two-layer approach:
+- **Shared base**: `gitops/helm-values/<name>.yaml` — common across all clusters
+- **Cluster overrides**: `gitops/helm-values/<cluster>/<name>.yaml` — cluster-specific values (merged last, wins)
+
+Both files are listed in `valueFiles` in the Application manifest. Only add a cluster-specific file when there are actual overrides.
 
 Raw Kubernetes manifests live in `gitops/k8s-manifests/<cluster>/<app>/`.
 

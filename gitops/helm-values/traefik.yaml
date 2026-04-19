@@ -1,0 +1,56 @@
+# Traefik — shared Helm values (bare-metal, Gateway API, hostNetwork)
+# Upstream values.yaml: https://github.com/traefik/traefik-helm-chart/blob/master/traefik/values.yaml
+# Cluster-specific overrides (IPs, hostnames): gitops/helm-values/<cluster>/traefik.yaml
+
+hostNetwork: true
+
+# Required when hostNetwork: true so CoreDNS is still used for *.svc.cluster.local
+# Without this, the host's DNS resolver is used and cluster DNS names don't resolve.
+deployment:
+  dnsPolicy: ClusterFirstWithHostNet
+
+updateStrategy:
+  type: Recreate
+
+ports:
+  web:
+    port: 80
+  metrics: null
+
+api:
+  dashboard: true
+  insecure: true
+
+service:
+  # ClusterIP + externalIPs is the correct pattern for bare metal.
+  # LoadBalancer (default) waits for status.loadBalancer.ingress which a bare metal cluster
+  # never populates, causing ArgoCD to mark the Service as Progressing forever.
+  type: ClusterIP
+
+ingressClass:
+  enabled: false
+
+# Enable Gateway API Provider & disable KubernetesIngress provider.
+# Providers tell Traefik where to find routing configuration.
+providers:
+  kubernetesIngress:
+    enabled: false
+  kubernetesCRD:
+    enabled: true
+    # Watch all namespaces so Middleware CRDs can be referenced via HTTPRoute ExtensionRef.
+    namespaces: []
+  kubernetesGateway:
+    enabled: true
+
+# Gateway Listeners
+gateway:
+  listeners:
+    web:
+      port: 80
+      protocol: HTTP
+      namespacePolicy:
+        from: All
+
+logs:
+  general:
+    level: INFO

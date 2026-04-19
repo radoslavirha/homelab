@@ -1,0 +1,27 @@
+# Traefik — server3 cluster overrides
+# Shared base values: gitops/helm-values/traefik.yaml
+
+ingressRoute:
+  dashboard:
+    enabled: true
+    # Custom match rule with Host() so external-dns traefik-proxy source can extract the hostname.
+    # The default rule only has PathPrefix, which gives external-dns nothing to work with.
+    matchRule: "Host(`traefik.server3.home`) && (PathPrefix(`/dashboard`) || PathPrefix(`/api`))"
+    entryPoints: [web]
+    annotations:
+      # traefik-proxy source resolves target from status.loadBalancer.ingress by default.
+      # Since the Traefik Service is ClusterIP (no LB), that is always empty.
+      # Provide the target IP explicitly so external-dns can create the A record.
+      external-dns.alpha.kubernetes.io/target: "192.168.1.202"
+
+service:
+  externalIPs:
+    - 192.168.1.202
+
+providers:
+  kubernetesGateway:
+    statusAddress:
+      # The Traefik Service uses externalIPs (not LoadBalancer), so status.loadBalancer is empty
+      # and statusAddress.service would never populate Gateway status.addresses.
+      # Use a static IP instead so external-dns can resolve HTTPRoute target addresses.
+      ip: "192.168.1.202"
