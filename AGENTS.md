@@ -77,8 +77,9 @@ When changing any component version:
 
 ## Vault
 
-Only the server3 cluster has `iac/clusters/server3/vault/argocd.sops.yaml` (SOPS-encrypted, gitignored).
-App vault are stored in OpenBao (running on the server3 cluster) and synced via External Secrets Operator.
+OpenBao is deployed via `iac/clusters/server3/vault/` (Terraform-managed, server3 only).
+App secrets are stored in OpenBao and synced to all clusters via External Secrets Operator.
+After `terraform apply`, run the init ceremony manually (see `iac/clusters/server3/vault/main.tf` header).
 See [docs/secrets.md](docs/secrets.md) once that file is created.
 
 ## Credentials

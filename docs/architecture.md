@@ -22,7 +22,7 @@ Multi-cluster Kubernetes homelab: three Talos Linux nodes managed with a shared 
 | ArgoCD | Terraform apps (server3 only) | Installed on server3; manages workloads on all three clusters via registered external clusters |
 | External Secrets Operator | ArgoCD | Per cluster; ClusterSecretStore points to server3 OpenBao |
 | MinIO | ArgoCD (server3) | S3-compatible storage for Terraform state and Longhorn backups |
-| All other apps | ArgoCD | See gitops/clusters/<cluster>/argocd-manifests/ |
+| All other apps | ArgoCD | See gitops/argocd-manifests/<cluster>/ |
 
 ## Multi-cluster design decisions
 
@@ -70,7 +70,7 @@ MinIO is the intended S3-compatible backend for Terraform state. But MinIO itsel
 │                                                                         │
 │  1. terraform bootstrap  → Talos cluster + credentials                  │
 │  2. terraform platform   → Cilium + Longhorn + Gateway API              │
-│  3. terraform secrets    → OpenBao                                      │
+│  3. terraform vault      → OpenBao                                      │
 │     [manual: OpenBao init ceremony, unseal, KV path setup]              │
 │  4. terraform apps       → ArgoCD                                       │
 │     [manual: create sops-age-key Secret in argocd namespace]            │

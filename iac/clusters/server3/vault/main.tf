@@ -3,13 +3,15 @@
 # Run after platform, before apps.
 #
 # After apply, run the init ceremony manually:
-#   kubectl exec -n openbao openbao-0 -- bao operator init   # save keys + root token
-#   kubectl exec -n openbao openbao-0 -- bao operator unseal  # repeat 3×
+#   kubectl exec -n openbao openbao-0 -- bao operator init   # save unseal keys + root token
+#   kubectl exec -n openbao openbao-0 -- bao operator unseal <key>  # repeat 3× with different keys
+#   kubectl port-forward -n openbao svc/openbao 8200:8200 &
+#   export BAO_ADDR=http://127.0.0.1:8200
 #   bao login <root-token>
 #   bao secrets enable -path=secret kv-v2
 #
 # Usage:
-#   cd iac/clusters/server3/secrets
+#   cd iac/clusters/server3/vault
 #   terraform init && terraform apply
 
 terraform {
@@ -26,7 +28,7 @@ provider "helm" {
 }
 
 module "secrets" {
-  source = "../../../modules/secrets"
+  source = "../../../modules/vault"
 
   kubeconfig_path = "${path.root}/../credentials/kubeconfig"
 

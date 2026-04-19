@@ -3,6 +3,17 @@
 Terraform manages three stages for the **server3** cluster and two stages for **server1** and **server2**.
 Shared logic lives in `iac/modules/`; cluster-specific values are inlined in `iac/clusters/<cluster>/<stage>/main.tf`.
 
+## Prerequisites
+
+```bash
+brew install terraform
+brew install kubectl
+brew install siderolabs/tap/talosctl
+brew install argoproj/tap/argocd
+brew install openbao        # bao CLI — for OpenBao (server3 secrets backend)
+brew install helm
+```
+
 ## Directory structure
 
 ```
@@ -44,7 +55,20 @@ cd iac/clusters/server3/platform && terraform init && terraform apply -auto-appr
 
 # 3. OpenBao
 cd iac/clusters/server3/vault && terraform init && terraform apply -auto-approve
-# [manual: OpenBao init ceremony, unseal, KV path setup]
+
+# 3.a Init (run once — save the unseal keys and root token somewhere safe)
+kubectl exec -n openbao openbao-0 -- bao operator init
+
+# 3.b Unseal (repeat with 3 different unseal keys from the init output)
+kubectl exec -n openbao openbao-0 -- bao operator unseal <unseal-key-1>
+kubectl exec -n openbao openbao-0 -- bao operator unseal <unseal-key-2>
+kubectl exec -n openbao openbao-0 -- bao operator unseal <unseal-key-3>
+
+# 3.c Login and configure KV engine (port-forward required for local bao CLI)
+kubectl port-forward -n openbao svc/openbao 8200:8200--kubeconfig iac/clusters/server3/credentials/kubeconfig &
+export BAO_ADDR=http://127.0.0.1:8200
+bao login <root-token>
+bao secrets enable -path=secret kv-v2
 
 # 4. ArgoCD install
 cd iac/clusters/server3/apps && terraform init && terraform apply -auto-approve
@@ -112,6 +136,16 @@ Outputs: `kubeconfig_path`, `talosconfig_path`, `cluster_endpoint`, `controlplan
 
 Outputs: `cilium_version`, `longhorn_version`
 
+### modules/vault
+
+| Variable | Type | Description |
+|----------|------|-------------|
+| `kubeconfig_path` | string | Absolute path to kubeconfig |
+| `openbao_version` | string | OpenBao Helm chart version |
+| `openbao_values` | string | OpenBao Helm values content (`file(...)`) |
+
+Outputs: `openbao_version`
+
 ### modules/apps
 
 | Variable | Type | Default | Description |
@@ -124,14 +158,14 @@ Outputs: `cilium_version`, `longhorn_version`
 
 ## SOPS secrets file format
 
-Only server3 needs `iac/clusters/server3/secrets/argocd.sops.yaml` (gitignored, SOPS-encrypted with age). Server1 and server2 do not run ArgoCD.
+Only server3 needs `iac/clusters/server3/apps/argocd.sops.yaml` (gitignored, SOPS-encrypted with age). Server1 and server2 do not run ArgoCD.
 
 Plaintext structure before encryption:
 ```yaml
 adminPassword: "your-plaintext-password"
 ```
 
-Encrypt: `sops --encrypt --in-place iac/clusters/server3/secrets/argocd.sops.yaml`
+Encrypt: `sops --encrypt --in-place iac/clusters/server3/apps/argocd.sops.yaml`
 
 ## Helm values for Terraform-managed components
 
@@ -176,6 +210,9 @@ terraform init -migrate-state
 # Accept the confirmation prompt — state is copied to MinIO
 
 cd iac/clusters/server3/platform
+terraform init -migrate-state
+
+cd iac/clusters/server3/vault
 terraform init -migrate-state
 
 cd iac/clusters/server3/apps
