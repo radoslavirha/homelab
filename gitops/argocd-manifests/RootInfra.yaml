@@ -5,7 +5,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: root-infra-server3
+  name: root-infra
   namespace: argocd
 spec:
   project: default

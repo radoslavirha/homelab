@@ -5,7 +5,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: root-gateway-server3
+  name: root-gateway
   namespace: argocd
 spec:
   project: default
