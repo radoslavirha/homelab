@@ -1,0 +1,30 @@
+# ArgoCD self-management Application.
+# Terraform applies this once; ArgoCD owns it from then on.
+# To upgrade ArgoCD: update targetRevision below and commit — ArgoCD self-heals.
+#
+# Chart version must match argocd_chart_version in iac/clusters/server3/apps/main.tf.
+# Check latest: helm search repo argo/argo-cd --versions
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: argocd
+  namespace: argocd
+spec:
+  project: default
+  sources:
+    - repoURL: https://argoproj.github.io/argo-helm
+      chart: argo-cd
+      targetRevision: "9.5.2"
+      helm:
+        valueFiles:
+          - $values/gitops/helm-values/server3/argocd.yaml
+    - repoURL: https://github.com/radoslavirha/homelab
+      targetRevision: HEAD
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

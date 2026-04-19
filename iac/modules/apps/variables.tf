@@ -13,19 +13,19 @@ variable "argocd_values" {
   description = "Contents of the ArgoCD Helm values override file. Use file() in the cluster instance."
 }
 
-# Path to the SOPS-encrypted YAML file containing the ArgoCD admin password.
-# The cluster instance should pass an absolute path, e.g. path.root + "/../secrets/argocd.sops.yaml".
-# File must exist at iac/clusters/<cluster>/secrets/argocd.sops.yaml (gitignored).
-# See docs/iac.md for the secret layout.
-variable "sops_secrets_file" {
+# OpenBao KV v2 path (under the "secret" mount) that holds the ArgoCD admin credential.
+# The secret must contain a field named "adminPasswordHash" — a pre-computed bcrypt hash.
+# Store with: bao kv put secret/argocd adminPasswordHash='$2a$10$...'
+# Generate:   python3 -c "import bcrypt; print(bcrypt.hashpw(b'PASSWORD', bcrypt.gensalt()).decode())"
+variable "argocd_vault_secret_path" {
   type        = string
-  description = "Path to the SOPS-encrypted ArgoCD secrets file."
+  description = "OpenBao KV v2 path (mount=secret) containing adminPasswordHash for ArgoCD. Use cluster-scoped paths, e.g. server3/argocd."
+  default     = "argocd"
 }
 
 # Raw YAML of the ArgoCD self-management Application manifest.
-# After the gitops/ directory is populated, pass the file contents:
-#   file("<path.root>/../../../../gitops/clusters/<cluster>/argocd-manifests/ArgoCD.yaml")
-# Leave empty ("") to skip creating the self-management resource (e.g. during initial setup).
+# Pass: file("${path.root}/../../../gitops/argocd-manifests/server3/ArgoCD.yaml")
+# Leave empty ("") to skip (only if the manifest does not exist yet).
 variable "argocd_self_manage_yaml" {
   type        = string
   description = "Raw YAML of the ArgoCD Application that makes ArgoCD manage itself. Empty string skips the resource."

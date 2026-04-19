@@ -6,9 +6,9 @@ terraform {
       source  = "hashicorp/helm"
       version = "3.1.1"
     }
-    sops = {
-      source  = "carlpett/sops"
-      version = "~> 1.1"
+    vault = {
+      source  = "hashicorp/vault"
+      version = "~> 4.0"
     }
     kubectl = {
       source  = "gavinbunney/kubectl"

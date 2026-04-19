@@ -1,5 +1,8 @@
-data "sops_file" "argocd" {
-  source_file = var.sops_secrets_file
+# Read the pre-computed bcrypt hash from OpenBao.
+# Requires VAULT_ADDR and VAULT_TOKEN (or ~/.vault-token) to be set.
+data "vault_kv_secret_v2" "argocd" {
+  mount = "secret"
+  name  = var.argocd_vault_secret_path
 }
 
 # Create the namespace explicitly so the argocd-secret can be provisioned before Helm runs.
@@ -10,13 +13,11 @@ resource "kubernetes_namespace" "argocd" {
 }
 
 # Create argocd-secret directly so Helm skips it (configs.secret.createSecret: false).
+# ArgoCD requires admin.password to be a bcrypt hash — the hash is stored pre-computed
+# in OpenBao to avoid re-hashing (with a new random salt) on every terraform apply.
 #
-# ESO handoff: once ESO is fully operational, delete this Terraform resource and let
-# an ExternalSecret sync argocd-secret from OpenBao instead.
-#
-# Note: bcrypt() is non-deterministic (random salt each call), so every `terraform apply`
-# recomputes the hash and triggers a secret update. To avoid churn, pre-compute the hash
-# and store adminPasswordHash in the SOPS file, then reference it directly here.
+# ESO handoff: once ESO is fully operational, delete this resource and let an
+# ExternalSecret sync argocd-secret from OpenBao instead.
 resource "kubernetes_secret" "argocd" {
   metadata {
     name      = "argocd-secret"
@@ -28,7 +29,7 @@ resource "kubernetes_secret" "argocd" {
   }
 
   data = {
-    "admin.password"      = bcrypt(data.sops_file.argocd.data["adminPassword"])
+    "admin.password"      = data.vault_kv_secret_v2.argocd.data["adminPasswordHash"]
     "admin.passwordMtime" = "2026-04-07T00:00:00Z"
   }
 }

@@ -65,21 +65,20 @@ kubectl exec -n openbao openbao-0 -- bao operator unseal <unseal-key-2>
 kubectl exec -n openbao openbao-0 -- bao operator unseal <unseal-key-3>
 
 # 3.c Login and configure KV engine (port-forward required for local bao CLI)
-kubectl port-forward -n openbao svc/openbao 8200:8200--kubeconfig iac/clusters/server3/credentials/kubeconfig &
+kubectl port-forward -n openbao svc/openbao 8200:8200
 export BAO_ADDR=http://127.0.0.1:8200
 bao login <root-token>
 bao secrets enable -path=secret kv-v2
 
 # 4. ArgoCD install
+# Prerequisites: OpenBao port-forward must be running and vault credentials exported.
+kubectl port-forward -n openbao svc/openbao 8200:8200
+export VAULT_ADDR=http://127.0.0.1:8200
+export VAULT_TOKEN=$(cat ~/.vault-token)   # set after: bao login <root-token>
 cd iac/clusters/server3/apps && terraform init && terraform apply -auto-approve
-# [manual: create sops-age-key Secret in argocd namespace]
-kubectl -n argocd create secret generic sops-age-key \
-  --from-file=keys.txt=~/.config/sops/age/keys.txt \
-  --kubeconfig iac/clusters/server3/credentials/kubeconfig
 
 # 5. Apply Root Application manifests
-kubectl apply -f gitops/argocd-manifests/server3/ \
-  --kubeconfig iac/clusters/server3/credentials/kubeconfig
+kubectl apply -f gitops/argocd-manifests/server3/
 ```
 
 ### Server1 / Server2 cluster (managed by server3 ArgoCD)
@@ -98,7 +97,7 @@ talosctl get disks -n 192.168.1.20X
 cd iac/clusters/<cluster>/platform && terraform init && terraform apply -auto-approve
 
 # 3. Register the cluster in server3 ArgoCD
-argocd cluster add <context-name> --kubeconfig iac/clusters/server3/credentials/kubeconfig
+argocd cluster add <context-name>
 
 # 4. server3 ArgoCD deploys all apps (ESO → OpenBao, Traefik, ...)
 ```
@@ -153,19 +152,27 @@ Outputs: `openbao_version`
 | `kubeconfig_path` | string | — | Absolute path to kubeconfig |
 | `argocd_chart_version` | string | — | argo-cd chart version |
 | `argocd_values` | string | — | ArgoCD Helm values content (`file(...)`) |
-| `sops_secrets_file` | string | — | Path to SOPS-encrypted `argocd.sops.yaml` |
+| `argocd_vault_secret_path` | string | `"argocd"` | OpenBao KV v2 path (mount `secret`) holding `adminPasswordHash`. Use cluster-scoped paths, e.g. `server3/argocd` |
 | `argocd_self_manage_yaml` | string | `""` | ArgoCD.yaml manifest content; empty = skip |
 
-## SOPS secrets file format
+Outputs: none
 
-Only server3 needs `iac/clusters/server3/apps/argocd.sops.yaml` (gitignored, SOPS-encrypted with age). Server1 and server2 do not run ArgoCD.
+## ArgoCD admin credential in OpenBao
 
-Plaintext structure before encryption:
-```yaml
-adminPassword: "your-plaintext-password"
+The ArgoCD admin password is stored as a pre-computed bcrypt hash in OpenBao. This avoids
+plaintext in Terraform state and prevents re-hashing (new salt) on every `terraform apply`.
+
+```bash
+# 1. Generate bcrypt hash of your chosen password (htpasswd ships with macOS)
+htpasswd -bnBC 10 "" YOUR_PASSWORD | tr -d ':\n'
+
+# 2. Store in OpenBao (port-forward must be running)
+export BAO_ADDR=http://127.0.0.1:8200
+bao kv put secret/server3/argocd adminPasswordHash='$2a$10$...'
 ```
 
-Encrypt: `sops --encrypt --in-place iac/clusters/server3/apps/argocd.sops.yaml`
+Note: bcrypt is an ArgoCD requirement — `argocd-secret` must contain a bcrypt hash.
+All other app secrets in OpenBao are stored as plaintext.
 
 ## Helm values for Terraform-managed components
 
