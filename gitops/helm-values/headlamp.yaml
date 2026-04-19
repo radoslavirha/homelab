@@ -1,0 +1,14 @@
+# Headlamp — shared Helm values
+# Upstream values.yaml: https://github.com/kubernetes-sigs/headlamp/blob/main/charts/headlamp/values.yaml
+
+# Use native HTTPRoute instead of Ingress for consistency with the Gateway API stack.
+# external-dns watches gateway-httproute source and will auto-create the DNS record.
+httpRoute:
+  enabled: true
+  parentRefs:
+    - name: traefik-gateway
+      namespace: traefik
+
+# Default clusterRoleName is cluster-admin — full access needed for a cluster management UI.
+clusterRoleBinding:
+  clusterRoleName: cluster-admin

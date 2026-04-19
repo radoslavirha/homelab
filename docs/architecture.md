@@ -21,6 +21,11 @@ Multi-cluster Kubernetes homelab: three Talos Linux nodes managed with a shared 
 | OpenBao | Terraform secrets (server3 only) | Central secrets backend for all clusters |
 | ArgoCD | Terraform apps (server3 only) | Installed on server3; manages workloads on all three clusters via registered external clusters |
 | External Secrets Operator | ArgoCD | Per cluster; ClusterSecretStore points to server3 OpenBao |
+| Traefik | ArgoCD (server3) | hostNetwork bare-metal ingress; Gateway API provider; externalIPs |
+| ExternalDNS | ArgoCD (server3) | Unifi webhook; sources: gateway-httproute, traefik-proxy, crd |
+| Headlamp | ArgoCD (server3) | Kubernetes dashboard UI; HTTPRoute headlamp.server3.home |
+| Hubble UI | ArgoCD (server3) | Cilium network observability UI; HTTPRoute hubble.server3.home |
+| Longhorn UI | ArgoCD (server3) | Longhorn storage dashboard; HTTPRoute longhorn.server3.home |
 | MinIO | ArgoCD (server3) | S3-compatible storage for Terraform state and Longhorn backups |
 | All other apps | ArgoCD | See gitops/argocd-manifests/<cluster>/ |
 

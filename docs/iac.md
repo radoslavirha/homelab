@@ -29,6 +29,34 @@ iac/
     server1/            bootstrap/ platform/ helm-values/
     server2/            bootstrap/ platform/ helm-values/
     server3/            bootstrap/ platform/ vault/ apps/ helm-values/
+gitops/
+  helm-values/
+    external-dns.yaml        shared: Unifi webhook, sources (gateway-httproute, traefik-proxy, crd)
+    external-secrets.yaml    shared: installCRDs: true
+    headlamp.yaml            shared: httpRoute + clusterRoleBinding
+    traefik.yaml             shared: hostNetwork, Gateway API, bare-metal service
+    server3/
+      argocd.yaml            ArgoCD Helm overrides
+      external-dns.yaml      domainFilters, txtOwnerId
+      headlamp.yaml          hostname: headlamp.server3.home
+      traefik.yaml           dashboard, externalIPs, statusAddress.ip
+  argocd-manifests/
+    ArgoCD.yaml              ArgoCD self-management
+    server3/
+      RootInfra.yaml         App-of-Apps → apps/infra/
+      RootGateway.yaml       App-of-Apps → apps/gateway/
+      RootUI.yaml            App-of-Apps → apps/ui/
+      apps/
+        infra/    ESO.yaml, OpenBaoRoute.yaml
+        gateway/  Traefik.yaml, ExternalDNS.yaml
+        ui/       Headlamp.yaml, Hubble.yaml, LonghornUI.yaml
+  k8s-manifests/
+    server3/
+      cilium/              HTTPRoute: hubble.server3.home → hubble-ui:80
+      external-dns/        ExternalSecret (unifi-credentials), DNSEndpoint (server3.home)
+      external-secrets/    ClusterSecretStore → local OpenBao
+      longhorn/            HTTPRoute: longhorn.server3.home → longhorn-frontend:80
+      openbao/             HTTPRoute: vault.server3.home → openbao:8200
 ```
 
 Each `iac/clusters/<name>/<stage>/main.tf` contains:
@@ -112,6 +140,10 @@ bao kv put secret/server3/external-dns api-key=<unifi-api-key>
 # 6. Apply gateway stage
 kubectl apply -f gitops/argocd-manifests/server3/RootGateway.yaml
 # ArgoCD auto-syncs Traefik + ExternalDNS from that point on.
+
+# 7. Apply UI stage (Headlamp, Hubble, Longhorn UI)
+kubectl apply -f gitops/argocd-manifests/server3/RootUI.yaml
+# ArgoCD auto-syncs UI apps from that point on.
 ```
 
 ### Server1 / Server2 cluster (managed by server3 ArgoCD)
