@@ -106,8 +106,8 @@ bao secrets enable -path=secret kv-v2
 
 # 3.d Configure Kubernetes auth (required by ESO ClusterSecretStore)
 #     Continue in the same port-forward session — bao login already persisted the token.
-bao auth enable kubernetes
-bao write auth/kubernetes/config kubernetes_host="https://kubernetes.default.svc:443"
+bao auth enable -path=kubernetes-server3 kubernetes
+bao write auth/kubernetes-server3/config kubernetes_host="https://kubernetes.default.svc:443"
 
 # Policy: read-only access to all KV v2 secrets
 bao policy write read-secrets - <<'EOF'
@@ -115,7 +115,7 @@ path "secret/data/*" { capabilities = ["read"] }
 EOF
 
 # Role: bind the ESO ServiceAccount to the policy
-bao write auth/kubernetes/role/external-secrets \
+bao write auth/kubernetes-server3/role/external-secrets \
   bound_service_account_names=external-secrets \
   bound_service_account_namespaces=external-secrets \
   policies=read-secrets \
