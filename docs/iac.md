@@ -172,20 +172,45 @@ talosctl get disks -n 192.168.1.20X
 # 2. Gateway API CRDs + Cilium + Longhorn
 cd iac/clusters/<cluster>/platform && terraform init && terraform apply -auto-approve
 
-# 3. Register the cluster in server3 ArgoCD
+# 3. Configure OpenBao to trust this cluster (run on your local machine with port-forward active)
+#    OpenBao is on server3 — port-forward if not yet reachable via vault.server3.home.
+export BAO_ADDR=http://127.0.0.1:8200   # or http://vault.server3.home if Traefik is up
+bao login <root-token>
+
+#    Get the cluster's Kubernetes CA cert:
+SERVER2_CA=$(kubectl --kubeconfig iac/clusters/<cluster>/credentials/kubeconfig \
+  get configmap kube-root-ca.crt -n kube-system -o jsonpath='{.data.ca\.crt}')
+
+#    Enable a dedicated Kubernetes auth mount (one per cluster — never reuse):
+bao auth enable -path=kubernetes-<cluster> kubernetes
+bao write auth/kubernetes-<cluster>/config \
+  kubernetes_host="https://<controlplane-ip>:6443" \
+  kubernetes_ca_cert="$SERVER2_CA"
+
+#    Create a policy scoped to this cluster's secrets only:
+bao policy write <cluster>-external-secrets - <<'EOF'
+path "secret/data/<cluster>/*"     { capabilities = ["read"] }
+path "secret/metadata/<cluster>/*" { capabilities = ["read", "list"] }
+EOF
+
+#    Bind the ESO ServiceAccount to the policy:
+bao write auth/kubernetes-<cluster>/role/external-secrets \
+  bound_service_account_names=external-secrets \
+  bound_service_account_namespaces=external-secrets \
+  policies=<cluster>-external-secrets \
+  ttl=1h
+
+# 4. Register the cluster in server3 ArgoCD
 export KUBECONFIG=iac/clusters/<cluster>/credentials/kubeconfig
 argocd cluster add <context-name> --name <cluster>
-argocd cluster list   # note the SERVER URL; check destination.server in leaf Applications
-
-# 4. Store the cluster's ExternalDNS Unifi API key in OpenBao:
-bao kv put secret/<cluster>/external-dns api-key=<unifi-api-key>
+argocd cluster list   # note the SERVER URL; matches clusterServer in ApplicationSet elements
 
 # 5. Add this cluster to each ApplicationSet's list generator.
-#    In each file under gitops/argocd-manifests/apps/infra/,
-#    apps/gateway/, and apps/dashboards/, add under spec.generators[0].list.elements:
+#    Start with infra only (ESO + ClusterSecretStore); add gateway/dashboards later.
+#    In gitops/argocd-manifests/apps/infra/ESO.yaml add under spec.generators[0].list.elements:
 #      - cluster: <cluster>
 #        clusterServer: <server-url>  # from: argocd cluster list
-#    Commit and push — server3 ArgoCD auto-generates all Applications for this cluster.
+#    Commit and push — server3 ArgoCD auto-generates the ESO Application for this cluster.
 ```
 
 ## Module variable reference
