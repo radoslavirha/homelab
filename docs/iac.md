@@ -172,20 +172,44 @@ talosctl get disks -n 192.168.1.20X
 # 2. Gateway API CRDs + Cilium + Longhorn
 cd iac/clusters/<cluster>/platform && terraform init && terraform apply -auto-approve
 
-# 3. Configure OpenBao to trust this cluster (run on your local machine with port-forward active)
-#    OpenBao is on server3 — port-forward if not yet reachable via vault.server3.home.
-export BAO_ADDR=http://127.0.0.1:8200   # or http://vault.server3.home if Traefik is up
+# Switch kubectl context to the new cluster for all steps below:
+kubectl config use-context <cluster>
+
+# 3. Configure OpenBao to trust this cluster
+#    OpenBao runs on server3 and is a REMOTE cluster from the perspective of the new cluster.
+#    It needs a token reviewer JWT from the new cluster to validate ESO service account tokens
+#    via the TokenReview API — without it, all logins return 403 permission denied.
+
+#    3.a Create a token reviewer ServiceAccount on the NEW cluster:
+kubectl create serviceaccount openbao-token-reviewer -n kube-system
+kubectl create clusterrolebinding openbao-token-reviewer \
+  --clusterrole=system:auth-delegator \
+  --serviceaccount=kube-system:openbao-token-reviewer
+kubectl apply -f - <<'EOF'
+apiVersion: v1
+kind: Secret
+metadata:
+  name: openbao-token-reviewer
+  namespace: kube-system
+  annotations:
+    kubernetes.io/service-account.name: openbao-token-reviewer
+type: kubernetes.io/service-account-token
+EOF
+REVIEWER_JWT=$(kubectl get secret openbao-token-reviewer -n kube-system \
+  -o jsonpath='{.data.token}' | base64 -d)
+
+#    3.b Configure OpenBao (switch to server3 context):
+export BAO_ADDR=http://vault.server3.home   # or port-forward: http://127.0.0.1:8200
 bao login <root-token>
 
-#    Get the cluster's Kubernetes CA cert:
-SERVER2_CA=$(kubectl --kubeconfig iac/clusters/<cluster>/credentials/kubeconfig \
-  get configmap kube-root-ca.crt -n kube-system -o jsonpath='{.data.ca\.crt}')
+CLUSTER_CA=$(kubectl get configmap kube-root-ca.crt -n kube-system -o jsonpath='{.data.ca\.crt}')
 
 #    Enable a dedicated Kubernetes auth mount (one per cluster — never reuse):
 bao auth enable -path=kubernetes-<cluster> kubernetes
 bao write auth/kubernetes-<cluster>/config \
   kubernetes_host="https://<controlplane-ip>:6443" \
-  kubernetes_ca_cert="$SERVER2_CA"
+  kubernetes_ca_cert="$CLUSTER_CA" \
+  token_reviewer_jwt="$REVIEWER_JWT"
 
 #    Create a policy scoped to this cluster's secrets only:
 bao policy write <cluster>-external-secrets - <<'EOF'
@@ -205,7 +229,7 @@ bao kv put secret/<cluster>/external-dns api-key=<unifi-api-key>
 # Verify: bao kv get secret/<cluster>/external-dns
 
 # 4. Register the cluster in server3 ArgoCD
-export KUBECONFIG=iac/clusters/<cluster>/credentials/kubeconfig
+#    Context must still be set to <cluster> (set above)
 argocd cluster add <context-name> --name <cluster>
 argocd cluster list   # note the SERVER URL; matches clusterServer in ApplicationSet elements
 
