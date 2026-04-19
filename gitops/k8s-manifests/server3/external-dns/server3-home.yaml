@@ -1,0 +1,15 @@
+# Bare A record for server3.home → 192.168.1.202
+# External services reference server3.home directly and specify their own port,
+# so no HTTPRoute or IngressRoute is needed for this entry.
+apiVersion: externaldns.k8s.io/v1alpha1
+kind: DNSEndpoint
+metadata:
+  name: server3-home
+  namespace: external-dns
+spec:
+  endpoints:
+    - dnsName: server3.home
+      recordType: A
+      recordTTL: 180
+      targets:
+        - 192.168.1.202

@@ -30,12 +30,14 @@ provider:
       initialDelaySeconds: 10
       periodSeconds: 10
 
-# Watch Gateway API HTTPRoutes and Traefik IngressRoute CRDs for hostnames.
+# Watch Gateway API HTTPRoutes, Traefik IngressRoute CRDs, and DNSEndpoint CRDs for hostnames.
 # Hostnames from HTTPRoutes come from spec.hostnames; from IngressRoutes via Host() match rule.
 # Target IP comes from Gateway status.addresses (set via statusAddress.ip in traefik helm values).
+# DNSEndpoint CRD (crd source) is used for bare DNS entries not tied to any route.
 sources:
   - gateway-httproute
   - traefik-proxy
+  - crd
 
 # Safe starting policy — only creates/updates, never deletes
 policy: upsert-only
