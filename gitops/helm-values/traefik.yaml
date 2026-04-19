@@ -9,13 +9,25 @@ hostNetwork: true
 deployment:
   dnsPolicy: ClusterFirstWithHostNet
 
-# NET_BIND_SERVICE is required to bind ports <1024 (80, 443) on the host network stack.
-# Traefik must run as root (runAsUser: 0) with hostNetwork: true on bare metal.
+# With hostNetwork: true and ports.web.port: 80, Traefik binds port 80 directly on the
+# host network stack. Port 80 is privileged (<1024) and requires root or NET_BIND_SERVICE.
+#
+# The upstream chart default uses port 8000 internally (non-privileged) and only exposes
+# port 80 via the Service — so it can run as non-root 65532 without any extra capability.
+# That model does not work with hostNetwork because the host listens on the container port.
+#
+# Solution: run as root with NET_BIND_SERVICE. Also override podSecurityContext to clear
+# the upstream default of runAsNonRoot: true, which would conflict with runAsUser: 0.
 securityContext:
   capabilities:
     drop: [ALL]
     add: [NET_BIND_SERVICE]
   readOnlyRootFilesystem: true
+  runAsGroup: 0
+  runAsNonRoot: false
+  runAsUser: 0
+
+podSecurityContext:
   runAsGroup: 0
   runAsNonRoot: false
   runAsUser: 0
