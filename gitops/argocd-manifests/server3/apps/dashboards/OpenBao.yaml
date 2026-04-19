@@ -5,7 +5,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: openbao-route-server3
+  name: openbao-dashboard-server3
   namespace: argocd
 spec:
   project: default

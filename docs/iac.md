@@ -42,14 +42,17 @@ gitops/
       traefik.yaml           dashboard, externalIPs, statusAddress.ip
   argocd-manifests/
     ArgoCD.yaml              ArgoCD self-management
+    RootInfra.yaml           App-of-Apps → apps/infra/
+    RootGateway.yaml         App-of-Apps → apps/gateway/
+    RootDashboards.yaml       App-of-Apps → apps/dashboards/
+    apps/
+      infra/    ESO (AppSet, list generator)
+      gateway/  Traefik (AppSet), ExternalDNS (AppSet)
+      ui/       Headlamp (AppSet), Hubble (AppSet), Longhorn (AppSet)
     server3/
-      RootInfra.yaml         App-of-Apps → apps/infra/
-      RootGateway.yaml       App-of-Apps → apps/gateway/
-      RootUI.yaml            App-of-Apps → apps/ui/
+      RootDashboards.yaml    App-of-Apps → server3/apps/dashboards/ (server3-only singletons)
       apps/
-        infra/    ESO.yaml, OpenBaoRoute.yaml
-        gateway/  Traefik.yaml, ExternalDNS.yaml
-        ui/       Headlamp.yaml, Hubble.yaml, LonghornUI.yaml
+        ui/   OpenBao.yaml    App: vault.server3.home HTTPRoute
   k8s-manifests/
     server3/
       cilium/              HTTPRoute: hubble.server3.home → hubble-ui:80
@@ -124,7 +127,7 @@ cd iac/clusters/server3/apps && terraform init && terraform apply -auto-approve
 
 # 5. Apply ArgoCD self-management + infra stage
 kubectl apply -f gitops/argocd-manifests/ArgoCD.yaml
-kubectl apply -f gitops/argocd-manifests/server3/RootInfra.yaml
+kubectl apply -f gitops/argocd-manifests/RootInfra.yaml
 # Wait for ESO + ClusterSecretStore to become ready before continuing:
 kubectl wait --for=condition=Ready clusterSecretStore/openbao -n external-secrets --timeout=120s
 
@@ -138,11 +141,16 @@ bao kv put secret/server3/external-dns api-key=<unifi-api-key>
 # Verify: bao kv get secret/server3/external-dns
 
 # 6. Apply gateway stage
-kubectl apply -f gitops/argocd-manifests/server3/RootGateway.yaml
+kubectl apply -f gitops/argocd-manifests/RootGateway.yaml
 # ArgoCD auto-syncs Traefik + ExternalDNS from that point on.
 
+# 6.a Apply server3-specific singleton Applications
+#     Discovered by server3/RootDashboards — applied once, ArgoCD self-heals from then on.
+kubectl apply -f gitops/argocd-manifests/server3/RootDashboards.yaml
+# OpenBao is now accessible at vault.server3.home via Traefik.
+
 # 7. Apply UI stage (Headlamp, Hubble, Longhorn UI)
-kubectl apply -f gitops/argocd-manifests/server3/RootUI.yaml
+kubectl apply -f gitops/argocd-manifests/RootDashboards.yaml
 # ArgoCD auto-syncs UI apps from that point on.
 ```
 
@@ -169,10 +177,12 @@ argocd cluster list   # note the SERVER URL; check destination.server in leaf Ap
 # 4. Store the cluster's ExternalDNS Unifi API key in OpenBao:
 bao kv put secret/<cluster>/external-dns api-key=<unifi-api-key>
 
-# 5. Apply Root Application manifests for this cluster
-kubectl apply -f gitops/argocd-manifests/<cluster>/RootInfra.yaml
-kubectl apply -f gitops/argocd-manifests/<cluster>/RootGateway.yaml
-# ArgoCD auto-syncs ESO + Traefik + ExternalDNS from that point on.
+# 5. Add this cluster to each ApplicationSet's list generator.
+#    In each file under gitops/argocd-manifests/apps/infra/,
+#    apps/gateway/, and apps/dashboards/, add under spec.generators[0].list.elements:
+#      - cluster: <cluster>
+#        clusterServer: <server-url>  # from: argocd cluster list
+#    Commit and push — server3 ArgoCD auto-generates all Applications for this cluster.
 ```
 
 ## Module variable reference

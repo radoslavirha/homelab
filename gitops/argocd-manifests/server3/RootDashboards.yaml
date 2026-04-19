@@ -1,18 +1,17 @@
-# Infra App-of-Apps for server3: ESO + OpenBao HTTPRoute.
-# Applied once (manually or by ArgoCD after self-bootstrap).
-# ArgoCD auto-syncs from that point on.
-# Manual apply: kubectl apply -f gitops/argocd-manifests/server3/RootInfra.yaml
+# Server3-specific Dashboards App-of-Apps: HTTPRoutes and other server3-only singleton Applications.
+# Applied once manually after RootGateway (Traefik must exist before HTTPRoutes can bind).
+# Manual apply: kubectl apply -f gitops/argocd-manifests/server3/RootDashboards.yaml
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: root-infra-server3
+  name: root-dashboards-server3
   namespace: argocd
 spec:
   project: default
   source:
     repoURL: https://github.com/radoslavirha/homelab
     targetRevision: HEAD
-    path: gitops/argocd-manifests/server3/apps/infra
+    path: gitops/argocd-manifests/server3/apps/dashboards
     directory:
       recurse: true
   destination:

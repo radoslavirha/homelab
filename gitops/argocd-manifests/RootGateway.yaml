@@ -1,18 +1,18 @@
-# UI App-of-Apps for server3: Longhorn, Hubble (Cilium), Headlamp.
+# Gateway App-of-Apps for server3: Traefik + ExternalDNS.
 # Applied once (manually or by ArgoCD after self-bootstrap).
 # ArgoCD auto-syncs from that point on.
-# Manual apply: kubectl apply -f gitops/argocd-manifests/server3/RootUI.yaml
+# Manual apply: kubectl apply -f gitops/argocd-manifests/server3/RootGateway.yaml
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: root-ui-server3
+  name: root-gateway-server3
   namespace: argocd
 spec:
   project: default
   source:
     repoURL: https://github.com/radoslavirha/homelab
     targetRevision: HEAD
-    path: gitops/argocd-manifests/server3/apps/ui
+    path: gitops/argocd-manifests/apps/gateway
     directory:
       recurse: true
   destination:

@@ -1,0 +1,42 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: traefik
+  namespace: argocd
+spec:
+  generators:
+    - list:
+        elements:
+          - cluster: server3
+            clusterServer: https://kubernetes.default.svc
+  template:
+    metadata:
+      name: traefik-{{cluster}}
+    spec:
+      project: default
+      sources:
+        - repoURL: https://traefik.github.io/charts
+          chart: traefik
+          targetRevision: 39.0.7
+          helm:
+            releaseName: traefik
+            valueFiles:
+              - $values/gitops/helm-values/traefik.yaml
+              - $values/gitops/helm-values/{{cluster}}/traefik.yaml
+        - repoURL: https://github.com/radoslavirha/homelab
+          targetRevision: HEAD
+          ref: values
+      destination:
+        server: '{{clusterServer}}'
+        namespace: traefik
+      syncPolicy:
+        managedNamespaceMetadata:
+          labels:
+            pod-security.kubernetes.io/enforce: privileged
+            pod-security.kubernetes.io/audit: privileged
+            pod-security.kubernetes.io/warn: privileged
+        syncOptions:
+          - CreateNamespace=true
+        automated:
+          selfHeal: true
+          prune: true

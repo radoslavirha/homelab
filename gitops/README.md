@@ -14,7 +14,7 @@ gitops/
       RootInfra.yaml        Infra App-of-Apps for server3 (ESO + OpenBao route)
       RootGateway.yaml      Gateway App-of-Apps for server3 (Traefik + ExternalDNS)
       apps/
-        infra/    ESO.yaml, OpenBaoRoute.yaml
+        infra/    ESO.yaml, OpenBao.yaml
         gateway/  Traefik.yaml, ExternalDNS.yaml
   helm-values/
     external-dns.yaml       shared: Unifi webhook provider, sources, policy

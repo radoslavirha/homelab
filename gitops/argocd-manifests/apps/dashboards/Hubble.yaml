@@ -1,0 +1,27 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: hubble-dashboard
+  namespace: argocd
+spec:
+  generators:
+    - list:
+        elements:
+          - cluster: server3
+            clusterServer: https://kubernetes.default.svc
+  template:
+    metadata:
+      name: hubble-ui-{{cluster}}
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/radoslavirha/homelab
+        targetRevision: HEAD
+        path: gitops/k8s-manifests/{{cluster}}/cilium
+      destination:
+        server: '{{clusterServer}}'
+        namespace: kube-system
+      syncPolicy:
+        automated:
+          selfHeal: true
+          prune: false

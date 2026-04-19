@@ -31,14 +31,17 @@ gitops/
       traefik.yaml          dashboard hostname/IP, externalIPs, statusAddress.ip
   argocd-manifests/
     ArgoCD.yaml             ArgoCD self-management (cluster-agnostic)
+    RootInfra.yaml        App-of-Apps → apps/infra/
+    RootGateway.yaml      App-of-Apps → apps/gateway/
+    RootDashboards.yaml    App-of-Apps → apps/dashboards/
+    apps/
+      infra/    ESO (AppSet, list generator)
+      gateway/  Traefik (AppSet), ExternalDNS (AppSet)
+      ui/       Headlamp (AppSet), Hubble (AppSet), Longhorn (AppSet)
     server3/
-      RootInfra.yaml        App-of-Apps → server3/apps/infra/
-      RootGateway.yaml      App-of-Apps → server3/apps/gateway/
-      RootUI.yaml           App-of-Apps → server3/apps/ui/
+      RootDashboards.yaml App-of-Apps → server3/apps/dashboards/ (server3-only singletons)
       apps/
-        infra/    ESO.yaml, OpenBaoRoute.yaml
-        gateway/  Traefik.yaml, ExternalDNS.yaml
-        ui/       Headlamp.yaml, Hubble.yaml, LonghornUI.yaml
+        ui/       OpenBao.yaml   App: vault.server3.home HTTPRoute
   k8s-manifests/
     server3/
       cilium/              HTTPRoute: hubble.server3.home → hubble-ui:80
@@ -80,15 +83,19 @@ To apply a version change: `cd iac/clusters/<cluster>/<stage> && terraform apply
 
 ### 2. ArgoCD-managed (GitOps)
 
-All other apps use the **app-of-apps** pattern with three stages per cluster:
-- **infra** stage: ESO + supporting K8s resources (ClusterSecretStore, OpenBao HTTPRoute)
+All other apps use the **app-of-apps + ApplicationSet** pattern with three stages:
+- **infra** stage: ESO + supporting K8s resources (ClusterSecretStore)
 - **gateway** stage: Traefik + ExternalDNS + ExternalSecret for Unifi credentials
 - **ui** stage: Headlamp, Hubble UI, Longhorn UI
 
-Root Application CRDs live in `gitops/argocd-manifests/<cluster>/` as `RootInfra.yaml` / `RootGateway.yaml` / `RootUI.yaml`.
-They discover child Applications from `gitops/argocd-manifests/<cluster>/apps/<stage>/`.
-`destination.server` in each leaf Application selects which cluster the workload deploys to.
-Version is `targetRevision` in that file. ArgoCD auto-syncs on commit.
+Root Application CRDs live in `gitops/argocd-manifests/` as `RootInfra.yaml` / `RootGateway.yaml` / `RootDashboards.yaml`. Applied once manually per stage; ArgoCD self-heals from then on.
+Each Root Application discovers **ApplicationSets** in `gitops/argocd-manifests/apps/<stage>/`.
+Each ApplicationSet uses a **list generator** with one element per cluster. Adding a cluster to a stage means adding one `{cluster, clusterServer}` element to each ApplicationSet in that stage and committing.
+`destination.server` in each ApplicationSet template selects the target cluster via `{{clusterServer}}`.
+Version is `targetRevision` in the ApplicationSet template. ArgoCD auto-syncs on commit.
+
+Server3-specific singleton Applications live in `gitops/argocd-manifests/server3/apps/dashboards/` and are managed by `gitops/argocd-manifests/server3/RootDashboards.yaml`. Apply `server3/RootDashboards.yaml` once manually after `RootGateway` (Traefik must be running before HTTPRoutes can bind).
+- `OpenBao.yaml` — exposes OpenBao at `vault.server3.home`
 
 `ArgoCD.yaml` (self-management) lives at `gitops/argocd-manifests/ArgoCD.yaml` — not under any cluster subdirectory.
 
@@ -194,12 +201,12 @@ rm -rf / any deletion of credentials
 3. Update Cilium `devices: "TODO"` to the correct network interface
 4. Bootstrap: run `terraform apply -auto-approve` for bootstrap and platform stages
 5. Register the cluster in server3 ArgoCD: `argocd cluster add <context>`
-6. Apply the cluster's Application manifests from `gitops/`
+6. Add a `{cluster, clusterServer}` element to each ApplicationSet in `gitops/argocd-manifests/server3/apps/<stage>/*.yaml` and commit — ArgoCD auto-generates all Applications for the new cluster.
 
 ## Adding a new ArgoCD app
 
-1. Create `gitops/argocd-manifests/server3/<Name>.yaml` — copy an existing Application as template, set `destination.server` for the target cluster
-2. Add helm values at `gitops/helm-values/<cluster>/<name>.yaml`
+1. Create `gitops/argocd-manifests/apps/<stage>/<Name>.yaml` — copy an existing ApplicationSet as template. The list generator already targets all registered clusters.
+2. Add helm values at `gitops/helm-values/<name>.yaml` (shared) and `gitops/helm-values/<cluster>/<name>.yaml` (cluster overrides)
 3. Add raw manifests to `gitops/k8s-manifests/<cluster>/<name>/` if needed
 4. Add a row to the technology stack table in `docs/architecture.md` with all required columns (see App documentation rules above)
 

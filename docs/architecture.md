@@ -78,7 +78,10 @@ MinIO is the intended S3-compatible backend for Terraform state. But MinIO itsel
 │     [manual: OpenBao init ceremony, unseal, KV path setup]              │
 │  4. terraform apps       → ArgoCD                                       │
 │     [manual: create sops-age-key Secret in argocd namespace]            │
-│  5. ArgoCD GitOps        → ESO, MinIO, Traefik, ...                    │
+│  5. ArgoCD GitOps        → RootInfra (ESO + ClusterSecretStore)         │
+│     [manual: kubectl apply RootGateway → Traefik + ExternalDNS]         │
+│     [manual: kubectl apply server3/RootDashboards → OpenBaoRoute]          │
+│     [manual: kubectl apply RootDashboards → Headlamp + Hubble + Longhorn] │
 │     [manual: terraform init -migrate-state for all server3 modules]     │
 │  6. Register server1 + server2 kubeconfigs in server3 ArgoCD            │
 └─────────────────────────────────────────────────────────────────────────┘

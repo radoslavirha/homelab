@@ -1,18 +1,18 @@
-# Gateway App-of-Apps for server3: Traefik + ExternalDNS.
+# Infra App-of-Apps for server3: ESO + OpenBao HTTPRoute.
 # Applied once (manually or by ArgoCD after self-bootstrap).
 # ArgoCD auto-syncs from that point on.
-# Manual apply: kubectl apply -f gitops/argocd-manifests/server3/RootGateway.yaml
+# Manual apply: kubectl apply -f gitops/argocd-manifests/server3/RootInfra.yaml
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: root-gateway-server3
+  name: root-infra-server3
   namespace: argocd
 spec:
   project: default
   source:
     repoURL: https://github.com/radoslavirha/homelab
     targetRevision: HEAD
-    path: gitops/argocd-manifests/server3/apps/gateway
+    path: gitops/argocd-manifests/apps/infra
     directory:
       recurse: true
   destination:
