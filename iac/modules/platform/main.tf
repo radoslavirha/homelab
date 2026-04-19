@@ -30,7 +30,7 @@ resource "helm_release" "cilium" {
   namespace        = "kube-system"
   create_namespace = false
 
-  values = [var.cilium_values]
+  values = var.cilium_values
 
   # Cilium must be fully ready before Longhorn can reach the API server.
   wait          = true
@@ -80,7 +80,7 @@ resource "helm_release" "longhorn" {
   namespace        = "longhorn-system"
   create_namespace = true
 
-  values = [var.longhorn_values]
+  values = var.longhorn_values
 
   wait    = true
   timeout = 600

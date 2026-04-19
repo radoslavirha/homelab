@@ -1,13 +1,3 @@
-defaultSettings:
-  defaultReplicaCount: 1
-  defaultDataLocality: best-effort
-  backupTarget: ""
+# Longhorn — server1 cluster overrides
+# Base values are defined in iac/clusters/helm-values/longhorn.yaml
 
-longhornManager:
-  tolerations: []
-
-longhornDriver:
-  tolerations: []
-
-longhornUI:
-  tolerations: []

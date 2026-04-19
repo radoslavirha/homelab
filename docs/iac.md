@@ -33,6 +33,12 @@ Each `iac/clusters/<name>/<stage>/main.tf` contains:
 # 1. Talos cluster + kubeconfig/talosconfig
 cd iac/clusters/server3/bootstrap && terraform init && terraform apply -auto-approve
 
+# 1.a Cilium device (update cilium helm values)
+talosctl get links -n 192.168.1.20X
+
+# 1.b Disks (update disks in terraform values)
+talosctl get disks -n 192.168.1.20X
+
 # 2. Gateway API CRDs + Cilium + Longhorn
 cd iac/clusters/server3/platform && terraform init && terraform apply -auto-approve
 
@@ -57,6 +63,12 @@ kubectl apply -f gitops/argocd-manifests/server3/ \
 ```bash
 # 1. Talos cluster + kubeconfig/talosconfig
 cd iac/clusters/<cluster>/bootstrap && terraform init && terraform apply -auto-approve
+
+# 1.a Cilium device (update cilium helm values)
+talosctl get links -n 192.168.1.20X
+
+# 1.b Disks (update disks in terraform values)
+talosctl get disks -n 192.168.1.20X
 
 # 2. Gateway API CRDs + Cilium + Longhorn
 cd iac/clusters/<cluster>/platform && terraform init && terraform apply -auto-approve

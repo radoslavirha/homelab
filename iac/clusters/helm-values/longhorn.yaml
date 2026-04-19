@@ -1,0 +1,15 @@
+# Longhorn — shared base values (all Talos clusters)
+# Cluster-specific overrides live in iac/clusters/<name>/helm-values/longhorn.yaml
+defaultSettings:
+  defaultReplicaCount: 1
+  defaultDataLocality: best-effort
+  backupTarget: ""
+
+longhornManager:
+  tolerations: []
+
+longhornDriver:
+  tolerations: []
+
+longhornUI:
+  tolerations: []

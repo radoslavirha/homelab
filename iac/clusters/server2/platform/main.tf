@@ -38,8 +38,14 @@ module "platform" {
   longhorn_version    = "1.11.1"
   gateway_api_version = "1.2.1"
 
-  cilium_values   = file("${path.root}/../helm-values/cilium.yaml")
-  longhorn_values = file("${path.root}/../helm-values/longhorn.yaml")
+  cilium_values = [
+    file("${path.root}/../../helm-values/cilium.yaml"),
+    file("${path.root}/../helm-values/cilium.yaml"),
+  ]
+  longhorn_values = [
+    file("${path.root}/../../helm-values/longhorn.yaml"),
+    file("${path.root}/../helm-values/longhorn.yaml"),
+  ]
 
   enable_longhorn = true
 }

@@ -21,14 +21,14 @@ variable "gateway_api_version" {
 
 # ── Helm values content ───────────────────────────────────────────────────────
 variable "cilium_values" {
-  type        = string
-  description = "Contents of the Cilium Helm values override file. Use file() in the cluster instance."
+  type        = list(string)
+  description = "Ordered list of Cilium Helm values files. Merged in order (last wins). Use file() in the cluster instance."
 }
 
 variable "longhorn_values" {
-  type        = string
-  description = "Contents of the Longhorn Helm values override file. Use file() in the cluster instance."
-  default     = ""
+  type        = list(string)
+  description = "Ordered list of Longhorn Helm values files. Merged in order (last wins). Use file() in the cluster instance."
+  default     = []
 }
 
 # ── Feature flags ─────────────────────────────────────────────────────────────
