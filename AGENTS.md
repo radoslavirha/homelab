@@ -44,7 +44,7 @@ gitops/
         ui/       OpenBao.yaml   App: vault.server3.home HTTPRoute
   k8s-manifests/
     server3/
-      cilium/              HTTPRoute: hubble.server3.home → hubble-ui:80
+      cilium/              HTTPRoute: hubble.server3.home → hubble-dashboard:80
       external-dns/        ExternalSecret (unifi-credentials), DNSEndpoint (server3.home A record)
       external-secrets/    ClusterSecretStore → local OpenBao
       longhorn/            HTTPRoute: longhorn.server3.home → longhorn-frontend:80

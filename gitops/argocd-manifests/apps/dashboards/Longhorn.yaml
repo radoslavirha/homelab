@@ -11,7 +11,7 @@ spec:
             clusterServer: https://kubernetes.default.svc
   template:
     metadata:
-      name: longhorn-ui-{{cluster}}
+      name: longhorn-dashboard-{{cluster}}
     spec:
       project: default
       source:

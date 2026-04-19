@@ -11,7 +11,7 @@ spec:
             clusterServer: https://kubernetes.default.svc
   template:
     metadata:
-      name: headlamp-{{cluster}}
+      name: headlamp-dashboard-{{cluster}}
     spec:
       project: default
       sources:
