@@ -10,6 +10,7 @@ spec:
       chart: external-dns
       targetRevision: 1.20.0
       helm:
+        releaseName: external-dns
         valueFiles:
           - $values/gitops/helm-values/external-dns.yaml
           - $values/gitops/helm-values/server3/external-dns.yaml

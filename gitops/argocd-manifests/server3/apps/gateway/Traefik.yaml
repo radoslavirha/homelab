@@ -10,6 +10,7 @@ spec:
       chart: traefik
       targetRevision: 39.0.7
       helm:
+        releaseName: traefik
         valueFiles:
           - $values/gitops/helm-values/traefik.yaml
           - $values/gitops/helm-values/server3/traefik.yaml

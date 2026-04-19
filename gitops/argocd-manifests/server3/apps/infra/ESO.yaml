@@ -10,6 +10,7 @@ spec:
       chart: external-secrets
       targetRevision: 2.3.0
       helm:
+        releaseName: external-secrets
         valueFiles:
           - $values/gitops/helm-values/external-secrets.yaml
           - $values/gitops/helm-values/server3/external-secrets.yaml
