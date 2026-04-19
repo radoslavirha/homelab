@@ -8,7 +8,7 @@ Personal Kubernetes homelab — three Talos Linux clusters managed as Infrastruc
 |---------|------|----------|
 | `server1` | Production workloads | server1 — 32 GB RAM / 6 cores / 500 GB SSD |
 | `server2` | Experimentation | server2 — 32 GB RAM / 6 cores / 500 GB SSD |
-| `server3` | Platform services — MinIO, OpenBao, ArgoCD | server3 — 16 GB RAM / 4 cores / 250 GB SSD |
+| `server3` | Platform services — MinIO, OpenBao, ArgoCD | server3 — 16 GB RAM / 4 cores / 256 GB SSD |
 
 ## Repository structure
 

@@ -10,38 +10,49 @@ ArgoCD runs only on the **server3** cluster and manages workloads on all cluster
 gitops/
   argocd-manifests/
     ArgoCD.yaml             ArgoCD self-management Application (cluster-agnostic)
+    RootInfra.yaml          App-of-Apps → apps/infra/ (all clusters)
+    RootGateway.yaml        App-of-Apps → apps/gateway/ (all clusters)
+    RootDashboards.yaml     App-of-Apps → apps/dashboards/ (all clusters)
+    apps/
+      infra/      ESO.yaml
+      gateway/    Traefik.yaml, ExternalDNS.yaml
+      dashboards/ Headlamp.yaml, Hubble.yaml, Longhorn.yaml
     server3/
-      RootInfra.yaml        Infra App-of-Apps for server3 (ESO + OpenBao route)
-      RootGateway.yaml      Gateway App-of-Apps for server3 (Traefik + ExternalDNS)
+      RootDashboards.yaml   App-of-Apps → server3/apps/dashboards/ (server3-only singletons)
       apps/
-        infra/    ESO.yaml, OpenBao.yaml
-        gateway/  Traefik.yaml, ExternalDNS.yaml
+        dashboards/   OpenBao.yaml
   helm-values/
     external-dns.yaml       shared: Unifi webhook provider, sources, policy
     external-secrets.yaml   shared: installCRDs: true
+    headlamp.yaml           shared: httpRoute + clusterRoleBinding
     traefik.yaml            shared: hostNetwork, Gateway API provider, listeners, bare-metal service
     server3/
       argocd.yaml           ArgoCD helm overrides
       external-dns.yaml     domainFilters, txtOwnerId
       external-secrets.yaml cluster-specific overrides (currently empty)
+      headlamp.yaml         hostname: headlamp.server3.home
       traefik.yaml          dashboard hostname/IP, externalIPs, statusAddress.ip
   k8s-manifests/
     server3/
-      external-dns/        ExternalSecret — unifi-credentials (pulls from local OpenBao)
-      external-secrets/    ClusterSecretStore → openbao.openbao.svc.cluster.local
-      openbao/             HTTPRoute: vault.server3.home (Traefik → OpenBao:8200)
-  shared/
-    helm-charts/      Custom Helm charts used across clusters
+      cilium/              HTTPRoute: hubble.server3.home → hubble-dashboard:80
+      external-dns/        ExternalSecret (unifi-credentials), DNSEndpoint (server3.home A record)
+      external-secrets/    ClusterSecretStore → local OpenBao
+      longhorn/            HTTPRoute: longhorn.server3.home → longhorn-frontend:80
+      openbao/             HTTPRoute: vault.server3.home → openbao:8200
 ```
 
 ## App-of-apps pattern
 
-Each cluster has two root Applications: **infra** and **gateway**.
+There are three multi-cluster root Applications and one server3-only root Application:
 
-| Stage | Apps | Why this order |
-|-------|------|----------------|
-| infra | ESO, OpenBao HTTPRoute | ESO must be running before ExternalDNS can pull the Unifi API key |
-| gateway | Traefik, ExternalDNS | Traefik GatewayClass is needed for HTTPRoutes; ExternalDNS needs the ESO-synced secret |
+| Root Application | Stage | Apps | Why this order |
+|-----------------|-------|------|----------------|
+| `RootInfra.yaml` | infra | ESO | ESO must be running before ExternalDNS can pull the Unifi API key |
+| `RootGateway.yaml` | gateway | Traefik, ExternalDNS | Traefik GatewayClass is needed for HTTPRoutes; ExternalDNS needs the ESO-synced secret |
+| `RootDashboards.yaml` | dashboards | Headlamp, Hubble, Longhorn UI | UI layer — depends on Traefik for HTTPRoutes |
+| `server3/RootDashboards.yaml` | server3 singletons | OpenBao HTTPRoute | server3-only; Traefik must exist before HTTPRoute can bind |
+
+Each stage uses ApplicationSets with a list generator — one element per cluster. Adding a cluster means adding `{cluster, clusterServer}` to each ApplicationSet and committing.
 
 ## Helm values — two-layer approach
 
@@ -78,15 +89,17 @@ Once seeded, apply the gateway stage — ESO will create the K8s `unifi-credenti
 
 ## Adding a new app
 
-1. Create `gitops/argocd-manifests/<cluster>/apps/<stage>/<Name>.yaml` — copy an existing Application as template.
+1. Create `gitops/argocd-manifests/apps/<stage>/<Name>.yaml` — copy an existing ApplicationSet as template. The list generator already targets all registered clusters.
 2. Add shared Helm values at `gitops/helm-values/<name>.yaml` if applicable.
-3. Add cluster-specific overrides at `gitops/helm-values/<cluster>/<name>.yaml`.
+3. Add cluster-specific overrides at `gitops/helm-values/<cluster>/<name>.yaml` when needed.
 4. Add raw manifests to `gitops/k8s-manifests/<cluster>/<name>/` if needed.
-5. The root Application for that cluster+stage will auto-discover the new file (`directory.recurse: true`).
+5. Commit — ArgoCD auto-discovers the new ApplicationSet via `directory.recurse: true` on the root Application.
 
 ## Adding a new cluster
 
-1. Add root Application manifests under `gitops/argocd-manifests/<cluster>/`.
-2. Add cluster-specific helm-values overrides under `gitops/helm-values/<cluster>/`.
-3. Add raw K8s manifests under `gitops/k8s-manifests/<cluster>/`.
-4. Register the cluster in ArgoCD: `argocd cluster add <context> --name <cluster>`; update `destination.server` in leaf Applications.
+1. Bootstrap the cluster (Talos + platform) via Terraform in `iac/clusters/<cluster>/`.
+2. Register the cluster in server3 ArgoCD: `argocd cluster add <context> --name <cluster>`.
+3. Add `{cluster, clusterServer}` to the list generator in each ApplicationSet under `gitops/argocd-manifests/apps/infra/`, `apps/gateway/`, and `apps/dashboards/`.
+4. Add cluster-specific helm-values overrides under `gitops/helm-values/<cluster>/` if needed.
+5. Add raw K8s manifests under `gitops/k8s-manifests/<cluster>/` if needed.
+6. Commit — ArgoCD auto-generates all Applications for the new cluster.

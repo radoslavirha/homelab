@@ -13,6 +13,7 @@ iac/
     vault/      OpenBao (server3 only)
     apps/         ArgoCD install + self-management bootstrap (reusable module, server3 only)
   clusters/
+    helm-values/  Shared Cilium + Longhorn values (all clusters)
     server1/      bootstrap/ platform/ helm-values/
     server2/      bootstrap/ platform/ helm-values/
     server3/      bootstrap/ platform/ vault/ apps/ helm-values/
@@ -22,7 +23,6 @@ gitops/
     external-secrets.yaml   shared: installCRDs: true
     headlamp.yaml           shared: httpRoute + clusterRoleBinding
     traefik.yaml            shared: hostNetwork, Gateway API provider, listeners, bare-metal service
-    server1/      cluster overrides (empty until server1 is onboarded)
     server3/
       argocd.yaml           ArgoCD helm overrides
       external-dns.yaml     domainFilters, txtOwnerId
@@ -37,11 +37,11 @@ gitops/
     apps/
       infra/    ESO (AppSet, list generator)
       gateway/  Traefik (AppSet), ExternalDNS (AppSet)
-      ui/       Headlamp (AppSet), Hubble (AppSet), Longhorn (AppSet)
+      dashboards/ Headlamp (AppSet), Hubble (AppSet), Longhorn (AppSet)
     server3/
       RootDashboards.yaml App-of-Apps → server3/apps/dashboards/ (server3-only singletons)
       apps/
-        ui/       OpenBao.yaml   App: vault.server3.home HTTPRoute
+        dashboards/ OpenBao.yaml   App: vault.server3.home HTTPRoute
   k8s-manifests/
     server3/
       cilium/              HTTPRoute: hubble.server3.home → hubble-dashboard:80
@@ -49,8 +49,6 @@ gitops/
       external-secrets/    ClusterSecretStore → local OpenBao
       longhorn/            HTTPRoute: longhorn.server3.home → longhorn-frontend:80
       openbao/             HTTPRoute: vault.server3.home → openbao:8200
-  shared/
-    helm-charts/  Custom Helm charts used across clusters
 docs/             Architecture decisions, IaC guide, secrets guide
 ```
 
@@ -86,7 +84,7 @@ To apply a version change: `cd iac/clusters/<cluster>/<stage> && terraform apply
 All other apps use the **app-of-apps + ApplicationSet** pattern with three stages:
 - **infra** stage: ESO + supporting K8s resources (ClusterSecretStore)
 - **gateway** stage: Traefik + ExternalDNS + ExternalSecret for Unifi credentials
-- **ui** stage: Headlamp, Hubble UI, Longhorn UI
+- **dashboards** stage: Headlamp, Hubble UI, Longhorn UI
 
 Root Application CRDs live in `gitops/argocd-manifests/` as `RootInfra.yaml` / `RootGateway.yaml` / `RootDashboards.yaml`. Applied once manually per stage; ArgoCD self-heals from then on.
 Each Root Application discovers **ApplicationSets** in `gitops/argocd-manifests/apps/<stage>/`.
@@ -201,7 +199,7 @@ rm -rf / any deletion of credentials
 3. Update Cilium `devices: "TODO"` to the correct network interface
 4. Bootstrap: run `terraform apply -auto-approve` for bootstrap and platform stages
 5. Register the cluster in server3 ArgoCD: `argocd cluster add <context>`
-6. Add a `{cluster, clusterServer}` element to each ApplicationSet in `gitops/argocd-manifests/server3/apps/<stage>/*.yaml` and commit — ArgoCD auto-generates all Applications for the new cluster.
+6. Add a `{cluster, clusterServer}` element to each ApplicationSet in `gitops/argocd-manifests/apps/<stage>/*.yaml` and commit — ArgoCD auto-generates all Applications for the new cluster.
 
 ## Adding a new ArgoCD app
 

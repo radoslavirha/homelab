@@ -24,8 +24,10 @@ iac/
         cilium.yaml     Universal: disable Flannel + kube-proxy (required for Cilium)
         scheduling.yaml Universal: allow scheduling on control-plane (single-node clusters)
     platform/           Gateway API CRDs, Cilium, Longhorn
+    vault/              OpenBao Helm install
     apps/               ArgoCD namespace + secret + Helm install + self-management Application
   clusters/
+    helm-values/        Shared Cilium + Longhorn values (all clusters)
     server1/            bootstrap/ platform/ helm-values/
     server2/            bootstrap/ platform/ helm-values/
     server3/            bootstrap/ platform/ vault/ apps/ helm-values/
@@ -38,6 +40,7 @@ gitops/
     server3/
       argocd.yaml            ArgoCD Helm overrides
       external-dns.yaml      domainFilters, txtOwnerId
+      external-secrets.yaml  cluster-specific overrides (currently empty)
       headlamp.yaml          hostname: headlamp.server3.home
       traefik.yaml           dashboard, externalIPs, statusAddress.ip
   argocd-manifests/
@@ -48,11 +51,11 @@ gitops/
     apps/
       infra/    ESO (AppSet, list generator)
       gateway/  Traefik (AppSet), ExternalDNS (AppSet)
-      ui/       Headlamp (AppSet), Hubble (AppSet), Longhorn (AppSet)
+      dashboards/   Headlamp (AppSet), Hubble (AppSet), Longhorn (AppSet)
     server3/
       RootDashboards.yaml    App-of-Apps → server3/apps/dashboards/ (server3-only singletons)
       apps/
-        ui/   OpenBao.yaml    App: vault.server3.home HTTPRoute
+        dashboards/   OpenBao.yaml    App: vault.server3.home HTTPRoute
   k8s-manifests/
     server3/
       cilium/              HTTPRoute: hubble.server3.home → hubble-dashboard:80
@@ -149,9 +152,9 @@ kubectl apply -f gitops/argocd-manifests/RootGateway.yaml
 kubectl apply -f gitops/argocd-manifests/server3/RootDashboards.yaml
 # OpenBao is now accessible at vault.server3.home via Traefik.
 
-# 7. Apply UI stage (Headlamp, Hubble, Longhorn UI)
+# 7. Apply dashboards stage (Headlamp, Hubble, Longhorn UI)
 kubectl apply -f gitops/argocd-manifests/RootDashboards.yaml
-# ArgoCD auto-syncs UI apps from that point on.
+# ArgoCD auto-syncs dashboards apps from that point on.
 ```
 
 ### Server1 / Server2 cluster (managed by server3 ArgoCD)
@@ -259,9 +262,9 @@ All other app secrets in OpenBao are stored as plaintext.
 
 ## Helm values for Terraform-managed components
 
-Cilium and Longhorn values are cluster-specific and only used by Terraform — they live inside the cluster directory:
-- `iac/clusters/<cluster>/helm-values/cilium.yaml`
-- `iac/clusters/<cluster>/helm-values/longhorn.yaml`
+Cilium and Longhorn values are two-layered and only used by Terraform:
+- **Shared base**: `iac/clusters/helm-values/cilium.yaml` / `longhorn.yaml` — common values across all clusters
+- **Cluster overrides**: `iac/clusters/<cluster>/helm-values/cilium.yaml` / `longhorn.yaml` — cluster-specific values (merged last, wins)
 
 ArgoCD values live in `gitops/helm-values/server3/` (server3 only):
 - `gitops/helm-values/server3/argocd.yaml`
