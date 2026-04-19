@@ -200,6 +200,10 @@ bao write auth/kubernetes-<cluster>/role/external-secrets \
   policies=<cluster>-external-secrets \
   ttl=1h
 
+#    Seed KV secrets for this cluster (ExternalDNS pulls these on first sync):
+bao kv put secret/<cluster>/external-dns api-key=<unifi-api-key>
+# Verify: bao kv get secret/<cluster>/external-dns
+
 # 4. Register the cluster in server3 ArgoCD
 export KUBECONFIG=iac/clusters/<cluster>/credentials/kubeconfig
 argocd cluster add <context-name> --name <cluster>
