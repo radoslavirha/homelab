@@ -1,0 +1,18 @@
+# ── Terraform state and provider cache ──────────────────────────────────────
+**/.terraform/
+**/.terraform.lock.hcl
+**/terraform.tfstate
+**/terraform.tfstate.backup
+**/terraform.tfstate.*.backup
+
+# ── Cluster credentials (written by bootstrap stage) ────────────────────────
+iac/clusters/*/credentials/
+
+# ── Per-cluster secrets (SOPS-encrypted, but still sensitive — keep local) ──
+iac/clusters/*/secrets/
+
+# ── Editor and OS noise ─────────────────────────────────────────────────────
+.DS_Store
+.idea/
+*.swp
+*.swo

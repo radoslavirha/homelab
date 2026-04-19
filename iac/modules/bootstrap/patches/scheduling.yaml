@@ -1,0 +1,4 @@
+# Allow workload pods to be scheduled on the control-plane node.
+# Required for a single-node cluster where the control-plane also acts as a worker.
+cluster:
+  allowSchedulingOnControlPlanes: true

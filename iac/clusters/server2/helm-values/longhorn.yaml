@@ -1,0 +1,13 @@
+defaultSettings:
+  defaultReplicaCount: 1
+  defaultDataLocality: best-effort
+  backupTarget: ""
+
+longhornManager:
+  tolerations: []
+
+longhornDriver:
+  tolerations: []
+
+longhornUI:
+  tolerations: []

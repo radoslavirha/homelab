@@ -1,0 +1,128 @@
+global:
+  domain: argocd.server3.home
+
+notifications:
+  argocdUrl: http://argocd.server3.home
+
+configs:
+  cm:
+    admin.enabled: "true"
+    url: http://argocd.server3.home
+  params:
+    server.insecure: "true"
+  secret:
+    createSecret: false
+
+  cmp:
+    create: true
+    plugins:
+      sops:
+        allowConcurrency: true
+        lockRepo: false
+        discover:
+          find:
+            glob: "*.sops.yaml"
+        generate:
+          command: [sh, -c]
+          args:
+            - |
+              set -e
+              for f in $(find . -maxdepth 1 -name '*.yaml' | sort); do
+                case "$f" in
+                  *.sops.yaml) sops --decrypt "$f" ;;
+                  *)           cat "$f" ;;
+                esac
+                printf '\n---\n'
+              done
+
+dex:
+  enabled: false
+
+server:
+  replicas: 1
+  httproute:
+    enabled: true
+    parentRefs:
+      - name: traefik-gateway
+        namespace: traefik
+        group: gateway.networking.k8s.io
+        kind: Gateway
+    hostnames:
+      - argocd.server3.home
+    rules:
+      - matches:
+          - path:
+              type: PathPrefix
+              value: /
+
+repoServer:
+  replicas: 1
+  volumes:
+    - name: sops-age-key
+      secret:
+        secretName: sops-age-key
+        optional: true
+    - name: custom-tools
+      emptyDir: {}
+    - name: argocd-cmp-cm
+      configMap:
+        name: argocd-cmp-cm
+  initContainers:
+    - name: download-sops
+      image: alpine:3.21
+      command: [sh, -c]
+      args:
+        - |
+          SOPS_VERSION=3.9.4
+          ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
+          wget -qO /custom-tools/sops \
+            "https://github.com/getsops/sops/releases/download/v${SOPS_VERSION}/sops-v${SOPS_VERSION}.linux.${ARCH}"
+          chmod +x /custom-tools/sops
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: ["ALL"]
+        seccompProfile:
+          type: RuntimeDefault
+      volumeMounts:
+        - name: custom-tools
+          mountPath: /custom-tools
+  extraContainers:
+    - name: sops-cmp
+      command: [/var/run/argocd/argocd-cmp-server]
+      image: alpine:3.21
+      env:
+        - name: SOPS_AGE_KEY_FILE
+          value: /age/keys.txt
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: ["ALL"]
+        seccompProfile:
+          type: RuntimeDefault
+      volumeMounts:
+        - name: var-files
+          mountPath: /var/run/argocd
+        - name: plugins
+          mountPath: /home/argocd/cmp-server/plugins
+        - name: tmp
+          mountPath: /tmp
+        - name: sops-age-key
+          mountPath: /age
+          readOnly: true
+        - name: custom-tools
+          mountPath: /usr/local/bin/sops
+          subPath: sops
+        - name: argocd-cmp-cm
+          mountPath: /home/argocd/cmp-server/config/plugin.yaml
+          subPath: sops.yaml
+
+applicationSet:
+  replicas: 1
+
+controller:
+  replicas: 1

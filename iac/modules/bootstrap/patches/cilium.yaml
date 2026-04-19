@@ -1,0 +1,9 @@
+# Disable the default Talos CNI (would install Flannel) and kube-proxy.
+# Required for Cilium kube-proxy replacement mode.
+# Applied as a config patch during Terraform bootstrap.
+cluster:
+  network:
+    cni:
+      name: none
+  proxy:
+    disabled: true

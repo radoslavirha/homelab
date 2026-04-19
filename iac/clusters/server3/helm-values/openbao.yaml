@@ -1,0 +1,34 @@
+# OpenBao Helm values — server3 cluster
+# Upstream values.yaml: https://github.com/openbao/openbao-helm/blob/main/values.yaml
+
+server:
+  # Single-node server3 cluster — standalone mode, no HA needed.
+  standalone:
+    enabled: true
+    config: |
+      ui = true
+
+      listener "tcp" {
+        tls_disable = 1
+        address     = "[::]:8200"
+        cluster_address = "[::]:8201"
+      }
+
+      storage "raft" {
+        path = "/openbao/data"
+      }
+
+  # Persistent storage backed by Longhorn.
+  dataStorage:
+    enabled: true
+    storageClass: longhorn
+    size: 10Gi
+
+# UI — useful during the init ceremony and for day-to-day inspection.
+# Exposed via HTTPRoute in gitops/k8s-manifests/server3/openbao/.
+ui:
+  enabled: true
+
+# Vault Agent injector — not needed; ESO pulls secrets directly via API.
+injector:
+  enabled: false
