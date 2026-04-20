@@ -17,3 +17,17 @@ providers:
   kubernetesGateway:
     statusAddress:
       ip: "192.168.1.201"
+
+ports:
+  mqtt:
+    port: 1883
+    protocol: TCP
+    expose:
+      default: true
+    exposedPort: 1883
+  mongodb:
+    port: 27017
+    protocol: TCP
+    expose:
+      default: true
+    exposedPort: 27017
