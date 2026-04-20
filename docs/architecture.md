@@ -94,8 +94,14 @@ MinIO is the intended S3-compatible backend for Terraform state. But MinIO itsel
 │  1. terraform bootstrap  → Talos cluster + credentials                  │
 │  2. terraform platform   → Cilium + Longhorn + Gateway API              │
 │     (no apps stage — ArgoCD on server3 manages this cluster)            │
-│  3. Register kubeconfig in server3 ArgoCD                               │
-│  4. [manual: bao kv put secret/<cluster>/... (seed per-app secrets)]    │
+│  3. Single OpenBao session — all vault work before any ArgoCD sync:     │
+│     a. Collect token reviewer JWT from new cluster                      │
+│     b. Register Kubernetes auth mount (one per cluster)                 │
+│     c. ESO read-only policy + role                                      │
+│     d. Provisioner write policy + long-lived token → OpenBao KV        │
+│     e. Seed all KV secrets (external-dns, influxdb2, …)                 │
+│     See docs/iac.md step 3 for full commands.                           │
+│  4. Register kubeconfig in server3 ArgoCD                               │
 │  5. Add cluster to ApplicationSet list generators, commit               │
 │     → server3 ArgoCD deploys: ESO → Traefik → InfluxDB2 → Headlamp     │
 └─────────────────────────────────────────────────────────────────────────┘
@@ -123,4 +129,4 @@ Secrets flow: OpenBao (server3 cluster) → ESO ClusterSecretStore → Kubernete
 - The only SOPS-encrypted secrets in this repo are per-cluster `argocd.sops.yaml` (Terraform consumption)
 
 OpenBao initialization is a manual ceremony performed once after the server3 secrets stage.
-Steps are documented at [docs/secrets.md](docs/secrets.md) (to be created).
+Steps are fully documented in [docs/iac.md](iac.md) under "Bootstrap sequence — Server3 cluster" (step 3).

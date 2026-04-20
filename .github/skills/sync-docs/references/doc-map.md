@@ -38,11 +38,20 @@ Maps each documentation section to its authoritative source so the agent knows e
 | Directory structure tree | Actual workspace layout (run `find iac/ gitops/ -maxdepth 3 -type d`) |
 | Bootstrap sequence — Server3 | Actual Terraform stages: `iac/clusters/server3/` subdirectories |
 | Bootstrap sequence — Server1/Server2 | Actual Terraform stages: `iac/clusters/<cluster>/` subdirectories |
+| Bootstrap step 3.f "Seed initial KV secrets" | Every datastore app deployed on server1/server2 must have its `bao kv put` command listed here. Source of truth: `docs/provisioning.md` + `gitops/argocd-manifests/apps/datastores/` |
 | Module variable reference — `modules/bootstrap` | `iac/modules/bootstrap/variables.tf` |
 | Module variable reference — `modules/platform` | `iac/modules/platform/variables.tf` |
 | Module variable reference — `modules/vault` | `iac/modules/vault/variables.tf` |
 | Module variable reference — `modules/apps` | `iac/modules/apps/variables.tf` |
 | Helm values paths | `iac/clusters/<cluster>/helm-values/` actual files |
+
+## docs/provisioning.md
+
+| Section | Source of Truth |
+|---------|----------------|
+| "Credential bootstrapping" blocks (one per datastore) | Must match the corresponding `bao kv put` commands in `docs/iac.md` step 3.f |
+| "Per-app token provisioning" PostSync Job examples | `gitops/k8s-manifests/<cluster>/<datastore>/provisioner-*.yaml` actual files |
+| "Provisioner OpenBao token setup" | Must match the `bao policy write <cluster>-provisioner` + `bao token create` commands in `docs/iac.md` step 3.e |
 
 ## Shared / Cross-Doc Consistency Rules
 

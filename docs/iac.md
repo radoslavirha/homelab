@@ -190,12 +190,18 @@ cd iac/clusters/<cluster>/platform && terraform init && terraform apply -auto-ap
 # Switch kubectl context to the new cluster for all steps below:
 kubectl config use-context <cluster>
 
-# 3. Configure OpenBao to trust this cluster
+# 3. Configure OpenBao — all vault work in a single session
+#
 #    OpenBao runs on server3 and is a REMOTE cluster from the perspective of the new cluster.
-#    It needs a token reviewer JWT from the new cluster to validate ESO service account tokens
-#    via the TokenReview API — without it, all logins return 403 permission denied.
+#    Perform ALL of the following sub-steps before moving to step 4, so that ESO, ExternalDNS,
+#    and every datastore can pull their secrets on first sync without any follow-up vault sessions.
+#
+#    ── 3.a  Collect the token reviewer JWT from the NEW cluster ───────────────────────────────
+#
+#    ESO uses Kubernetes auth to log in to OpenBao. OpenBao needs a token reviewer JWT from the
+#    new cluster's API server to validate those logins (TokenReview API). Without it, every ESO
+#    login returns 403.
 
-#    3.a Create a token reviewer ServiceAccount on the NEW cluster:
 kubectl create serviceaccount openbao-token-reviewer -n kube-system
 kubectl create clusterrolebinding openbao-token-reviewer \
   --clusterrole=system:auth-delegator \
@@ -212,40 +218,74 @@ type: kubernetes.io/service-account-token
 EOF
 REVIEWER_JWT=$(kubectl get secret openbao-token-reviewer -n kube-system \
   -o jsonpath='{.data.token}' | base64 -d)
-
-#    3.b Configure OpenBao (switch to server3 context):
-export BAO_ADDR=http://vault.server3.home   # or port-forward: http://127.0.0.1:8200
-bao login <root-token>
-
 CLUSTER_CA=$(kubectl get configmap kube-root-ca.crt -n kube-system -o jsonpath='{.data.ca\.crt}')
 
-#    Enable a dedicated Kubernetes auth mount (one per cluster — never reuse):
+#    ── 3.b  Open a single OpenBao session (server3 must be reachable) ────────────────────────
+#
+#    If vault.server3.home DNS is not yet resolving, use a port-forward instead:
+#      kubectl port-forward -n openbao svc/openbao 8200:8200 --context server3 &
+#      export BAO_ADDR=http://127.0.0.1:8200
+
+export BAO_ADDR=http://vault.server3.home
+bao login <root-token>
+
+#    ── 3.c  Register Kubernetes auth mount for this cluster ───────────────────────────────────
+#    One dedicated mount per cluster — never share mounts across clusters.
+
 bao auth enable -path=kubernetes-<cluster> kubernetes
 bao write auth/kubernetes-<cluster>/config \
   kubernetes_host="https://<controlplane-ip>:6443" \
   kubernetes_ca_cert="$CLUSTER_CA" \
   token_reviewer_jwt="$REVIEWER_JWT"
 
-#    Create a policy scoped to this cluster's secrets only:
+#    ── 3.d  ESO read-only policy + role ──────────────────────────────────────────────────────
+
 bao policy write <cluster>-external-secrets - <<'EOF'
 path "secret/data/<cluster>/*"     { capabilities = ["read"] }
 path "secret/metadata/<cluster>/*" { capabilities = ["read", "list"] }
 EOF
 
-#    Bind the ESO ServiceAccount to the policy:
 bao write auth/kubernetes-<cluster>/role/external-secrets \
   bound_service_account_names=external-secrets \
   bound_service_account_namespaces=external-secrets \
   policies=<cluster>-external-secrets \
   ttl=1h
 
-#    Seed KV secrets for this cluster:
-bao kv put secret/<cluster>/external-dns api-key=<unifi-api-key>
-# Verify: bao kv get secret/<cluster>/external-dns
+#    ── 3.e  Provisioner write policy + long-lived token ──────────────────────────────────────
+#    Provisioner Jobs (PostSync hooks) use this token to write scoped app credentials back to
+#    OpenBao after calling each datastore's management API. See docs/provisioning.md for the
+#    full PostSync Job pattern.
 
-#    InfluxDB2 admin credentials (pulled by ESO before InfluxDB2 pod starts):
-bao kv put secret/<cluster>/influxdb2 admin-password=<password> admin-token=<token>
-# See docs/provisioning.md for token format and per-app credential provisioning strategy.
+bao policy write <cluster>-provisioner - <<'EOF'
+path "secret/data/<cluster>/*" { capabilities = ["create", "update"] }
+EOF
+
+PROVISIONER_TOKEN=$(bao token create \
+  -policy=<cluster>-provisioner \
+  -period=8760h \
+  -display-name="<cluster>-provisioner" \
+  -format=json | jq -r .auth.client_token)
+
+# Store the provisioner token so provisioner Jobs can consume it via ESO:
+bao kv put secret/<cluster>/provisioner-token token="$PROVISIONER_TOKEN"
+
+#    ── 3.f  Seed initial KV secrets ──────────────────────────────────────────────────────────
+#    These secrets must exist before ESO syncs for the first time (steps 5 onwards).
+#    Add all secrets for every app you plan to deploy on this cluster.
+
+#    ExternalDNS — UniFi API key (gateway stage):
+bao kv put secret/<cluster>/external-dns api-key=<unifi-api-key>
+
+#    InfluxDB2 admin credentials (datastores stage; ESO syncs before pod starts):
+#      admin-token: any 20+ char string — InfluxDB2 accepts arbitrary values.
+#      Generate: openssl rand -base64 24 | tr -d '=+/'
+#      See docs/provisioning.md for per-app token provisioning after first start.
+bao kv put secret/<cluster>/influxdb2 \
+  admin-password=<password> \
+  admin-token=<token>
+
+#    Verify all secrets are present before continuing:
+bao kv list secret/<cluster>
 
 # 4. Register the cluster in server3 ArgoCD
 #    Context must still be set to <cluster> (set above)

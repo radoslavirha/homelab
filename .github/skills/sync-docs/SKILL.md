@@ -27,7 +27,8 @@ Load this skill after **any** of the following:
 | `README.md` | Cluster table (roles + machine specs); repo structure tree; quick-reference commands |
 | `AGENTS.md` | Repo layout tree; module+cluster pattern table; version location table; operational commands |
 | `docs/architecture.md` | Cluster roles table; technology stack table; design-decision narratives; bootstrap sequence diagram |
-| `docs/iac.md` | Directory structure tree; bootstrap sequences (server3, server1/server2); module variable reference tables |
+| `docs/iac.md` | Directory structure tree; bootstrap sequences (server3, server1/server2); module variable reference tables; step 3.f "Seed initial KV secrets" (one entry per datastore app) |
+| `docs/provisioning.md` | Per-datastore credential bootstrapping commands; PostSync Job patterns; provisioner token setup |
 
 See [doc-map](./references/doc-map.md) for the precise section-to-source mapping.
 
@@ -71,6 +72,7 @@ Follow the rules below, then verify each doc against the codebase.
 |-----|----------------|
 | `AGENTS.md` | "Adding a new ArgoCD app" section if steps changed |
 | `docs/architecture.md` | Technology stack table: add/remove row with all seven columns — Component (linked), Purpose, Clusters, Managed by, Artifact Hub link (or `—`), Local values links for every cluster file, Upstream `values.yaml` link (or `—`). Use `—` for all chart columns if the app has no Helm chart. |
+| `docs/iac.md` | If the app requires root/admin credentials at deploy time (datastores like InfluxDB2, EMQX, MongoDB), add a `bao kv put secret/<cluster>/<app> ...` line to the "Seed initial KV secrets" block (step 3.f) in the Server1/Server2 bootstrap sequence. Also add a comment referencing `docs/provisioning.md` for the per-app provisioner Job pattern. |
 
 ---
 
@@ -143,6 +145,8 @@ After all edits, verify that these items are consistent across **all four docs**
 - [ ] Directory trees agree with actual workspace layout
 - [ ] Bootstrap sequences agree between `docs/iac.md` and `docs/architecture.md`
 - [ ] `AGENTS.md` version table lists every Terraform-managed component that exists
+- [ ] Every datastore app that needs root credentials at deploy time has a `bao kv put` entry in `docs/iac.md` step 3.f (Server1/Server2 bootstrap) and a corresponding entry in `docs/provisioning.md`
+- [ ] No stale references to `docs/secrets.md` — OpenBao init steps live in `docs/iac.md`
 
 ### 6. Verify Against Actual Files
 
