@@ -23,6 +23,7 @@ gitops/
     external-secrets.yaml   shared: installCRDs: true
     headlamp.yaml           shared: httpRoute + clusterRoleBinding
     traefik.yaml            shared: hostNetwork, Gateway API provider, listeners, bare-metal service
+    influxdb2.yaml          shared: org=homelab, existingSecret, Longhorn persistence 25Gi
     server3/
       argocd.yaml           ArgoCD helm overrides
       external-dns.yaml     domainFilters, txtOwnerId
@@ -33,11 +34,13 @@ gitops/
     ArgoCD.yaml             ArgoCD self-management (cluster-agnostic)
     RootInfra.yaml        App-of-Apps → apps/infra/
     RootGateway.yaml      App-of-Apps → apps/gateway/
+    RootDatastores.yaml   App-of-Apps → apps/datastores/
     RootDashboards.yaml    App-of-Apps → apps/dashboards/
     apps/
-      infra/    ESO (AppSet, list generator)
-      gateway/  Traefik (AppSet), ExternalDNS (AppSet)
-      dashboards/ Headlamp (AppSet), Hubble (AppSet), Longhorn (AppSet)
+      infra/       ESO (AppSet, list generator)
+      gateway/     Traefik (AppSet), ExternalDNS (AppSet)
+      datastores/  InfluxDB2 (AppSet)
+      dashboards/  Headlamp (AppSet), Hubble (AppSet), Longhorn (AppSet)
     server3/
       RootDashboards.yaml App-of-Apps → server3/apps/dashboards/ (server3-only singletons)
       apps/
@@ -81,12 +84,13 @@ To apply a version change: `cd iac/clusters/<cluster>/<stage> && terraform apply
 
 ### 2. ArgoCD-managed (GitOps)
 
-All other apps use the **app-of-apps + ApplicationSet** pattern with three stages:
+All other apps use the **app-of-apps + ApplicationSet** pattern with four stages:
 - **infra** stage: ESO + supporting K8s resources (ClusterSecretStore)
 - **gateway** stage: Traefik + ExternalDNS + ExternalSecret for Unifi credentials
+- **datastores** stage: InfluxDB2 (server2; future: server1, EMQX, MongoDB, Telegraf)
 - **dashboards** stage: Headlamp, Hubble UI, Longhorn UI
 
-Root Application CRDs live in `gitops/argocd-manifests/` as `RootInfra.yaml` / `RootGateway.yaml` / `RootDashboards.yaml`. Applied once manually per stage; ArgoCD self-heals from then on.
+Root Application CRDs live in `gitops/argocd-manifests/` as `RootInfra.yaml` / `RootGateway.yaml` / `RootDatastores.yaml` / `RootDashboards.yaml`. Applied once manually per stage; ArgoCD self-heals from then on.
 Each Root Application discovers **ApplicationSets** in `gitops/argocd-manifests/apps/<stage>/`.
 Each ApplicationSet uses a **list generator** with one element per cluster. Adding a cluster to a stage means adding one `{cluster, clusterServer}` element to each ApplicationSet in that stage and committing.
 `destination.server` in each ApplicationSet template selects the target cluster via `{{clusterServer}}`.

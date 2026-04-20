@@ -1,0 +1,40 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: influxdb2
+  namespace: argocd
+spec:
+  generators:
+    - list:
+        elements:
+          - cluster: server2
+            clusterServer: https://192.168.1.201:6443
+  template:
+    metadata:
+      name: influxdb2-{{cluster}}
+    spec:
+      project: default
+      sources:
+        - repoURL: https://helm.influxdata.com
+          chart: influxdb2
+          targetRevision: 2.1.2
+          helm:
+            releaseName: influxdb2
+            valueFiles:
+              - $values/gitops/helm-values/influxdb2.yaml
+              - $values/gitops/helm-values/{{cluster}}/influxdb2.yaml
+        - repoURL: https://github.com/radoslavirha/homelab
+          targetRevision: HEAD
+          ref: values
+        - repoURL: https://github.com/radoslavirha/homelab
+          targetRevision: HEAD
+          path: gitops/k8s-manifests/{{cluster}}/influxdb2
+      destination:
+        server: '{{clusterServer}}'
+        namespace: monitoring
+      syncPolicy:
+        syncOptions:
+          - CreateNamespace=true
+        automated:
+          selfHeal: true
+          prune: true

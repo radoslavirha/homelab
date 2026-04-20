@@ -36,6 +36,7 @@ gitops/
     external-dns.yaml        shared: Unifi webhook, sources (gateway-httproute, traefik-proxy, crd)
     external-secrets.yaml    shared: installCRDs: true
     headlamp.yaml            shared: httpRoute + clusterRoleBinding
+    influxdb2.yaml           shared: org=homelab, existingSecret, Longhorn persistence 25Gi
     traefik.yaml             shared: hostNetwork, Gateway API, bare-metal service
     server3/
       argocd.yaml            ArgoCD Helm overrides
@@ -47,16 +48,19 @@ gitops/
       external-dns.yaml      domainFilters, txtOwnerId
       external-secrets.yaml  cluster-specific overrides (currently empty)
       headlamp.yaml          hostname: headlamp.server2.home
+      influxdb2.yaml         cluster-specific overrides (currently empty)
       traefik.yaml           dashboard, externalIPs, statusAddress.ip
   argocd-manifests/
     ArgoCD.yaml              ArgoCD self-management
     RootInfra.yaml           App-of-Apps → apps/infra/
     RootGateway.yaml         App-of-Apps → apps/gateway/
-    RootDashboards.yaml       App-of-Apps → apps/dashboards/
+    RootDatastores.yaml      App-of-Apps → apps/datastores/
+    RootDashboards.yaml      App-of-Apps → apps/dashboards/
     apps/
-      infra/    ESO (AppSet, list generator)
-      gateway/  Traefik (AppSet), ExternalDNS (AppSet)
-      dashboards/   Headlamp (AppSet), Hubble (AppSet), Longhorn (AppSet)
+      infra/       ESO (AppSet, list generator)
+      gateway/     Traefik (AppSet), ExternalDNS (AppSet)
+      datastores/  InfluxDB2 (AppSet)
+      dashboards/  Headlamp (AppSet), Hubble (AppSet), Longhorn (AppSet)
     server3/
       RootDashboards.yaml    App-of-Apps → server3/apps/dashboards/ (server3-only singletons)
       apps/
@@ -72,6 +76,7 @@ gitops/
       cilium/              HTTPRoute: hubble.server2.home → hubble-dashboard:80
       external-dns/        ExternalSecret (unifi-credentials), DNSEndpoint (server2.home)
       external-secrets/    ClusterSecretStore → OpenBao on server3 (via vault.server3.home)
+      influxdb2/           ExternalSecret (admin creds from OpenBao), HTTPRoute: influx.server2.home
       longhorn/            HTTPRoute: longhorn.server2.home → longhorn-frontend:80
 ```
 
@@ -234,9 +239,13 @@ bao write auth/kubernetes-<cluster>/role/external-secrets \
   policies=<cluster>-external-secrets \
   ttl=1h
 
-#    Seed KV secrets for this cluster (ExternalDNS pulls these on first sync):
+#    Seed KV secrets for this cluster:
 bao kv put secret/<cluster>/external-dns api-key=<unifi-api-key>
 # Verify: bao kv get secret/<cluster>/external-dns
+
+#    InfluxDB2 admin credentials (pulled by ESO before InfluxDB2 pod starts):
+bao kv put secret/<cluster>/influxdb2 admin-password=<password> admin-token=<token>
+# See docs/provisioning.md for token format and per-app credential provisioning strategy.
 
 # 4. Register the cluster in server3 ArgoCD
 #    Context must still be set to <cluster> (set above)
@@ -249,6 +258,7 @@ argocd cluster list   # note the SERVER URL; matches clusterServer in Applicatio
 #    Infra (ESO + ClusterSecretStore) — gitops/argocd-manifests/apps/infra/ESO.yaml
 #    Gateway (Traefik + ExternalDNS)  — gitops/argocd-manifests/apps/gateway/Traefik.yaml
 #                                       gitops/argocd-manifests/apps/gateway/ExternalDNS.yaml
+#    Datastores (InfluxDB2, ...)      — gitops/argocd-manifests/apps/datastores/*.yaml
 #    Dashboards (Headlamp, Hubble, Longhorn UI)
 #                                     — gitops/argocd-manifests/apps/dashboards/*.yaml
 #

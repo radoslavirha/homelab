@@ -1,0 +1,21 @@
+# InfluxDB2 — shared Helm values
+# Upstream values.yaml: https://github.com/influxdata/helm-charts/blob/master/charts/influxdb2/values.yaml
+
+fullnameOverride: influxdb2
+
+adminUser:
+  organization: homelab
+  # admin-password and admin-token come from OpenBao via ESO.
+  # Store before first sync: bao kv put secret/<cluster>/influxdb2 admin-password=<...> admin-token=<...>
+  existingSecret: influxdb2
+
+service:
+  port: 80
+
+ingress:
+  enabled: false
+
+persistence:
+  enabled: true
+  size: 25Gi
+  storageClass: "longhorn"

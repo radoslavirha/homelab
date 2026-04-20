@@ -27,6 +27,7 @@ Multi-cluster Kubernetes homelab: three Talos Linux nodes managed with a shared 
 | [Hubble UI](https://docs.cilium.io/en/stable/observability/hubble/) | Cilium network observability UI | server3 · server2 | ArgoCD | — | — | — |
 | [Longhorn UI](https://longhorn.io/) | Distributed storage dashboard | server3 · server2 | ArgoCD | — | — | — |
 | [MinIO](https://min.io/) | S3 storage for Terraform state and Longhorn backups | server3 | ArgoCD | — | — | — |
+| [InfluxDB2](https://www.influxdata.com/) | Time-series database | server2 | ArgoCD `datastores` | [influxdb2](https://artifacthub.io/packages/helm/influxdata/influxdb2) | [shared](../gitops/helm-values/influxdb2.yaml) · [server2](../gitops/helm-values/server2/influxdb2.yaml) | [values.yaml](https://github.com/influxdata/helm-charts/blob/master/charts/influxdb2/values.yaml) |
 
 ## Multi-cluster design decisions
 
@@ -81,6 +82,7 @@ MinIO is the intended S3-compatible backend for Terraform state. But MinIO itsel
 │  5. ArgoCD GitOps        → RootInfra (ESO + ClusterSecretStore)         │
 │     [manual: kubectl apply RootGateway → Traefik + ExternalDNS]         │
 │     [manual: kubectl apply server3/RootDashboards → OpenBaoRoute]          │
+│     [manual: kubectl apply RootDatastores → InfluxDB2 (server2+)]       │
 │     [manual: kubectl apply RootDashboards → Headlamp + Hubble + Longhorn] │
 │     [manual: terraform init -migrate-state for all server3 modules]     │
 │  6. Register server1 + server2 kubeconfigs in server3 ArgoCD            │
@@ -93,7 +95,9 @@ MinIO is the intended S3-compatible backend for Terraform state. But MinIO itsel
 │  2. terraform platform   → Cilium + Longhorn + Gateway API              │
 │     (no apps stage — ArgoCD on server3 manages this cluster)            │
 │  3. Register kubeconfig in server3 ArgoCD                               │
-│  4. server3 ArgoCD GitOps → ESO (→ server3 OpenBao), all apps          │
+│  4. [manual: bao kv put secret/<cluster>/... (seed per-app secrets)]    │
+│  5. Add cluster to ApplicationSet list generators, commit               │
+│     → server3 ArgoCD deploys: ESO → Traefik → InfluxDB2 → Headlamp     │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
