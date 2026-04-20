@@ -1,0 +1,3 @@
+# EMQX — server2 cluster overrides
+# Shared base values: gitops/helm-values/emqx.yaml
+# No cluster-specific Helm overrides needed; hostname is set in gitops/k8s-manifests/server2/emqx/HTTPRoute.yaml

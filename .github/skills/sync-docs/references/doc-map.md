@@ -38,7 +38,7 @@ Maps each documentation section to its authoritative source so the agent knows e
 | Directory structure tree | Actual workspace layout (run `find iac/ gitops/ -maxdepth 3 -type d`) |
 | Bootstrap sequence — Server3 | Actual Terraform stages: `iac/clusters/server3/` subdirectories |
 | Bootstrap sequence — Server1/Server2 | Actual Terraform stages: `iac/clusters/<cluster>/` subdirectories |
-| Bootstrap step 3.f "Seed initial KV secrets" | Every datastore app deployed on server1/server2 must have its `bao kv put` command listed here. Source of truth: `docs/provisioning.md` + `gitops/argocd-manifests/apps/datastores/` |
+| Bootstrap step 3.f "Seed initial KV secrets" | Every IoT app deployed on server1/server2 must have its `bao kv put` command listed here. Source of truth: `docs/provisioning.md` + `gitops/argocd-manifests/apps/iot/` |
 | Module variable reference — `modules/bootstrap` | `iac/modules/bootstrap/variables.tf` |
 | Module variable reference — `modules/platform` | `iac/modules/platform/variables.tf` |
 | Module variable reference — `modules/vault` | `iac/modules/vault/variables.tf` |

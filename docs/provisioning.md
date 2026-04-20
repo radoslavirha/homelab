@@ -46,7 +46,7 @@ No Terraform. No UI. Fully GitOps.
 The Helm chart requires `adminUser.existingSecret` to exist before the pod starts. ESO syncs this from OpenBao — but OpenBao must contain the values first.
 
 ```bash
-# Run once before applying RootDatastores or adding the cluster to the ApplicationSet
+# Run once before applying RootIoT or adding the cluster to the ApplicationSet
 bao kv put secret/<cluster>/influxdb2 \
   admin-password=<password> \
   admin-token=<token>
@@ -66,7 +66,7 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: influxdb2-provision-telegraf
-  namespace: monitoring
+  namespace: iot
   annotations:
     argocd.argoproj.io/hook: PostSync
     argocd.argoproj.io/hook-delete-policy: HookSucceeded
@@ -161,7 +161,7 @@ EOF
 # Create a long-lived token for use in provisioner Jobs
 bao token create -policy=<cluster>-provisioner -period=8760h -display-name="<cluster>-provisioner"
 # Store the token: bao kv put secret/<cluster>/provisioner-token token=<value>
-# Then create a K8s Secret or ExternalSecret named openbao-provision-token in the monitoring namespace
+# Then create a K8s Secret or ExternalSecret named openbao-provision-token in the iot namespace
 ```
 
 ### InfluxDB2 API reference

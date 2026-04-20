@@ -34,12 +34,12 @@ gitops/
     ArgoCD.yaml             ArgoCD self-management (cluster-agnostic)
     RootInfra.yaml        App-of-Apps → apps/infra/
     RootGateway.yaml      App-of-Apps → apps/gateway/
-    RootDatastores.yaml   App-of-Apps → apps/datastores/
+    RootIoT.yaml          App-of-Apps → apps/iot/
     RootDashboards.yaml    App-of-Apps → apps/dashboards/
     apps/
       infra/       ESO (AppSet, list generator)
       gateway/     Traefik (AppSet), ExternalDNS (AppSet)
-      datastores/  InfluxDB2 (AppSet)
+      iot/         InfluxDB2 (AppSet), EMQX (AppSet)
       dashboards/  Headlamp (AppSet), Hubble (AppSet), Longhorn (AppSet)
     server3/
       RootDashboards.yaml App-of-Apps → server3/apps/dashboards/ (server3-only singletons)
@@ -87,10 +87,10 @@ To apply a version change: `cd iac/clusters/<cluster>/<stage> && terraform apply
 All other apps use the **app-of-apps + ApplicationSet** pattern with four stages:
 - **infra** stage: ESO + supporting K8s resources (ClusterSecretStore)
 - **gateway** stage: Traefik + ExternalDNS + ExternalSecret for Unifi credentials
-- **datastores** stage: InfluxDB2 (server2; future: server1, EMQX, MongoDB, Telegraf)
+- **iot** stage: InfluxDB2 (server2), EMQX (server1 · server2)
 - **dashboards** stage: Headlamp, Hubble UI, Longhorn UI
 
-Root Application CRDs live in `gitops/argocd-manifests/` as `RootInfra.yaml` / `RootGateway.yaml` / `RootDatastores.yaml` / `RootDashboards.yaml`. Applied once manually per stage; ArgoCD self-heals from then on.
+Root Application CRDs live in `gitops/argocd-manifests/` as `RootInfra.yaml` / `RootGateway.yaml` / `RootIoT.yaml` / `RootDashboards.yaml`. Applied once manually per stage; ArgoCD self-heals from then on.
 Each Root Application discovers **ApplicationSets** in `gitops/argocd-manifests/apps/<stage>/`.
 Each ApplicationSet uses a **list generator** with one element per cluster. Adding a cluster to a stage means adding one `{cluster, clusterServer}` element to each ApplicationSet in that stage and committing.
 `destination.server` in each ApplicationSet template selects the target cluster via `{{clusterServer}}`.

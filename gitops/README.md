@@ -12,12 +12,12 @@ gitops/
     ArgoCD.yaml             ArgoCD self-management Application (cluster-agnostic)
     RootInfra.yaml          App-of-Apps → apps/infra/ (all clusters)
     RootGateway.yaml        App-of-Apps → apps/gateway/ (all clusters)
-    RootDatastores.yaml     App-of-Apps → apps/datastores/ (all clusters)
+    RootIoT.yaml            App-of-Apps → apps/iot/ (all clusters)
     RootDashboards.yaml     App-of-Apps → apps/dashboards/ (all clusters)
     apps/
       infra/       ESO.yaml
       gateway/     Traefik.yaml, ExternalDNS.yaml
-      datastores/  InfluxDB2.yaml
+      iot/         InfluxDB2.yaml, EMQX.yaml
       dashboards/  Headlamp.yaml, Hubble.yaml, Longhorn.yaml
     server3/
       RootDashboards.yaml   App-of-Apps → server3/apps/dashboards/ (server3-only singletons)
@@ -26,12 +26,16 @@ gitops/
   helm-values/
     external-dns.yaml       shared: Unifi webhook provider, sources, policy
     external-secrets.yaml   shared: installCRDs: true
+    emqx.yaml               shared: MQTT broker, Longhorn persistence, emqxConfig rules
     headlamp.yaml           shared: httpRoute + clusterRoleBinding
     influxdb2.yaml          shared: org=homelab, existingSecret, Longhorn persistence 25Gi
-    traefik.yaml            shared: hostNetwork, Gateway API provider, listeners, bare-metal service
+    traefik.yaml            shared: hostNetwork, Gateway API provider, listeners, mqtt entrypoint, bare-metal service
+    server1/
+      emqx.yaml             cluster-specific overrides (currently empty)
     server2/
       external-dns.yaml     domainFilters, txtOwnerId
       external-secrets.yaml cluster-specific overrides (currently empty)
+      emqx.yaml             cluster-specific overrides (currently empty)
       headlamp.yaml         hostname: headlamp.server2.home
       influxdb2.yaml        cluster-specific overrides (currently empty)
       traefik.yaml          dashboard hostname/IP, externalIPs, statusAddress.ip
@@ -42,10 +46,13 @@ gitops/
       headlamp.yaml         hostname: headlamp.server3.home
       traefik.yaml          dashboard hostname/IP, externalIPs, statusAddress.ip
   k8s-manifests/
+    server1/
+      emqx/                ExternalSecret (emqx-credentials), HTTPRoute: mqtt.server1.home, IngressRouteTCP: port 1883
     server2/
       cilium/              HTTPRoute: hubble.server2.home → hubble-dashboard:80
       external-dns/        ExternalSecret (unifi-credentials), DNSEndpoint (server2.home A record)
       external-secrets/    ClusterSecretStore → OpenBao on server3
+      emqx/                ExternalSecret (emqx-credentials), HTTPRoute: mqtt.server2.home, IngressRouteTCP: port 1883
       influxdb2/           ExternalSecret (admin creds from OpenBao), HTTPRoute: influx.server2.home
       longhorn/            HTTPRoute: longhorn.server2.home → longhorn-frontend:80
     server3/
@@ -64,7 +71,7 @@ There are three multi-cluster root Applications and one server3-only root Applic
 |-----------------|-------|------|----------------|
 | `RootInfra.yaml` | infra | ESO | ESO must be running before ExternalDNS can pull the Unifi API key |
 | `RootGateway.yaml` | gateway | Traefik, ExternalDNS | Traefik GatewayClass is needed for HTTPRoutes; ExternalDNS needs the ESO-synced secret |
-| `RootDatastores.yaml` | datastores | InfluxDB2 | Datastores depend on ESO for secret sync; secrets must be seeded in OpenBao first |
+| `RootIoT.yaml` | iot | InfluxDB2, EMQX | IoT datastores and broker depend on ESO for secret sync; secrets must be seeded in OpenBao first |
 | `RootDashboards.yaml` | dashboards | Headlamp, Hubble, Longhorn UI | UI layer — depends on Traefik for HTTPRoutes |
 | `server3/RootDashboards.yaml` | server3 singletons | OpenBao HTTPRoute | server3-only; Traefik must exist before HTTPRoute can bind |
 
@@ -113,13 +120,13 @@ kubectl apply -f gitops/argocd-manifests/RootGateway.yaml
 #    Applied once — ArgoCD self-heals from then on.
 kubectl apply -f gitops/argocd-manifests/server3/RootDashboards.yaml
 
-# 5. Apply datastores stage
-#    ⚠️  PREREQUISITE: secret/server3/influxdb2 and secret/server3/provisioner-token
-#    must exist in OpenBao before this step. ESO syncs these on first sync —
-#    if the paths are missing the pod will crashloop.
-#    See docs/secrets.md → "<cluster>/influxdb2" and "<cluster>/provisioner-token".
+# 5. Apply iot stage (EMQX + InfluxDB2)
+#    ⚠️  PREREQUISITE: secret/server3/influxdb2, secret/server3/emqx, and
+#    secret/server3/provisioner-token must exist in OpenBao before this step.
+#    ESO syncs these on first sync — if the paths are missing the pod will crashloop.
+#    See docs/secrets.md → "<cluster>/influxdb2", "<cluster>/emqx", "<cluster>/provisioner-token".
 #    Verify: bao kv list secret/server3
-kubectl apply -f gitops/argocd-manifests/RootDatastores.yaml
+kubectl apply -f gitops/argocd-manifests/RootIoT.yaml
 
 # 6. Apply dashboards stage (Headlamp, Hubble, Longhorn UI)
 kubectl apply -f gitops/argocd-manifests/RootDashboards.yaml
@@ -137,7 +144,8 @@ Run after completing the Terraform + OpenBao setup and `argocd cluster add` in `
 #   gitops/argocd-manifests/apps/infra/ESO.yaml
 #   gitops/argocd-manifests/apps/gateway/Traefik.yaml
 #   gitops/argocd-manifests/apps/gateway/ExternalDNS.yaml
-#   gitops/argocd-manifests/apps/datastores/InfluxDB2.yaml
+#   gitops/argocd-manifests/apps/iot/InfluxDB2.yaml
+#   gitops/argocd-manifests/apps/iot/EMQX.yaml
 #   gitops/argocd-manifests/apps/dashboards/Headlamp.yaml
 #   gitops/argocd-manifests/apps/dashboards/Hubble.yaml
 #   gitops/argocd-manifests/apps/dashboards/Longhorn.yaml
@@ -146,13 +154,14 @@ Run after completing the Terraform + OpenBao setup and `argocd cluster add` in `
 #   - cluster: <cluster>
 #     clusterServer: <server-url>   # from: argocd cluster list
 #
-# Recommended order: infra → gateway → datastores → dashboards.
+# Recommended order: infra → gateway → iot → dashboards.
 # After infra: wait for ClusterSecretStore to be Ready before committing the next stage.
 #
 # Stage prerequisites — seed these in OpenBao BEFORE committing the stage:
-#   gateway stage:    secret/<cluster>/external-dns
-#   datastores stage: secret/<cluster>/influxdb2
-#                     secret/<cluster>/provisioner-token
+#   gateway stage: secret/<cluster>/external-dns
+#   iot stage:     secret/<cluster>/influxdb2
+#                  secret/<cluster>/emqx
+#                  secret/<cluster>/provisioner-token
 # See docs/secrets.md for exact bao kv put commands and verification steps.
 ```
 
@@ -168,7 +177,7 @@ Run after completing the Terraform + OpenBao setup and `argocd cluster add` in `
 
 1. Bootstrap the cluster (Talos + platform) via Terraform in `iac/clusters/<cluster>/`.
 2. Register the cluster in server3 ArgoCD: `argocd cluster add <context> --name <cluster>`.
-3. Add `{cluster, clusterServer}` to the list generator in each ApplicationSet under `gitops/argocd-manifests/apps/infra/`, `apps/gateway/`, `apps/datastores/`, and `apps/dashboards/`.
+3. Add `{cluster, clusterServer}` to the list generator in each ApplicationSet under `gitops/argocd-manifests/apps/infra/`, `apps/gateway/`, `apps/iot/`, and `apps/dashboards/`.
 4. Add cluster-specific helm-values overrides under `gitops/helm-values/<cluster>/` if needed.
 5. Add raw K8s manifests under `gitops/k8s-manifests/<cluster>/` if needed.
 6. Commit — ArgoCD auto-generates all Applications for the new cluster.

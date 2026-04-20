@@ -27,7 +27,8 @@ Multi-cluster Kubernetes homelab: three Talos Linux nodes managed with a shared 
 | [Hubble UI](https://docs.cilium.io/en/stable/observability/hubble/) | Cilium network observability UI | server3 · server2 | ArgoCD | — | — | — |
 | [Longhorn UI](https://longhorn.io/) | Distributed storage dashboard | server3 · server2 | ArgoCD | — | — | — |
 | [MinIO](https://min.io/) | S3 storage for Terraform state and Longhorn backups | server3 | ArgoCD | — | — | — |
-| [InfluxDB2](https://www.influxdata.com/) | Time-series database | server2 | ArgoCD `datastores` | [influxdb2](https://artifacthub.io/packages/helm/influxdata/influxdb2) | [shared](../gitops/helm-values/influxdb2.yaml) · [server2](../gitops/helm-values/server2/influxdb2.yaml) | [values.yaml](https://github.com/influxdata/helm-charts/blob/master/charts/influxdb2/values.yaml) |
+| [EMQX](https://www.emqx.io/) | MQTT broker for IoT message routing | server1 · server2 | ArgoCD `iot` | [emqx](https://artifacthub.io/packages/helm/emqx/emqx) | [shared](../gitops/helm-values/emqx.yaml) · [server1](../gitops/helm-values/server1/emqx.yaml) · [server2](../gitops/helm-values/server2/emqx.yaml) | [values.yaml](https://github.com/emqx/emqx/blob/master/deploy/charts/emqx/values.yaml) |
+| [InfluxDB2](https://www.influxdata.com/) | Time-series database for IoT data | server2 | ArgoCD `iot` | [influxdb2](https://artifacthub.io/packages/helm/influxdata/influxdb2) | [shared](../gitops/helm-values/influxdb2.yaml) · [server2](../gitops/helm-values/server2/influxdb2.yaml) | [values.yaml](https://github.com/influxdata/helm-charts/blob/master/charts/influxdb2/values.yaml) |
 
 ## Multi-cluster design decisions
 
@@ -81,8 +82,8 @@ MinIO is the intended S3-compatible backend for Terraform state. But MinIO itsel
 │     [manual: create sops-age-key Secret in argocd namespace]            │
 │  5. ArgoCD GitOps        → RootInfra (ESO + ClusterSecretStore)         │
 │     [manual: kubectl apply RootGateway → Traefik + ExternalDNS]         │
-│     [manual: kubectl apply server3/RootDashboards → OpenBaoRoute]          │
-│     [manual: kubectl apply RootDatastores → InfluxDB2 (server2+)]       │
+│     [manual: kubectl apply server3/RootDashboards → OpenBaoRoute]       │
+│     [manual: kubectl apply RootIoT → EMQX + InfluxDB2]                  │
 │     [manual: kubectl apply RootDashboards → Headlamp + Hubble + Longhorn] │
 │     [manual: terraform init -migrate-state for all server3 modules]     │
 │  6. Register server1 + server2 kubeconfigs in server3 ArgoCD            │
@@ -99,11 +100,11 @@ MinIO is the intended S3-compatible backend for Terraform state. But MinIO itsel
 │     b. Register Kubernetes auth mount (one per cluster)                 │
 │     c. ESO read-only policy + role                                      │
 │     d. Provisioner write policy + long-lived token → OpenBao KV        │
-│     e. Seed all KV secrets (external-dns, influxdb2, …)                 │
+│     e. Seed all KV secrets (external-dns, influxdb2, emqx, …)           │
 │     See docs/iac.md step 3 for full commands.                           │
 │  4. Register kubeconfig in server3 ArgoCD                               │
 │  5. Add cluster to ApplicationSet list generators, commit               │
-│     → server3 ArgoCD deploys: ESO → Traefik → InfluxDB2 → Headlamp     │
+│     → server3 ArgoCD deploys: ESO → Traefik → EMQX + InfluxDB2 → Headlamp │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 

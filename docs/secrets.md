@@ -13,7 +13,8 @@ Every stage in `docs/iac.md` and `gitops/README.md` that requires secrets links 
 |---|---|---|---|
 | `secret/server3/argocd` | `adminPasswordHash` | ArgoCD install (`apps` stage) | server3 |
 | `secret/<cluster>/external-dns` | `api-key` | gateway stage | any |
-| `secret/<cluster>/influxdb2` | `admin-password`, `admin-token` | datastores stage | any |
+| `secret/<cluster>/influxdb2` | `admin-password`, `admin-token` | iot stage | any |
+| `secret/<cluster>/emqx` | `dashboard-username`, `dashboard-password` | iot stage | any |
 
 `<cluster>` is the short cluster name: `server2`, `server3`, etc.
 
@@ -74,7 +75,7 @@ bao kv get secret/<cluster>/external-dns
 
 ## \<cluster\>/influxdb2
 
-**Required before:** datastores stage (`RootDatastores.yaml` applied / cluster added to InfluxDB2 ApplicationSet)
+**Required before:** iot stage (`RootIoT.yaml` applied / cluster added to InfluxDB2 ApplicationSet)
 
 The Helm chart references `adminUser.existingSecret: influxdb2`. ESO syncs this secret from OpenBao before the pod starts. If the OpenBao path is empty, ESO sync fails and the pod never gets its secret — it will crashloop.
 
@@ -91,6 +92,27 @@ bao kv get secret/<cluster>/influxdb2
 ```
 
 See [provisioning.md](provisioning.md) for per-app scoped token provisioning after InfluxDB2 is running.
+
+---
+
+## \<cluster\>/emqx
+
+**Required before:** iot stage (`RootIoT.yaml` applied / cluster added to EMQX ApplicationSet)
+
+EMQX references `envFromSecret: emqx-credentials`. ESO syncs this secret from OpenBao before the pod starts. If the OpenBao path is empty, ESO sync fails and the pod never gets its credentials — it will crashloop.
+
+```bash
+# dashboard-username: EMQX dashboard admin username (e.g. admin).
+# dashboard-password: strong password (20+ chars).
+bao kv put secret/<cluster>/emqx \
+  dashboard-username=<username> \
+  dashboard-password=<password>
+
+# Verify
+bao kv get secret/<cluster>/emqx
+```
+
+See [provisioning.md](provisioning.md) for per-app MQTT user provisioning via the EMQX management API.
 
 ---
 

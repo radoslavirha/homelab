@@ -1,7 +1,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
-  name: influxdb2
+  name: emqx
   namespace: argocd
 spec:
   generators:
@@ -11,27 +11,27 @@ spec:
             clusterServer: https://192.168.1.201:6443
   template:
     metadata:
-      name: influxdb2-{{cluster}}
+      name: emqx-{{cluster}}
     spec:
       project: default
       sources:
-        - repoURL: https://helm.influxdata.com
-          chart: influxdb2
-          targetRevision: 2.1.2
+        - repoURL: https://repos.emqx.io/charts
+          chart: emqx
+          targetRevision: 5.8.9
           helm:
-            releaseName: influxdb2
+            releaseName: emqx
             valueFiles:
-              - $values/gitops/helm-values/influxdb2.yaml
-              - $values/gitops/helm-values/{{cluster}}/influxdb2.yaml
+              - $values/gitops/helm-values/emqx.yaml
+              - $values/gitops/helm-values/{{cluster}}/emqx.yaml
         - repoURL: https://github.com/radoslavirha/homelab
           targetRevision: HEAD
           ref: values
         - repoURL: https://github.com/radoslavirha/homelab
           targetRevision: HEAD
-          path: gitops/k8s-manifests/{{cluster}}/influxdb2
+          path: gitops/k8s-manifests/{{cluster}}/emqx
       destination:
         server: '{{clusterServer}}'
-        namespace: monitoring
+        namespace: iot
       syncPolicy:
         syncOptions:
           - CreateNamespace=true

@@ -1,18 +1,18 @@
-# Datastores App-of-Apps: InfluxDB2 (+ future EMQX, MongoDB, Telegraf) — all applicable clusters.
+# IoT App-of-Apps: InfluxDB2, EMQX — all applicable clusters.
 # Applied once manually after RootGateway (Traefik must be running before HTTPRoutes can bind).
 # ArgoCD auto-syncs from that point on.
-# Manual apply: kubectl apply -f gitops/argocd-manifests/RootDatastores.yaml
+# Manual apply: kubectl apply -f gitops/argocd-manifests/RootIoT.yaml
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: root-datastores
+  name: root-iot
   namespace: argocd
 spec:
   project: default
   source:
     repoURL: https://github.com/radoslavirha/homelab
     targetRevision: HEAD
-    path: gitops/argocd-manifests/apps/datastores
+    path: gitops/argocd-manifests/apps/iot
     directory:
       recurse: true
   destination:

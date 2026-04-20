@@ -211,13 +211,21 @@ bao kv put secret/<cluster>/provisioner-token token="$PROVISIONER_TOKEN"
 #    ExternalDNS — UniFi API key (gateway stage):
 bao kv put secret/<cluster>/external-dns api-key=<unifi-api-key>
 
-#    InfluxDB2 admin credentials (datastores stage; ESO syncs before pod starts):
+#    InfluxDB2 admin credentials (iot stage; ESO syncs before pod starts):
 #      admin-token: any 20+ char string — InfluxDB2 accepts arbitrary values.
 #      Generate: openssl rand -base64 24 | tr -d '=+/'
 #      See docs/provisioning.md for per-app token provisioning after first start.
 bao kv put secret/<cluster>/influxdb2 \
   admin-password=<password> \
   admin-token=<token>
+
+#    EMQX dashboard credentials (iot stage):
+#      dashboard-username: admin username for EMQX dashboard (e.g. admin).
+#      dashboard-password: strong password (20+ chars).
+#      See docs/provisioning.md for per-app credential provisioning after first start.
+bao kv put secret/<cluster>/emqx \
+  dashboard-username=<username> \
+  dashboard-password=<password>
 
 #    Verify all secrets are present before continuing:
 bao kv list secret/<cluster>

@@ -1,0 +1,46 @@
+# EMQX — shared Helm values
+# Upstream values.yaml: https://github.com/emqx/emqx/blob/master/deploy/charts/emqx/values.yaml
+# Cluster-specific overrides: gitops/helm-values/<cluster>/emqx.yaml
+# Per-cluster k8s manifests (HTTPRoute, IngressRouteTCP, ExternalSecret): gitops/k8s-manifests/<cluster>/emqx/
+
+replicaCount: 1
+
+# Dashboard and API credentials come from OpenBao via ESO.
+# Store before first sync: bao kv put secret/<cluster>/emqx dashboard-username=<user> dashboard-password=<pass>
+envFromSecret: "emqx-credentials"
+
+service:
+  type: ClusterIP
+
+ingress:
+  enabled: false
+
+persistence:
+  enabled: true
+  storageClass: "longhorn"
+
+emqxConfig:
+  EMQX_rule_engine__rules__LOXONE_MIOT_NOTIFICATION:
+    enable: true
+    description: "Rule to accept JSON payload from MiOT Bridge and republish each property as a separate message with deviceId in text/plain format. First line is deviceId from topic, second line is property=value from JSON payload."
+    sql: |-
+      FOREACH
+        jq('to_entries[] | {k: .key, v: (.value | tostring)}', payload) as item
+      DO
+        nth(4, tokens(topic, '/')) as deviceId,
+        item.k as property,
+        item.v as value
+      FROM "iot/miot-bridge/device/+/notifications"
+    actions:
+      - function: "republish"
+        args:
+          topic: "iot/miot-bridge/devices/notifications"
+          direct_dispatch: false
+          qos: 1
+          retain: false
+          payload: |-
+            deviceId=${deviceId}
+            ${property}=${value}
+          mqtt_properties:
+            Content-Type: "text/plain"
+            Payload-Format-Indicator: "true"
