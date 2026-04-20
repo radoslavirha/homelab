@@ -1,0 +1,24 @@
+# Databases App-of-Apps: MongoDB (+ future PostgreSQL, Redis, …) — all applicable clusters.
+# Applied once manually after RootGateway (Traefik must be running before TCP routes can bind).
+# ArgoCD auto-syncs from that point on.
+# Manual apply: kubectl apply -f gitops/argocd-manifests/RootDatabases.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root-databases
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/radoslavirha/homelab
+    targetRevision: HEAD
+    path: gitops/argocd-manifests/apps/databases
+    directory:
+      recurse: true
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

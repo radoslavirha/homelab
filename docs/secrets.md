@@ -15,6 +15,7 @@ Every stage in `docs/iac.md` and `gitops/README.md` that requires secrets links 
 | `secret/<cluster>/external-dns` | `api-key` | gateway stage | any |
 | `secret/<cluster>/influxdb2` | `admin-password`, `admin-token` | iot stage | any |
 | `secret/<cluster>/emqx` | `dashboard-username`, `dashboard-password` | iot stage | any |
+| `secret/<cluster>/mongodb` | `root-password` | databases stage | any |
 
 `<cluster>` is the short cluster name: `server2`, `server3`, etc.
 
@@ -113,6 +114,25 @@ bao kv get secret/<cluster>/emqx
 ```
 
 See [provisioning.md](provisioning.md) for per-app MQTT user provisioning via the EMQX management API.
+
+---
+
+## \<cluster\>/mongodb
+
+**Required before:** databases stage (`RootDatabases.yaml` applied / cluster added to MongoDB ApplicationSet)
+
+The Bitnami MongoDB chart references `auth.existingSecret: mongodb`. ESO syncs this secret from OpenBao before the pod starts. If the OpenBao path is empty, ESO sync fails and the pod never gets its credentials — it will crashloop.
+
+```bash
+# root-password: strong password (20+ chars). Used for the MongoDB root user.
+bao kv put secret/<cluster>/mongodb \
+  root-password=<password>
+
+# Verify
+bao kv get secret/<cluster>/mongodb
+```
+
+See [provisioning.md](provisioning.md) for per-app scoped user provisioning via the MongoDB management API.
 
 ---
 

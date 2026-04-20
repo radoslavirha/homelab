@@ -227,6 +227,12 @@ bao kv put secret/<cluster>/emqx \
   dashboard-username=<username> \
   dashboard-password=<password>
 
+#    MongoDB root password (databases stage; ESO syncs before pod starts):
+#      root-password: strong password (20+ chars).
+#      See docs/provisioning.md for per-app user provisioning after first start.
+bao kv put secret/<cluster>/mongodb \
+  root-password=<password>
+
 #    Verify all secrets are present before continuing:
 bao kv list secret/<cluster>
 

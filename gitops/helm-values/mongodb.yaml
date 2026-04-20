@@ -1,0 +1,23 @@
+# MongoDB — shared Helm values
+# Upstream values.yaml: https://github.com/bitnami/charts/blob/main/bitnami/mongodb/values.yaml
+# Cluster-specific overrides: gitops/helm-values/<cluster>/mongodb.yaml
+# Per-cluster k8s manifests (IngressRouteTCP, ExternalSecret): gitops/k8s-manifests/<cluster>/mongodb/
+
+fullnameOverride: mongodb
+
+architecture: standalone
+useStatefulSet: true
+
+auth:
+  enabled: true
+  # root password comes from OpenBao via ESO.
+  # Store before first sync: bao kv put secret/<cluster>/mongodb root-password=<...>
+  existingSecret: mongodb
+
+service:
+  type: ClusterIP
+
+persistence:
+  enabled: true
+  size: 10Gi
+  storageClass: "longhorn"

@@ -1,0 +1,40 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: mongodb
+  namespace: argocd
+spec:
+  generators:
+    - list:
+        elements:
+          - cluster: server2
+            clusterServer: https://192.168.1.201:6443
+  template:
+    metadata:
+      name: mongodb-{{cluster}}
+    spec:
+      project: default
+      sources:
+        - repoURL: https://charts.bitnami.com/bitnami
+          chart: mongodb
+          targetRevision: 18.6.24
+          helm:
+            releaseName: mongodb
+            valueFiles:
+              - $values/gitops/helm-values/mongodb.yaml
+              - $values/gitops/helm-values/{{cluster}}/mongodb.yaml
+        - repoURL: https://github.com/radoslavirha/homelab
+          targetRevision: HEAD
+          ref: values
+        - repoURL: https://github.com/radoslavirha/homelab
+          targetRevision: HEAD
+          path: gitops/k8s-manifests/{{cluster}}/mongodb
+      destination:
+        server: '{{clusterServer}}'
+        namespace: mongodb
+      syncPolicy:
+        syncOptions:
+          - CreateNamespace=true
+        automated:
+          selfHeal: true
+          prune: true

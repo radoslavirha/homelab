@@ -1,0 +1,3 @@
+# MongoDB — server2 cluster overrides
+# Shared base values: gitops/helm-values/mongodb.yaml
+# No cluster-specific Helm overrides needed; TCP route is set in gitops/k8s-manifests/server2/mongodb/IngressRouteTCP.yaml

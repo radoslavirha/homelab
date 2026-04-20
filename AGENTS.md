@@ -35,11 +35,13 @@ gitops/
     RootInfra.yaml        App-of-Apps → apps/infra/
     RootGateway.yaml      App-of-Apps → apps/gateway/
     RootIoT.yaml          App-of-Apps → apps/iot/
+    RootDatabases.yaml    App-of-Apps → apps/databases/
     RootDashboards.yaml    App-of-Apps → apps/dashboards/
     apps/
       infra/       ESO (AppSet, list generator)
       gateway/     Traefik (AppSet), ExternalDNS (AppSet)
       iot/         InfluxDB2 (AppSet), EMQX (AppSet)
+      databases/   MongoDB (AppSet)
       dashboards/  Headlamp (AppSet), Hubble (AppSet), Longhorn (AppSet)
     server3/
       RootDashboards.yaml App-of-Apps → server3/apps/dashboards/ (server3-only singletons)
@@ -88,9 +90,10 @@ All other apps use the **app-of-apps + ApplicationSet** pattern with four stages
 - **infra** stage: ESO + supporting K8s resources (ClusterSecretStore)
 - **gateway** stage: Traefik + ExternalDNS + ExternalSecret for Unifi credentials
 - **iot** stage: InfluxDB2 (server2), EMQX (server1 · server2)
+- **databases** stage: MongoDB (server2)
 - **dashboards** stage: Headlamp, Hubble UI, Longhorn UI
 
-Root Application CRDs live in `gitops/argocd-manifests/` as `RootInfra.yaml` / `RootGateway.yaml` / `RootIoT.yaml` / `RootDashboards.yaml`. Applied once manually per stage; ArgoCD self-heals from then on.
+Root Application CRDs live in `gitops/argocd-manifests/` as `RootInfra.yaml` / `RootGateway.yaml` / `RootIoT.yaml` / `RootDatabases.yaml` / `RootDashboards.yaml`. Applied once manually per stage; ArgoCD self-heals from then on.
 Each Root Application discovers **ApplicationSets** in `gitops/argocd-manifests/apps/<stage>/`.
 Each ApplicationSet uses a **list generator** with one element per cluster. Adding a cluster to a stage means adding one `{cluster, clusterServer}` element to each ApplicationSet in that stage and committing.
 `destination.server` in each ApplicationSet template selects the target cluster via `{{clusterServer}}`.

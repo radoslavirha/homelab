@@ -24,20 +24,17 @@ See [docs/architecture.md](docs/architecture.md) for multi-cluster decisions and
 ## Quick reference
 
 ```bash
-# Bootstrap server1 / server2 (run in order)
-cd iac/clusters/<cluster>/bootstrap && terraform init && terraform apply -auto-approve
-cd iac/clusters/<cluster>/platform  && terraform init && terraform apply -auto-approve
-
 # Bootstrap server3 — also includes vault (OpenBao) and apps (ArgoCD) stages
 cd iac/clusters/server3/bootstrap && terraform init && terraform apply -auto-approve
 cd iac/clusters/server3/platform  && terraform init && terraform apply -auto-approve
 cd iac/clusters/server3/vault     && terraform init && terraform apply -auto-approve
 cd iac/clusters/server3/apps      && terraform init && terraform apply -auto-approve
 
-# Check cluster health
-talosctl health --talosconfig iac/clusters/<cluster>/credentials/talosconfig
-kubectl get nodes --kubeconfig iac/clusters/<cluster>/credentials/kubeconfig
+# Bootstrap server1 / server2 (run in order)
+cd iac/clusters/<cluster>/bootstrap && terraform init && terraform apply -auto-approve
+cd iac/clusters/<cluster>/platform  && terraform init && terraform apply -auto-approve
 
-# ArgoCD status (no CLI login needed)
-kubectl get applications -n argocd --kubeconfig iac/clusters/<cluster>/credentials/kubeconfig
+# Check cluster health
+talosctl health
+kubectl get nodes
 ```

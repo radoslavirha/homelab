@@ -45,6 +45,12 @@ ports:
     expose:
       default: true
     exposedPort: 1883
+  mongodb:
+    port: 27017
+    protocol: TCP
+    expose:
+      default: true
+    exposedPort: 27017
 
 api:
   dashboard: true
