@@ -31,54 +31,9 @@ iac/
     server1/            bootstrap/ platform/ helm-values/
     server2/            bootstrap/ platform/ helm-values/
     server3/            bootstrap/ platform/ vault/ apps/ helm-values/
-gitops/
-  helm-values/
-    external-dns.yaml        shared: Unifi webhook, sources (gateway-httproute, traefik-proxy, crd)
-    external-secrets.yaml    shared: installCRDs: true
-    headlamp.yaml            shared: httpRoute + clusterRoleBinding
-    influxdb2.yaml           shared: org=homelab, existingSecret, Longhorn persistence 25Gi
-    traefik.yaml             shared: hostNetwork, Gateway API, bare-metal service
-    server3/
-      argocd.yaml            ArgoCD Helm overrides
-      external-dns.yaml      domainFilters, txtOwnerId
-      external-secrets.yaml  cluster-specific overrides (currently empty)
-      headlamp.yaml          hostname: headlamp.server3.home
-      traefik.yaml           dashboard, externalIPs, statusAddress.ip
-    server2/
-      external-dns.yaml      domainFilters, txtOwnerId
-      external-secrets.yaml  cluster-specific overrides (currently empty)
-      headlamp.yaml          hostname: headlamp.server2.home
-      influxdb2.yaml         cluster-specific overrides (currently empty)
-      traefik.yaml           dashboard, externalIPs, statusAddress.ip
-  argocd-manifests/
-    ArgoCD.yaml              ArgoCD self-management
-    RootInfra.yaml           App-of-Apps → apps/infra/
-    RootGateway.yaml         App-of-Apps → apps/gateway/
-    RootDatastores.yaml      App-of-Apps → apps/datastores/
-    RootDashboards.yaml      App-of-Apps → apps/dashboards/
-    apps/
-      infra/       ESO (AppSet, list generator)
-      gateway/     Traefik (AppSet), ExternalDNS (AppSet)
-      datastores/  InfluxDB2 (AppSet)
-      dashboards/  Headlamp (AppSet), Hubble (AppSet), Longhorn (AppSet)
-    server3/
-      RootDashboards.yaml    App-of-Apps → server3/apps/dashboards/ (server3-only singletons)
-      apps/
-        dashboards/   OpenBao.yaml    App: vault.server3.home HTTPRoute
-  k8s-manifests/
-    server3/
-      cilium/              HTTPRoute: hubble.server3.home → hubble-dashboard:80
-      external-dns/        ExternalSecret (unifi-credentials), DNSEndpoint (server3.home)
-      external-secrets/    ClusterSecretStore → local OpenBao
-      longhorn/            HTTPRoute: longhorn.server3.home → longhorn-frontend:80
-      openbao/             HTTPRoute: vault.server3.home → openbao:8200
-    server2/
-      cilium/              HTTPRoute: hubble.server2.home → hubble-dashboard:80
-      external-dns/        ExternalSecret (unifi-credentials), DNSEndpoint (server2.home)
-      external-secrets/    ClusterSecretStore → OpenBao on server3 (via vault.server3.home)
-      influxdb2/           ExternalSecret (admin creds from OpenBao), HTTPRoute: influx.server2.home
-      longhorn/            HTTPRoute: longhorn.server2.home → longhorn-frontend:80
 ```
+
+> ArgoCD manifests, Helm values, and raw K8s manifests live in `gitops/` — see [gitops/README.md](../gitops/README.md).
 
 Each `iac/clusters/<name>/<stage>/main.tf` contains:
 - `terraform {}` block with required providers + S3 backend config (commented until MinIO is live)
@@ -143,33 +98,8 @@ export VAULT_ADDR=http://127.0.0.1:8200
 export VAULT_TOKEN=$(cat ~/.vault-token)   # set after: bao login <root-token>
 cd iac/clusters/server3/apps && terraform init && terraform apply -auto-approve
 
-# 5. Apply ArgoCD self-management + infra stage
-kubectl apply -f gitops/argocd-manifests/ArgoCD.yaml
-kubectl apply -f gitops/argocd-manifests/RootInfra.yaml
-# Wait for ESO + ClusterSecretStore to become ready before continuing:
-kubectl wait --for=condition=Ready clusterSecretStore/openbao -n external-secrets --timeout=120s
-
-# 5.a Seed secrets in OpenBao before applying the gateway stage.
-#     The ExternalDNS ExternalSecret will pull these on its first sync.
-#     OpenBao is not yet exposed via Traefik at this point — use port-forward.
-kubectl port-forward -n openbao svc/openbao 8200:8200 &
-export BAO_ADDR=http://127.0.0.1:8200
-bao login                                                            # enter root token
-bao kv put secret/server3/external-dns api-key=<unifi-api-key>
-# Verify: bao kv get secret/server3/external-dns
-
-# 6. Apply gateway stage
-kubectl apply -f gitops/argocd-manifests/RootGateway.yaml
-# ArgoCD auto-syncs Traefik + ExternalDNS from that point on.
-
-# 6.a Apply server3-specific singleton Applications
-#     Discovered by server3/RootDashboards — applied once, ArgoCD self-heals from then on.
-kubectl apply -f gitops/argocd-manifests/server3/RootDashboards.yaml
-# OpenBao is now accessible at vault.server3.home via Traefik.
-
-# 7. Apply dashboards stage (Headlamp, Hubble, Longhorn UI)
-kubectl apply -f gitops/argocd-manifests/RootDashboards.yaml
-# ArgoCD auto-syncs dashboards apps from that point on.
+# 5. Bootstrap GitOps stages (ArgoCD root Applications)
+#    See gitops/README.md → "Bootstrap sequence".
 ```
 
 ### Server1 / Server2 cluster (managed by server3 ArgoCD)
@@ -292,21 +222,8 @@ bao kv list secret/<cluster>
 argocd cluster add <context-name> --name <cluster>
 argocd cluster list   # note the SERVER URL; matches clusterServer in ApplicationSet elements
 
-# 5. Add this cluster to each ApplicationSet's list generator and commit + push.
-#    ArgoCD auto-generates Applications as each stage is added.
-#
-#    Infra (ESO + ClusterSecretStore) — gitops/argocd-manifests/apps/infra/ESO.yaml
-#    Gateway (Traefik + ExternalDNS)  — gitops/argocd-manifests/apps/gateway/Traefik.yaml
-#                                       gitops/argocd-manifests/apps/gateway/ExternalDNS.yaml
-#    Datastores (InfluxDB2, ...)      — gitops/argocd-manifests/apps/datastores/*.yaml
-#    Dashboards (Headlamp, Hubble, Longhorn UI)
-#                                     — gitops/argocd-manifests/apps/dashboards/*.yaml
-#
-#    Add under spec.generators[0].list.elements in each file:
-#      - cluster: <cluster>
-#        clusterServer: <server-url>  # from: argocd cluster list
-#
-#    Recommended order: infra first (wait for ClusterSecretStore Ready), then gateway, then dashboards.
+# 5. Bootstrap GitOps stages for this cluster
+#    See gitops/README.md → "Bootstrap sequence".
 ```
 
 ## Module variable reference
@@ -407,7 +324,7 @@ When upgrading across all clusters, update each cluster's `main.tf` separately.
 3. Update `devices:` in `helm-values/cilium.yaml` to the correct network interface
 4. Bootstrap: run `terraform apply -auto-approve` for bootstrap and platform stages
 5. Register the cluster kubeconfig in server3 ArgoCD (`argocd cluster add`)
-6. Apply the cluster's Application manifests from `gitops/`
+6. Bootstrap GitOps stages — see [gitops/README.md](../gitops/README.md) → "Bootstrap sequence"
 
 ## State backend migration to MinIO
 
