@@ -92,6 +92,8 @@ bao write auth/kubernetes-server3/role/external-secrets \
   ttl=24h
 
 # 4. ArgoCD install
+# ⚠️  PREREQUISITE: secret/server3/argocd must exist in OpenBao.
+#    See docs/secrets.md → "server3/argocd" for the bcrypt hash command.
 # Prerequisites: OpenBao port-forward must be running and vault credentials exported.
 kubectl port-forward -n openbao svc/openbao 8200:8200
 export VAULT_ADDR=http://127.0.0.1:8200
@@ -199,8 +201,11 @@ PROVISIONER_TOKEN=$(bao token create \
 # Store the provisioner token so provisioner Jobs can consume it via ESO:
 bao kv put secret/<cluster>/provisioner-token token="$PROVISIONER_TOKEN"
 
-#    ── 3.f  Seed initial KV secrets ──────────────────────────────────────────────────────────
-#    These secrets must exist before ESO syncs for the first time (steps 5 onwards).
+#    ── 3.f  Seed initial KV secrets ──────────────────────────────────────────────────────────#    ⚠️  PREREQUISITE: all secrets below MUST exist in OpenBao before any ArgoCD stage
+#    is committed for this cluster. ESO syncs immediately on first Application sync —
+#    missing paths cause ExternalSecrets to fail and pods to crashloop.
+#    See docs/secrets.md for full details and verification commands.
+##    These secrets must exist before ESO syncs for the first time (steps 5 onwards).
 #    Add all secrets for every app you plan to deploy on this cluster.
 
 #    ExternalDNS — UniFi API key (gateway stage):

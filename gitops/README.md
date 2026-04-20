@@ -95,6 +95,8 @@ kubectl apply -f gitops/argocd-manifests/RootInfra.yaml
 kubectl wait --for=condition=Ready clusterSecretStore/openbao -n external-secrets --timeout=120s
 
 # 2. Seed OpenBao secrets for the gateway stage
+#    ⚠️  PREREQUISITE: secret/server3/external-dns must exist in OpenBao.
+#    See docs/secrets.md → "<cluster>/external-dns" for the exact command.
 #    ExternalDNS ExternalSecret syncs on first start — secret must exist before RootGateway.yaml is applied.
 #    OpenBao is not yet exposed via Traefik at this point — use port-forward.
 kubectl port-forward -n openbao svc/openbao 8200:8200 &
@@ -112,6 +114,11 @@ kubectl apply -f gitops/argocd-manifests/RootGateway.yaml
 kubectl apply -f gitops/argocd-manifests/server3/RootDashboards.yaml
 
 # 5. Apply datastores stage
+#    ⚠️  PREREQUISITE: secret/server3/influxdb2 and secret/server3/provisioner-token
+#    must exist in OpenBao before this step. ESO syncs these on first sync —
+#    if the paths are missing the pod will crashloop.
+#    See docs/secrets.md → "<cluster>/influxdb2" and "<cluster>/provisioner-token".
+#    Verify: bao kv list secret/server3
 kubectl apply -f gitops/argocd-manifests/RootDatastores.yaml
 
 # 6. Apply dashboards stage (Headlamp, Hubble, Longhorn UI)
@@ -141,6 +148,12 @@ Run after completing the Terraform + OpenBao setup and `argocd cluster add` in `
 #
 # Recommended order: infra → gateway → datastores → dashboards.
 # After infra: wait for ClusterSecretStore to be Ready before committing the next stage.
+#
+# Stage prerequisites — seed these in OpenBao BEFORE committing the stage:
+#   gateway stage:    secret/<cluster>/external-dns
+#   datastores stage: secret/<cluster>/influxdb2
+#                     secret/<cluster>/provisioner-token
+# See docs/secrets.md for exact bao kv put commands and verification steps.
 ```
 
 ## Adding a new app
