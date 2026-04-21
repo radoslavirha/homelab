@@ -21,14 +21,8 @@ config:
   service:
     pipelines:
       logs:
-        receivers: [otlp]
-        processors: [memory_limiter, k8sattributes, resource, batch]
         exporters: [otlp/server3]
       traces:
-        receivers: [otlp]
-        processors: [memory_limiter, k8sattributes, resource, batch]
         exporters: [otlp/server3]
       metrics:
-        receivers: [otlp]
-        processors: [memory_limiter, k8sattributes, resource, batch]
         exporters: [otlp/server3]

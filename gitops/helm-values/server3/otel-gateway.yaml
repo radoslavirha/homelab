@@ -20,3 +20,11 @@ config:
     prometheusremotewrite:
       endpoint: "http://prometheus.monitoring.svc.cluster.local:80/api/v1/write"
 
+  service:
+    pipelines:
+      logs:
+        exporters: [otlphttp/loki]
+      traces:
+        exporters: [otlp/tempo]
+      metrics:
+        exporters: [prometheusremotewrite]
