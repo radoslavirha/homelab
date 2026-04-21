@@ -12,19 +12,23 @@ gitops/
     ArgoCD.yaml             ArgoCD self-management Application (cluster-agnostic)
     RootInfra.yaml          App-of-Apps → apps/infra/ (all clusters)
     RootGateway.yaml        App-of-Apps → apps/gateway/ (all clusters)
+    RootObservability.yaml  App-of-Apps → apps/observability/ (all clusters)
     RootIoT.yaml            App-of-Apps → apps/iot/ (all clusters)
     RootDatabases.yaml      App-of-Apps → apps/databases/ (all clusters)
     RootDashboards.yaml     App-of-Apps → apps/dashboards/ (all clusters)
     apps/
       infra/       ESO.yaml
       gateway/     Traefik.yaml, ExternalDNS.yaml
+      observability/ OTelGateway.yaml
       iot/         InfluxDB2.yaml, EMQX.yaml
       databases/   MongoDB.yaml
       dashboards/  Headlamp.yaml, Hubble.yaml, Longhorn.yaml
     server3/
-      RootDashboards.yaml   App-of-Apps → server3/apps/dashboards/ (server3-only singletons)
+      RootDashboards.yaml      App-of-Apps → server3/apps/dashboards/ (server3-only singletons)
+      RootObservability.yaml   App-of-Apps → server3/apps/observability/ (server3-only LGTM stack)
       apps/
         dashboards/   OpenBao.yaml
+        observability/ Prometheus.yaml, Grafana.yaml, Loki.yaml, Tempo.yaml
   helm-values/
     external-dns.yaml       shared: Unifi webhook provider, sources, policy
     external-secrets.yaml   shared: installCRDs: true
@@ -64,8 +68,10 @@ gitops/
       cilium/              HTTPRoute: hubble.server3.home → hubble-dashboard:80
       external-dns/        ExternalSecret (unifi-credentials), DNSEndpoint (server3.home A record)
       external-secrets/    ClusterSecretStore → local OpenBao
+      grafana/             ExternalSecret (grafana-admin), datasource ConfigMaps (prometheus/loki/tempo), HTTPRoute: grafana.server3.home
       longhorn/            HTTPRoute: longhorn.server3.home → longhorn-frontend:80
       openbao/             HTTPRoute: vault.server3.home → openbao:8200
+      otel-gateway/        HTTPRoute: otel.server3.home, IngressRouteTCP (otel gRPC :4317)
 ```
 
 ## App-of-apps pattern
@@ -76,10 +82,12 @@ There are three multi-cluster root Applications and one server3-only root Applic
 |-----------------|-------|------|----------------|
 | `RootInfra.yaml` | infra | ESO | ESO must be running before ExternalDNS can pull the Unifi API key |
 | `RootGateway.yaml` | gateway | Traefik, ExternalDNS | Traefik GatewayClass is needed for HTTPRoutes; ExternalDNS needs the ESO-synced secret |
+| `RootObservability.yaml` | observability | OTel Gateway | Receives telemetry from all clusters; Traefik must exist for HTTPRoutes and IngressRouteTCP |
 | `RootIoT.yaml` | iot | InfluxDB2, EMQX | IoT datastores and broker depend on ESO for secret sync; secrets must be seeded in OpenBao first |
 | `RootDatabases.yaml` | databases | MongoDB | Document databases depend on ESO for secret sync; secrets must be seeded in OpenBao first |
 | `RootDashboards.yaml` | dashboards | Headlamp, Hubble, Longhorn UI | UI layer — depends on Traefik for HTTPRoutes |
 | `server3/RootDashboards.yaml` | server3 singletons | OpenBao HTTPRoute | server3-only; Traefik must exist before HTTPRoute can bind |
+| `server3/RootObservability.yaml` | server3 observability | Prometheus, Grafana, Loki, Tempo | server3-only LGTM backends; Traefik must exist for HTTPRoutes; ESO must exist for Grafana admin secret |
 
 Each stage uses ApplicationSets with a list generator — one element per cluster. Adding a cluster means adding `{cluster, clusterServer}` to each ApplicationSet and committing.
 
@@ -126,6 +134,15 @@ kubectl apply -f gitops/argocd-manifests/RootGateway.yaml
 #    Applied once — ArgoCD self-heals from then on.
 kubectl apply -f gitops/argocd-manifests/server3/RootDashboards.yaml
 
+# 4b. Apply observability stage (OTel Gateway — all clusters)
+#     Traefik must be running before HTTPRoute and IngressRouteTCP can bind.
+kubectl apply -f gitops/argocd-manifests/RootObservability.yaml
+
+# 4c. Apply server3 LGTM stack (Prometheus, Grafana, Loki, Tempo)
+#     ⚠️  PREREQUISITE: secret/server3/grafana must exist in OpenBao.
+#     Store with: bao kv put secret/server3/grafana admin-user=admin admin-password=<password>
+kubectl apply -f gitops/argocd-manifests/server3/RootObservability.yaml
+
 # 5. Apply iot stage (EMQX + InfluxDB2)
 #    ⚠️  PREREQUISITE: secret/server3/influxdb2, secret/server3/emqx, and
 #    secret/server3/provisioner-token must exist in OpenBao before this step.
@@ -156,6 +173,7 @@ Run after completing the Terraform + OpenBao setup and `argocd cluster add` in `
 #   gitops/argocd-manifests/apps/infra/ESO.yaml
 #   gitops/argocd-manifests/apps/gateway/Traefik.yaml
 #   gitops/argocd-manifests/apps/gateway/ExternalDNS.yaml
+#   gitops/argocd-manifests/apps/observability/OTelGateway.yaml
 #   gitops/argocd-manifests/apps/iot/InfluxDB2.yaml
 #   gitops/argocd-manifests/apps/iot/EMQX.yaml
 #   gitops/argocd-manifests/apps/databases/MongoDB.yaml
@@ -171,8 +189,9 @@ Run after completing the Terraform + OpenBao setup and `argocd cluster add` in `
 # After infra: wait for ClusterSecretStore to be Ready before committing the next stage.
 #
 # Stage prerequisites — seed these in OpenBao BEFORE committing the stage:
-#   gateway stage:   secret/<cluster>/external-dns
-#   iot stage:       secret/<cluster>/influxdb2
+#   gateway stage:       secret/<cluster>/external-dns
+#   observability stage: gitops/k8s-manifests/<cluster>/otel-gateway/ (folder must exist for each new cluster)
+#   iot stage:           secret/<cluster>/influxdb2
 #                    secret/<cluster>/emqx
 #                    secret/<cluster>/provisioner-token
 #   databases stage: secret/<cluster>/mongodb

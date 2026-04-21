@@ -1,0 +1,36 @@
+# Prometheus — shared base values (server3 only, no scraping by default)
+# Upstream: https://github.com/prometheus-community/helm-charts/tree/main/charts/prometheus
+# Purpose: lightweight TSDB receiving remote-write from OTel Collector; no scraping needed.
+
+# Disable optional sub-components not used in this homelab
+alertmanager:
+  enabled: false
+
+kube-state-metrics:
+  enabled: false
+
+prometheus-node-exporter:
+  enabled: false
+
+prometheus-pushgateway:
+  enabled: false
+
+server:
+  # Override the generated name so the Service is named "prometheus" instead of "prometheus-server".
+  # All internal references (OTel Gateway, Tempo metricsGenerator, Grafana datasource) use
+  # prometheus.monitoring.svc.cluster.local:9090
+  fullnameOverride: prometheus
+
+  # Persistence via Longhorn
+  persistentVolume:
+    enabled: true
+    size: 20Gi
+    storageClass: longhorn
+
+  # Accept remote-write from OTel Collector and enable config hot-reload via /-/reload
+  extraFlags:
+    - web.enable-remote-write-receiver
+    - web.enable-lifecycle
+
+  # Minimal retention for homelab
+  retention: 30d

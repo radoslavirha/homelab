@@ -38,6 +38,11 @@ updateStrategy:
 ports:
   web:
     port: 80
+  otlp-grpc:
+    port: 4317
+    protocol: TCP
+    expose:
+      default: true
   metrics: null
 
 api:
@@ -77,3 +82,8 @@ gateway:
 logs:
   general:
     level: INFO
+  access:
+    enabled: true
+
+experimental:
+  otlpLogs: true

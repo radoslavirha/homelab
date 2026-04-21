@@ -1,0 +1,2 @@
+# Grafana — server3 cluster overrides
+# Shared base values: gitops/helm-values/grafana.yaml

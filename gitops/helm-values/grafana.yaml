@@ -1,0 +1,23 @@
+# Grafana — shared base values
+# Upstream: https://github.com/grafana-community/helm-charts/tree/main/charts/grafana
+
+# Admin credentials supplied via ExternalSecret → grafana-admin Secret
+admin:
+  existingSecret: grafana-admin
+  userKey: admin-user
+  passwordKey: admin-password
+
+# Persistence via Longhorn
+persistence:
+  enabled: true
+  size: 5Gi
+  storageClass: longhorn
+
+# Sidecar watches ConfigMaps labelled grafana_datasource="1" in all namespaces
+sidecar:
+  datasources:
+    enabled: true
+    searchNamespace: ALL
+  dashboards:
+    enabled: true
+    searchNamespace: ALL

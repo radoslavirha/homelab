@@ -1,0 +1,34 @@
+# Tempo — shared base values (single-binary mode)
+# Upstream: https://github.com/grafana-community/helm-charts/tree/main/charts/tempo
+# Receives traces from OTel Collector via OTLP gRPC on port 4317.
+
+tempo:
+  storage:
+    trace:
+      backend: local
+      local:
+        path: /var/tempo/traces
+      wal:
+        path: /var/tempo/wal
+
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: "0.0.0.0:4317"
+        http:
+          endpoint: "0.0.0.0:4318"
+
+  # Metrics generator writes span metrics to Prometheus
+  metricsGenerator:
+    enabled: true
+    remoteWriteUrl: "http://prometheus.monitoring.svc.cluster.local:9090/api/v1/write"
+
+  retention: 336h  # 14 days
+
+  reportingEnabled: false
+
+persistence:
+  enabled: true
+  size: 20Gi
+  storageClass: longhorn

@@ -6,9 +6,9 @@ Multi-cluster Kubernetes homelab: three Talos Linux nodes managed with a shared 
 
 | Cluster | Machine | Role |
 |---------|---------|------|
-| `server1` | server1 — 32 GB RAM / 6 cores / 500 GB SSD | Production workloads + full monitoring stack |
+| `server1` | server1 — 32 GB RAM / 6 cores / 500 GB SSD | Production workloads |
 | `server2` | server2 — 32 GB RAM / 6 cores / 500 GB SSD | Experimentation, staging |
-| `server3` | server3 — 16 GB RAM / 4 cores / 256 GB SSD | Platform services — MinIO, OpenBao, ArgoCD (manages all clusters) |
+| `server3` | server3 — 16 GB RAM / 4 cores / 256 GB SSD | Platform services — MinIO, OpenBao, ArgoCD, central observability hub (manages all clusters) |
 
 ## Technology stack
 
@@ -30,6 +30,11 @@ Multi-cluster Kubernetes homelab: three Talos Linux nodes managed with a shared 
 | [MongoDB](https://www.mongodb.com/) | Document database | server2 | ArgoCD `databases` | [mongodb](https://artifacthub.io/packages/helm/bitnami/mongodb) | [shared](../gitops/helm-values/mongodb.yaml) · [server2](../gitops/helm-values/server2/mongodb.yaml) | [values.yaml](https://github.com/bitnami/charts/blob/main/bitnami/mongodb/values.yaml) |
 | [EMQX](https://www.emqx.io/) | MQTT broker for IoT message routing | server1 · server2 | ArgoCD `iot` | [emqx](https://artifacthub.io/packages/helm/emqx/emqx) | [shared](../gitops/helm-values/emqx.yaml) · [server1](../gitops/helm-values/server1/emqx.yaml) · [server2](../gitops/helm-values/server2/emqx.yaml) | [values.yaml](https://github.com/emqx/emqx/blob/master/deploy/charts/emqx/values.yaml) |
 | [InfluxDB2](https://www.influxdata.com/) | Time-series database for IoT data | server2 | ArgoCD `iot` | [influxdb2](https://artifacthub.io/packages/helm/influxdata/influxdb2) | [shared](../gitops/helm-values/influxdb2.yaml) · [server2](../gitops/helm-values/server2/influxdb2.yaml) | [values.yaml](https://github.com/influxdata/helm-charts/blob/master/charts/influxdb2/values.yaml) |
+| [Prometheus](https://prometheus.io/) | TSDB receiving OTLP metrics; no scraping (remote-write only) | server3 | ArgoCD `observability` | [prometheus](https://artifacthub.io/packages/helm/prometheus-community/prometheus) | [shared](../gitops/helm-values/prometheus.yaml) · [server3](../gitops/helm-values/server3/prometheus.yaml) | [values.yaml](https://github.com/prometheus-community/helm-charts/blob/main/charts/prometheus/values.yaml) |
+| [Grafana](https://grafana.com/) | Observability dashboards; datasources: Prometheus, Loki, Tempo | server3 | ArgoCD `observability` | [grafana](https://artifacthub.io/packages/helm/grafana-community/grafana) | [shared](../gitops/helm-values/grafana.yaml) · [server3](../gitops/helm-values/server3/grafana.yaml) | [values.yaml](https://github.com/grafana-community/helm-charts/blob/main/charts/grafana/values.yaml) |
+| [Loki](https://grafana.com/oss/loki/) | Log aggregation backend; OTLP HTTP receiver | server3 | ArgoCD `observability` | [loki](https://artifacthub.io/packages/helm/grafana-community/loki) | [shared](../gitops/helm-values/loki.yaml) | [values.yaml](https://github.com/grafana-community/helm-charts/blob/main/charts/loki/values.yaml) |
+| [Tempo](https://grafana.com/oss/tempo/) | Distributed tracing backend; OTLP gRPC/HTTP receiver | server3 | ArgoCD `observability` | [tempo](https://artifacthub.io/packages/helm/grafana-community/tempo) | [shared](../gitops/helm-values/tempo.yaml) | [values.yaml](https://github.com/grafana-community/helm-charts/blob/main/charts/tempo/values.yaml) |
+| [OpenTelemetry Collector](https://opentelemetry.io/docs/collector/) | OTLP gateway; fan-out to Prometheus/Loki/Tempo | server3 (all clusters) | ArgoCD `observability` (AppSet) | [opentelemetry-collector](https://artifacthub.io/packages/helm/opentelemetry-helm-charts/opentelemetry-collector) | [shared](../gitops/helm-values/otel-gateway.yaml) · [server3](../gitops/helm-values/server3/otel-gateway.yaml) | [values.yaml](https://github.com/open-telemetry/opentelemetry-helm-charts/blob/main/charts/opentelemetry-collector/values.yaml) |
 
 ## Multi-cluster design decisions
 
@@ -83,7 +88,9 @@ MinIO is the intended S3-compatible backend for Terraform state. But MinIO itsel
 │     [manual: create sops-age-key Secret in argocd namespace]            │
 │  5. ArgoCD GitOps        → RootInfra (ESO + ClusterSecretStore)         │
 │     [manual: kubectl apply RootGateway → Traefik + ExternalDNS]         │
+│     [manual: kubectl apply RootObservability → OTel Gateway]            │
 │     [manual: kubectl apply server3/RootDashboards → OpenBaoRoute]       │
+│     [manual: kubectl apply server3/RootObservability → LGTM stack]      │
 │     [manual: kubectl apply RootIoT → EMQX + InfluxDB2]                  │
 │     [manual: kubectl apply RootDatabases → MongoDB]                    │
 │     [manual: kubectl apply RootDashboards → Headlamp + Hubble + Longhorn] │
@@ -122,6 +129,11 @@ ArgoCD runs only on the server3 cluster and manages workloads on all three clust
 Post-bootstrap steps for each new cluster:
 1. Register its kubeconfig in server3 ArgoCD (`argocd cluster add`)
 2. Apply the cluster's ApplicationSets / Application manifests from `gitops/`
+
+## Observability
+
+Central LGTM stack on server3 — metrics (Prometheus), logs (Loki), traces (Tempo), dashboards (Grafana). OTel push endpoints: `http://otel.server3.home` (HTTP/4318 via HTTPRoute) and `otel.server3.home:4317` (gRPC via IngressRouteTCP).
+See [docs/observability.md](observability.md) for full architecture, pipeline details, and datasource correlations.
 
 ## Secret management
 

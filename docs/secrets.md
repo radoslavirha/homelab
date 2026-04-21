@@ -13,6 +13,7 @@ Every stage in `docs/iac.md` and `gitops/README.md` that requires secrets links 
 |---|---|---|---|
 | `secret/server3/argocd` | `adminPasswordHash` | ArgoCD install (`apps` stage) | server3 |
 | `secret/<cluster>/external-dns` | `api-key` | gateway stage | any |
+| `secret/server3/grafana` | `admin-user`, `admin-password` | observability stage | server3 |
 | `secret/<cluster>/influxdb2` | `admin-password`, `admin-token` | iot stage | any |
 | `secret/<cluster>/emqx` | `dashboard-username`, `dashboard-password` | iot stage | any |
 | `secret/<cluster>/mongodb` | `root-password` | databases stage | any |
@@ -55,6 +56,23 @@ bao kv put secret/server3/argocd adminPasswordHash='$2a$10$...'
 
 # Verify
 bao kv get secret/server3/argocd
+```
+
+---
+
+## server3/grafana
+
+**Required before:** observability stage (`RootObservability.yaml` applied)
+
+Grafana references `existingSecret: grafana-admin`. ESO syncs this secret from OpenBao before the pod starts.
+
+```bash
+bao kv put secret/server3/grafana \
+  admin-user=admin \
+  admin-password=<strong-password>
+
+# Verify
+bao kv get secret/server3/grafana
 ```
 
 ---

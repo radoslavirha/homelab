@@ -18,6 +18,42 @@ service:
   externalIPs:
     - 192.168.1.202
 
+logs:
+  general:
+    otlp:
+      enabled: true
+      grpc:
+        enabled: true
+        endpoint: "otel-gateway-opentelemetry-collector.monitoring.svc.cluster.local:4317"
+        insecure: true
+  access:
+    otlp:
+      enabled: true
+      grpc:
+        enabled: true
+        endpoint: "otel-gateway-opentelemetry-collector.monitoring.svc.cluster.local:4317"
+        insecure: true
+
+tracing:
+  otlp:
+    enabled: true
+    grpc:
+      enabled: true
+      endpoint: "otel-gateway-opentelemetry-collector.monitoring.svc.cluster.local:4317"
+      insecure: true
+
+metrics:
+  prometheus: null
+  otlp:
+    enabled: true
+    addEntryPointsLabels: true
+    addRoutersLabels: true
+    addServicesLabels: true
+    grpc:
+      enabled: true
+      endpoint: "otel-gateway-opentelemetry-collector.monitoring.svc.cluster.local:4317"
+      insecure: true
+
 providers:
   kubernetesGateway:
     statusAddress:

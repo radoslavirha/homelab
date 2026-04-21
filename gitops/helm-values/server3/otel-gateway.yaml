@@ -1,0 +1,22 @@
+# OTel Gateway — server3 cluster overrides
+# Shared base values: gitops/helm-values/otel-gateway.yaml
+# Defines: resource processor (k8s.cluster.name=server3) + exporter endpoint URLs.
+
+config:
+  processors:
+    resource:
+      attributes:
+        - action: insert
+          key: k8s.cluster.name
+          value: server3
+
+  exporters:
+    otlphttp/loki:
+      endpoint: "http://loki.monitoring.svc.cluster.local:3100/otlp"
+    otlp/tempo:
+      endpoint: "tempo.monitoring.svc.cluster.local:4317"
+      tls:
+        insecure: true
+    prometheusremotewrite:
+      endpoint: "http://prometheus.monitoring.svc.cluster.local:80/api/v1/write"
+

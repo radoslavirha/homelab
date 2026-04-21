@@ -1,0 +1,24 @@
+# Root Observability App-of-Apps — multi-cluster observability stage.
+# Manages: OTel Gateway (ApplicationSet, all clusters).
+# Applied once manually after RootGateway (Traefik must exist before HTTPRoutes can bind).
+# Manual apply: kubectl apply -f gitops/argocd-manifests/RootObservability.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root-observability
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/radoslavirha/homelab
+    targetRevision: HEAD
+    path: gitops/argocd-manifests/apps/observability
+    directory:
+      recurse: true
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

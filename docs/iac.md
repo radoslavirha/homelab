@@ -92,8 +92,15 @@ bao write auth/kubernetes-server3/role/external-secrets \
   ttl=24h
 
 # 4. ArgoCD install
-# ⚠️  PREREQUISITE: secret/server3/argocd must exist in OpenBao.
-#    See docs/secrets.md → "server3/argocd" for the bcrypt hash command.
+# ⚠️  PREREQUISITES: the following secrets must exist in OpenBao before ArgoCD syncs:
+#    - secret/server3/argocd → See docs/secrets.md → "server3/argocd" for the bcrypt hash command.
+#    - secret/server3/grafana → Grafana admin credentials (observability stage).
+
+# Seed Grafana admin credentials (observability stage):
+bao kv put secret/server3/grafana \
+  admin-user=admin \
+  admin-password=<strong-password>
+
 # Prerequisites: OpenBao port-forward must be running and vault credentials exported.
 kubectl port-forward -n openbao svc/openbao 8200:8200
 export VAULT_ADDR=http://127.0.0.1:8200

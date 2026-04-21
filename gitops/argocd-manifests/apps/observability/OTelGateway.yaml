@@ -1,0 +1,45 @@
+# OTel Gateway Collector — ApplicationSet (all clusters)
+# Upstream values.yaml: https://github.com/open-telemetry/opentelemetry-helm-charts/blob/main/charts/opentelemetry-collector/values.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: otel-gateway
+  namespace: argocd
+spec:
+  generators:
+    - list:
+        elements:
+          - cluster: server3
+            clusterServer: https://kubernetes.default.svc
+  template:
+    metadata:
+      name: otel-gateway-{{cluster}}
+    spec:
+      project: default
+      sources:
+        - repoURL: https://open-telemetry.github.io/opentelemetry-helm-charts
+          chart: opentelemetry-collector
+          targetRevision: 0.149.0
+          helm:
+            releaseName: otel-gateway
+            valueFiles:
+              - $values/gitops/helm-values/otel-gateway.yaml
+              - $values/gitops/helm-values/{{cluster}}/otel-gateway.yaml
+        - repoURL: https://github.com/radoslavirha/homelab
+          targetRevision: HEAD
+          ref: values
+        - repoURL: https://github.com/radoslavirha/homelab
+          targetRevision: HEAD
+          path: gitops/k8s-manifests/{{cluster}}/otel-gateway
+      destination:
+        server: '{{clusterServer}}'
+        namespace: monitoring
+      syncPolicy:
+        managedNamespaceMetadata:
+          labels:
+            pod-security.kubernetes.io/enforce: privileged
+        syncOptions:
+          - CreateNamespace=true
+        automated:
+          selfHeal: true
+          prune: true

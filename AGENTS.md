@@ -24,29 +24,41 @@ gitops/
     headlamp.yaml           shared: httpRoute + clusterRoleBinding
     traefik.yaml            shared: hostNetwork, Gateway API provider, listeners, bare-metal service
     influxdb2.yaml          shared: org=homelab, existingSecret, Longhorn persistence 25Gi
+    prometheus.yaml         shared: TSDB only, remote-write receiver, Longhorn 20Gi, 30d retention
+    grafana.yaml            shared: existingSecret grafana-admin, sidecar datasources+dashboards, Longhorn 5Gi
+    loki.yaml               shared: Monolithic, filesystem storage, Longhorn 20Gi
+    tempo.yaml              shared: local backend, OTLP receivers, metrics generator, Longhorn 20Gi
+    otel-gateway.yaml       shared: Deployment mode, otel-contrib, receivers, processors, pipeline topology
     server3/
       argocd.yaml           ArgoCD helm overrides
       external-dns.yaml     domainFilters, txtOwnerId
       external-secrets.yaml cluster-specific overrides (currently empty)
       headlamp.yaml         hostname: headlamp.server3.home
-      traefik.yaml          dashboard hostname/IP, externalIPs, statusAddress.ip
+      traefik.yaml          dashboard hostname/IP, externalIPs, statusAddress.ip, OTLP tracing endpoint
+      prometheus.yaml       server3 overrides (currently empty)
+      grafana.yaml          server3 overrides (currently empty)
+      otel-gateway.yaml     exporters (Loki/Tempo/Prometheus endpoint URLs), k8s.cluster.name=server3
   argocd-manifests/
     ArgoCD.yaml             ArgoCD self-management (cluster-agnostic)
     RootInfra.yaml        App-of-Apps → apps/infra/
     RootGateway.yaml      App-of-Apps → apps/gateway/
-    RootIoT.yaml          App-of-Apps → apps/iot/
-    RootDatabases.yaml    App-of-Apps → apps/databases/
-    RootDashboards.yaml    App-of-Apps → apps/dashboards/
+    RootObservability.yaml  App-of-Apps → apps/observability/
+    RootIoT.yaml            App-of-Apps → apps/iot/
+    RootDatabases.yaml      App-of-Apps → apps/databases/
+    RootDashboards.yaml     App-of-Apps → apps/dashboards/
     apps/
       infra/       ESO (AppSet, list generator)
       gateway/     Traefik (AppSet), ExternalDNS (AppSet)
+      observability/ OTelGateway (AppSet)
       iot/         InfluxDB2 (AppSet), EMQX (AppSet)
       databases/   MongoDB (AppSet)
       dashboards/  Headlamp (AppSet), Hubble (AppSet), Longhorn (AppSet)
     server3/
       RootDashboards.yaml App-of-Apps → server3/apps/dashboards/ (server3-only singletons)
+      RootObservability.yaml App-of-Apps → server3/apps/observability/ (LGTM stack)
       apps/
         dashboards/ OpenBao.yaml   App: vault.server3.home HTTPRoute
+        observability/ Prometheus.yaml, Grafana.yaml, Loki.yaml, Tempo.yaml
   k8s-manifests/
     server3/
       cilium/              HTTPRoute: hubble.server3.home → hubble-dashboard:80
@@ -54,7 +66,9 @@ gitops/
       external-secrets/    ClusterSecretStore → local OpenBao
       longhorn/            HTTPRoute: longhorn.server3.home → longhorn-frontend:80
       openbao/             HTTPRoute: vault.server3.home → openbao:8200
-docs/             Architecture decisions, IaC guide, secrets guide
+      grafana/             ExternalSecret (grafana-admin), datasource ConfigMaps (prometheus/loki/tempo), HTTPRoute: grafana.server3.home
+      otel-gateway/        HTTPRoute: otel.server3.home, IngressRouteTCP (otel gRPC :4317)
+docs/             Architecture decisions, IaC guide, secrets guide, observability guide
 ```
 
 ## Module + cluster instance pattern
@@ -93,7 +107,7 @@ All other apps use the **app-of-apps + ApplicationSet** pattern with four stages
 - **databases** stage: MongoDB (server2)
 - **dashboards** stage: Headlamp, Hubble UI, Longhorn UI
 
-Root Application CRDs live in `gitops/argocd-manifests/` as `RootInfra.yaml` / `RootGateway.yaml` / `RootIoT.yaml` / `RootDatabases.yaml` / `RootDashboards.yaml`. Applied once manually per stage; ArgoCD self-heals from then on.
+Root Application CRDs live in `gitops/argocd-manifests/` as `RootInfra.yaml` / `RootGateway.yaml` / `RootObservability.yaml` / `RootIoT.yaml` / `RootDatabases.yaml` / `RootDashboards.yaml`. Applied once manually per stage; ArgoCD self-heals from then on.
 Each Root Application discovers **ApplicationSets** in `gitops/argocd-manifests/apps/<stage>/`.
 Each ApplicationSet uses a **list generator** with one element per cluster. Adding a cluster to a stage means adding one `{cluster, clusterServer}` element to each ApplicationSet in that stage and committing.
 `destination.server` in each ApplicationSet template selects the target cluster via `{{clusterServer}}`.
