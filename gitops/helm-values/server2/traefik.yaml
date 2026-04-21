@@ -31,3 +31,23 @@ ports:
     expose:
       default: true
     exposedPort: 27017
+
+logs:
+  general:
+    otlp:
+      grpc:
+        endpoint: "otlp.server3.home:4317"
+  access:
+    otlp:
+      grpc:
+        endpoint: "otlp.server3.home:4317"
+
+tracing:
+  otlp:
+    grpc:
+      endpoint: "otlp.server3.home:4317"
+
+metrics:
+  otlp:
+    grpc:
+      endpoint: "otlp.server3.home:4317"

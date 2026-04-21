@@ -18,42 +18,6 @@ service:
   externalIPs:
     - 192.168.1.202
 
-logs:
-  general:
-    otlp:
-      enabled: true
-      grpc:
-        enabled: true
-        endpoint: "otel-gateway-opentelemetry-collector.monitoring.svc.cluster.local:4317"
-        insecure: true
-  access:
-    otlp:
-      enabled: true
-      grpc:
-        enabled: true
-        endpoint: "otel-gateway-opentelemetry-collector.monitoring.svc.cluster.local:4317"
-        insecure: true
-
-tracing:
-  otlp:
-    enabled: true
-    grpc:
-      enabled: true
-      endpoint: "otel-gateway-opentelemetry-collector.monitoring.svc.cluster.local:4317"
-      insecure: true
-
-metrics:
-  prometheus: null
-  otlp:
-    enabled: true
-    addEntryPointsLabels: true
-    addRoutersLabels: true
-    addServicesLabels: true
-    grpc:
-      enabled: true
-      endpoint: "otel-gateway-opentelemetry-collector.monitoring.svc.cluster.local:4317"
-      insecure: true
-
 providers:
   kubernetesGateway:
     statusAddress:
@@ -61,3 +25,30 @@ providers:
       # and statusAddress.service would never populate Gateway status.addresses.
       # Use a static IP instead so external-dns can resolve HTTPRoute target addresses.
       ip: "192.168.1.202"
+
+ports:
+  otlp-grpc:
+    port: 4317
+    protocol: TCP
+    expose:
+      default: true
+
+logs:
+  general:
+    otlp:
+      grpc:
+        endpoint: "otel-gateway-opentelemetry-collector.monitoring.svc.cluster.local:4317"
+  access:
+    otlp:
+      grpc:
+        endpoint: "otel-gateway-opentelemetry-collector.monitoring.svc.cluster.local:4317"
+
+tracing:
+  otlp:
+    grpc:
+      endpoint: "otel-gateway-opentelemetry-collector.monitoring.svc.cluster.local:4317"
+
+metrics:
+  otlp:
+    grpc:
+      endpoint: "otel-gateway-opentelemetry-collector.monitoring.svc.cluster.local:4317"

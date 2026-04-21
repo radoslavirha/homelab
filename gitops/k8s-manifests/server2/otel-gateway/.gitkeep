@@ -1,0 +1,3 @@
+# No cluster-specific Kubernetes manifests needed for server2 otel-gateway.
+# server2 is a forwarder only — it has no local backends and no HTTPRoute/IngressRouteTCP.
+# All routing is handled by the central server3 otel-gateway.

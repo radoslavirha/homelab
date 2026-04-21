@@ -1,0 +1,34 @@
+# OTel Gateway — server2 cluster overrides
+# Shared base values: gitops/helm-values/otel-gateway.yaml
+# Role: forwarder — collects OTLP from local apps and forwards everything
+#       to the central otel-gateway on server3 via OTLP/gRPC.
+# All backend fan-out (Loki, Tempo, Prometheus) happens on server3.
+
+config:
+  processors:
+    resource:
+      attributes:
+        - action: insert
+          key: k8s.cluster.name
+          value: server2
+
+  exporters:
+    otlp/server3:
+      endpoint: "otel.server3.home:4317"
+      tls:
+        insecure: true
+
+  service:
+    pipelines:
+      logs:
+        receivers: [otlp]
+        processors: [memory_limiter, k8sattributes, resource, batch]
+        exporters: [otlp/server3]
+      traces:
+        receivers: [otlp]
+        processors: [memory_limiter, k8sattributes, resource, batch]
+        exporters: [otlp/server3]
+      metrics:
+        receivers: [otlp]
+        processors: [memory_limiter, k8sattributes, resource, batch]
+        exporters: [otlp/server3]

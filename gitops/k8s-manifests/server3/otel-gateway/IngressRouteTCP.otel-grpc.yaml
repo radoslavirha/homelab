@@ -1,0 +1,24 @@
+---
+# Expose otel-gateway gRPC (port 4317) via Traefik's otlp-grpc entrypoint.
+# Used by otel-gateway instances on other clusters (e.g. server2) to forward
+# telemetry to the central server3 collector over OTLP/gRPC.
+# DNS (otel.server3.home) is already registered by the sibling HTTPRoute.
+# HostSNI(*) is required for unencrypted TCP passthrough (no TLS).
+apiVersion: traefik.io/v1alpha1
+kind: IngressRouteTCP
+metadata:
+  name: otel-gateway-grpc
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: otel-gateway
+    app.kubernetes.io/component: observability
+  annotations:
+    argocd.argoproj.io/sync-wave: "100"
+spec:
+  entryPoints:
+    - otlp-grpc
+  routes:
+    - match: HostSNI(`*`)
+      services:
+        - name: otel-gateway-opentelemetry-collector
+          port: 4317

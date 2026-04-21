@@ -29,6 +29,8 @@ gitops/
     loki.yaml               shared: Monolithic, filesystem storage, Longhorn 20Gi
     tempo.yaml              shared: local backend, OTLP receivers, metrics generator, Longhorn 20Gi
     otel-gateway.yaml       shared: Deployment mode, otel-contrib, receivers, processors, pipeline topology
+    server2/
+      otel-gateway.yaml     forwarder: single otlp/server3 exporter → otel.server3.home:4317, k8s.cluster.name=server2
     server3/
       argocd.yaml           ArgoCD helm overrides
       external-dns.yaml     domainFilters, txtOwnerId
@@ -68,6 +70,8 @@ gitops/
       openbao/             HTTPRoute: vault.server3.home → openbao:8200
       grafana/             ExternalSecret (grafana-admin), datasource ConfigMaps (prometheus/loki/tempo), HTTPRoute: grafana.server3.home
       otel-gateway/        HTTPRoute: otel.server3.home, IngressRouteTCP (otel gRPC :4317)
+    server2/
+      otel-gateway/        (no manifests — forwarder only)
 docs/             Architecture decisions, IaC guide, secrets guide, observability guide
 ```
 
