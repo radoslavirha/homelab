@@ -21,3 +21,6 @@ sidecar:
   dashboards:
     enabled: true
     searchNamespace: ALL
+    folderAnnotation: grafana_folder
+    provider:
+      foldersFromFilesStructure: false
