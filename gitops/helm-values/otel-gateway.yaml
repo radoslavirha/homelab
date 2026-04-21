@@ -34,7 +34,7 @@ config:
       check_interval: 1s
       limit_percentage: 75
       spike_limit_percentage: 15
-    k8sattributes:
+    k8s_attributes:
       passthrough: false
       extract:
         metadata:
@@ -48,13 +48,13 @@ config:
     pipelines:
       logs:
         receivers: [otlp]
-        processors: [memory_limiter, k8sattributes, resource, batch]
-        exporters: [otlphttp/loki]
+        processors: [memory_limiter, k8s_attributes, resource, batch]
+        exporters: [otlp_http/loki]
       traces:
         receivers: [otlp]
-        processors: [memory_limiter, k8sattributes, resource, batch]
-        exporters: [otlp/tempo]
+        processors: [memory_limiter, k8s_attributes, resource, batch]
+        exporters: [otlp_grpc/tempo]
       metrics:
         receivers: [otlp]
-        processors: [memory_limiter, k8sattributes, resource, batch]
+        processors: [memory_limiter, k8s_attributes, resource, batch]
         exporters: [prometheusremotewrite]

@@ -13,7 +13,7 @@ config:
           value: server2
 
   exporters:
-    otlp/server3:
+    otlp_grpc/server3:
       endpoint: "otel.server3.home:4317"
       tls:
         insecure: true
@@ -21,8 +21,8 @@ config:
   service:
     pipelines:
       logs:
-        exporters: [otlp/server3]
+        exporters: [otlp_grpc/server3]
       traces:
-        exporters: [otlp/server3]
+        exporters: [otlp_grpc/server3]
       metrics:
-        exporters: [otlp/server3]
+        exporters: [otlp_grpc/server3]

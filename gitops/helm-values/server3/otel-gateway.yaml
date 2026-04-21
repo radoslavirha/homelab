@@ -11,9 +11,9 @@ config:
           value: server3
 
   exporters:
-    otlphttp/loki:
+    otlp_http/loki:
       endpoint: "http://loki.monitoring.svc.cluster.local:3100/otlp"
-    otlp/tempo:
+    otlp_grpc/tempo:
       endpoint: "tempo.monitoring.svc.cluster.local:4317"
       tls:
         insecure: true
@@ -23,8 +23,8 @@ config:
   service:
     pipelines:
       logs:
-        exporters: [otlphttp/loki]
+        exporters: [otlp_http/loki]
       traces:
-        exporters: [otlp/tempo]
+        exporters: [otlp_grpc/tempo]
       metrics:
         exporters: [prometheusremotewrite]
