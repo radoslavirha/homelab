@@ -20,6 +20,11 @@ service:
 
 providers:
   kubernetesGateway:
+    # TCPRoute and TLSRoute are part of the Gateway API experimental channel.
+    # Without this, Traefik rejects the entire Gateway object with
+    # "Protocol TCP requires the experimental channel support" when any TCP
+    # listener (e.g. otlp-grpc :4317) is present.
+    experimentalChannel: true
     statusAddress:
       # The Traefik Service uses externalIPs (not LoadBalancer), so status.loadBalancer is empty
       # and statusAddress.service would never populate Gateway status.addresses.
@@ -32,23 +37,3 @@ ports:
     protocol: TCP
     expose:
       default: true
-
-logs:
-  general:
-    otlp:
-      grpc:
-        endpoint: "otel-gateway-opentelemetry-collector.monitoring.svc.cluster.local:4317"
-  access:
-    otlp:
-      grpc:
-        endpoint: "otel-gateway-opentelemetry-collector.monitoring.svc.cluster.local:4317"
-
-tracing:
-  otlp:
-    grpc:
-      endpoint: "otel-gateway-opentelemetry-collector.monitoring.svc.cluster.local:4317"
-
-metrics:
-  otlp:
-    grpc:
-      endpoint: "otel-gateway-opentelemetry-collector.monitoring.svc.cluster.local:4317"

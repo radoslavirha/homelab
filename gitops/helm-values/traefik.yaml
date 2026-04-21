@@ -81,6 +81,7 @@ logs:
       enabled: true
       grpc:
         enabled: true
+        endpoint: "otel-gateway-opentelemetry-collector.monitoring.svc.cluster.local:4317"
         insecure: true
   access:
     enabled: true
@@ -88,6 +89,7 @@ logs:
       enabled: true
       grpc:
         enabled: true
+        endpoint: "otel-gateway-opentelemetry-collector.monitoring.svc.cluster.local:4317"
         insecure: true
 
 tracing:
@@ -95,6 +97,7 @@ tracing:
     enabled: true
     grpc:
       enabled: true
+      endpoint: "otel-gateway-opentelemetry-collector.monitoring.svc.cluster.local:4317"
       insecure: true
 
 metrics:
@@ -106,6 +109,7 @@ metrics:
     addServicesLabels: true
     grpc:
       enabled: true
+      endpoint: "otel-gateway-opentelemetry-collector.monitoring.svc.cluster.local:4317"
       insecure: true
 
 experimental:

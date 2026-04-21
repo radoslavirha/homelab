@@ -12,7 +12,7 @@ resource "null_resource" "gateway_api_crds" {
   provisioner "local-exec" {
     command = <<-EOT
       kubectl apply --server-side \
-        -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v${var.gateway_api_version}/standard-install.yaml \
+        -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v${var.gateway_api_version}/experimental-install.yaml \
         --kubeconfig ${abspath(var.kubeconfig_path)}
     EOT
   }
