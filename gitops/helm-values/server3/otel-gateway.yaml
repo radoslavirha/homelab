@@ -19,6 +19,8 @@ config:
         insecure: true
     prometheusremotewrite:
       endpoint: "http://prometheus.monitoring.svc.cluster.local:80/api/v1/write"
+      resource_to_telemetry_conversion:
+        enabled: true
 
   service:
     pipelines:
