@@ -48,16 +48,33 @@ spec:
               MQTT_USER="telegraf"
               BAO_HOST="http://vault.server3.home"
 
+              # EMQX 5.x REST API does not accept Basic auth with dashboard credentials.
+              # Must login via /api/v5/login to obtain a Bearer token.
+              echo "Obtaining EMQX Bearer token..."
+              TOKEN=$(curl -sf -X POST \
+                -H "Content-Type: application/json" \
+                "${EMQX_HOST}/api/v5/login" \
+                -d "{\"username\": \"${EMQX_USER}\", \"password\": \"${EMQX_PASS}\"}" \
+                | jq -r '.token')
+
+              if [ -z "${TOKEN}" ] || [ "${TOKEN}" = "null" ]; then
+                echo "ERROR: Failed to obtain EMQX Bearer token. Check EMQX_USER/EMQX_PASS."
+                exit 1
+              fi
+              echo "Bearer token obtained."
+
+              AUTH_HEADER="Authorization: Bearer ${TOKEN}"
+
               # Ensure built-in database authenticator is configured (idempotent)
               AUTH_EXISTS=$(curl -sf \
-                -u "${EMQX_USER}:${EMQX_PASS}" \
+                -H "${AUTH_HEADER}" \
                 "${EMQX_HOST}/api/v5/authentication" \
                 | jq '[.[] | select(.backend=="built_in_database")] | length')
 
               if [ "${AUTH_EXISTS:-0}" -eq 0 ]; then
                 echo "Configuring built-in database authenticator..."
                 curl -sf -X POST \
-                  -u "${EMQX_USER}:${EMQX_PASS}" \
+                  -H "${AUTH_HEADER}" \
                   -H "Content-Type: application/json" \
                   "${EMQX_HOST}/api/v5/authentication" \
                   -d '{
@@ -71,7 +88,7 @@ spec:
 
               # Idempotency: skip if user already exists (already in OpenBao from first run).
               HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
-                -u "${EMQX_USER}:${EMQX_PASS}" \
+                -H "${AUTH_HEADER}" \
                 "${EMQX_HOST}/api/v5/authentication/password_based:built_in_database/users/${MQTT_USER}")
 
               if [ "$HTTP_CODE" = "200" ]; then
@@ -83,7 +100,7 @@ spec:
               MQTT_PASS=$(tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 24)
 
               curl -sf -X POST \
-                -u "${EMQX_USER}:${EMQX_PASS}" \
+                -H "${AUTH_HEADER}" \
                 -H "Content-Type: application/json" \
                 "${EMQX_HOST}/api/v5/authentication/password_based:built_in_database/users" \
                 -d "{\"user_id\": \"${MQTT_USER}\", \"password\": \"${MQTT_PASS}\", \"is_superuser\": false}"
