@@ -12,6 +12,11 @@ spec:
   template:
     metadata:
       name: telegraf-{{cluster}}
+      annotations:
+        # Sync AFTER InfluxDB2 and EMQX (wave 0) complete — including their PostSync
+        # provisioner Jobs that write credentials to OpenBao. Without this, the
+        # ExternalSecrets here try to read non-existent OpenBao paths on first deploy.
+        argocd.argoproj.io/sync-wave: "1"
     spec:
       project: default
       sources:

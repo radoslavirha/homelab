@@ -19,6 +19,7 @@
 - `gitops/k8s-manifests/server2/emqx/CronJob.rotate.yaml` — EMQX rotation CronJob (in-place password update)
 
 **Modified files:**
+- `gitops/argocd-manifests/apps/iot/Telegraf.yaml` — `sync-wave: "1"` already applied (fix for credential race on first deploy — InfluxDB2/EMQX PostSync Jobs must complete before Telegraf ExternalSecrets sync)
 - `gitops/helm-values/telegraf.yaml` — add `reloader.stakater.com/auto: "true"` to `podAnnotations`
 - `gitops/k8s-manifests/server2/telegraf/ExternalSecret.telegraf.influxdb2.yaml` — `refreshInterval: 1h` → `5m`
 - `gitops/k8s-manifests/server2/telegraf/ExternalSecret.telegraf.mqtt.yaml` — `refreshInterval: 1h` → `5m`
