@@ -37,8 +37,6 @@ gitops/
     influxdb2.yaml          shared: org=homelab, existingSecret, Longhorn persistence 25Gi
     mongodb.yaml            shared: standalone, existingSecret, Longhorn persistence 10Gi
     traefik.yaml            shared: hostNetwork, Gateway API provider, listeners, mqtt + mongodb entrypoints, bare-metal service
-    server1/
-      emqx.yaml             cluster-specific overrides (currently empty)
     server2/
       external-dns.yaml     domainFilters, txtOwnerId
       external-secrets.yaml cluster-specific overrides (currently empty)
@@ -54,8 +52,6 @@ gitops/
       headlamp.yaml         hostname: headlamp.server3.home
       traefik.yaml          dashboard hostname/IP, externalIPs, statusAddress.ip
   k8s-manifests/
-    server1/
-      emqx/                ExternalSecret (emqx-credentials), HTTPRoute: mqtt.server1.home, IngressRouteTCP: port 1883
     server2/
       cilium/              HTTPRoute: hubble.server2.home → hubble-dashboard:80
       external-dns/        ExternalSecret (unifi-credentials), DNSEndpoint (server2.home A record)

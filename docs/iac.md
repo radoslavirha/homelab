@@ -208,11 +208,12 @@ PROVISIONER_TOKEN=$(bao token create \
 # Store the provisioner token so provisioner Jobs can consume it via ESO:
 bao kv put secret/<cluster>/provisioner-token token="$PROVISIONER_TOKEN"
 
-#    ── 3.f  Seed initial KV secrets ──────────────────────────────────────────────────────────#    ⚠️  PREREQUISITE: all secrets below MUST exist in OpenBao before any ArgoCD stage
+#    ── 3.f  Seed initial KV secrets ──────────────────────────────────────────────────────────
+#    ⚠️  PREREQUISITE: all secrets below MUST exist in OpenBao before any ArgoCD stage
 #    is committed for this cluster. ESO syncs immediately on first Application sync —
 #    missing paths cause ExternalSecrets to fail and pods to crashloop.
 #    See docs/secrets.md for full details and verification commands.
-##    These secrets must exist before ESO syncs for the first time (steps 5 onwards).
+#    These secrets must exist before ESO syncs for the first time (steps 5 onwards).
 #    Add all secrets for every app you plan to deploy on this cluster.
 
 #    ExternalDNS — UniFi API key (gateway stage):

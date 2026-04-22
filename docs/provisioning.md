@@ -92,7 +92,7 @@ spec:
           args:
             - |
               set -e
-              INFLUX_HOST="http://influxdb2.monitoring.svc.cluster.local"
+              INFLUX_HOST="http://influxdb2.iot.svc.cluster.local"
               ORG="homelab"
               BUCKET="loxone"
 
@@ -198,7 +198,7 @@ bao kv put secret/<cluster>/emqx \
 curl -sf -X POST \
   -u "${EMQX_USER}:${EMQX_PASS}" \
   -H "Content-Type: application/json" \
-  "http://emqx.mqtt.svc.cluster.local:18083/api/v5/authentication/password_based:built_in_database/users" \
+  "http://emqx.iot.svc.cluster.local:18083/api/v5/authentication/password_based:built_in_database/users" \
   -d '{
     "user_id": "telegraf",
     "password": "<generated-password>",
