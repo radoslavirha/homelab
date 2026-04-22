@@ -22,7 +22,11 @@ See [docs/iac.md](docs/iac.md) for Terraform module usage, bootstrap sequence, a
 See [docs/architecture.md](docs/architecture.md) for multi-cluster decisions and the future roadmap.
 See [docs/observability.md](docs/observability.md) for the LGTM stack architecture, OTel pipeline, and Grafana datasource correlations.
 
-## Quick reference
+## Quick start
+
+**→ [docs/quickstart.md](docs/quickstart.md)** — complete ordered runbook for provisioning server3, then server2/server1. All commands in sequence, all secrets in one block per cluster. No background reading required.
+
+## Full reference
 
 ```bash
 # Bootstrap server3 — also includes vault (OpenBao) and apps (ArgoCD) stages

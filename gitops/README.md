@@ -111,49 +111,28 @@ kubectl apply -f gitops/argocd-manifests/RootInfra.yaml
 # Wait for ESO + ClusterSecretStore to become ready before continuing:
 kubectl wait --for=condition=Ready clusterSecretStore/openbao -n external-secrets --timeout=120s
 
-# 2. Seed OpenBao secrets for the gateway stage
-#    ⚠️  PREREQUISITE: secret/server3/external-dns must exist in OpenBao.
-#    See docs/secrets.md → "<cluster>/external-dns" for the exact command.
-#    ExternalDNS ExternalSecret syncs on first start — secret must exist before RootGateway.yaml is applied.
-#    OpenBao is not yet exposed via Traefik at this point — use port-forward.
-kubectl port-forward -n openbao svc/openbao 8200:8200 &
-export BAO_ADDR=http://127.0.0.1:8200
-bao login                                      # enter root token
-bao kv put secret/server3/external-dns api-key=<unifi-api-key>
-# Verify: bao kv get secret/server3/external-dns
-
-# 3. Apply gateway stage
+# 2. Apply gateway stage
+#    All server3 secrets were already seeded in docs/iac.md step 4 (argocd, grafana, external-dns).
 kubectl apply -f gitops/argocd-manifests/RootGateway.yaml
-# ArgoCD auto-syncs Traefik + ExternalDNS. OpenBao is now accessible at vault.server3.home.
+# Wait for Traefik to be running. OpenBao is now accessible at vault.server3.home.
 
-# 4. Apply server3-specific singleton Applications (OpenBao HTTPRoute)
+# 3. Apply server3-specific singleton Applications (OpenBao HTTPRoute)
 #    Applied once — ArgoCD self-heals from then on.
 kubectl apply -f gitops/argocd-manifests/server3/RootDashboards.yaml
 
-# 4b. Apply observability stage (OTel Gateway — all clusters)
-#     Traefik must be running before HTTPRoute and IngressRouteTCP can bind.
+# 4. Apply observability (OTel Gateway — all clusters; then LGTM stack — server3 only)
+#    Traefik must be running before HTTPRoute and IngressRouteTCP can bind.
 kubectl apply -f gitops/argocd-manifests/RootObservability.yaml
-
-# 4c. Apply server3 LGTM stack (Prometheus, Grafana, Loki, Tempo)
-#     ⚠️  PREREQUISITE: secret/server3/grafana must exist in OpenBao.
-#     Store with: bao kv put secret/server3/grafana admin-user=admin admin-password=<password>
 kubectl apply -f gitops/argocd-manifests/server3/RootObservability.yaml
 
-# 5. Apply iot stage (EMQX + InfluxDB2)
-#    ⚠️  PREREQUISITE: secret/server3/influxdb2, secret/server3/emqx, and
-#    secret/server3/provisioner-token must exist in OpenBao before this step.
-#    ESO syncs these on first sync — if the paths are missing the pod will crashloop.
-#    See docs/secrets.md → "<cluster>/influxdb2", "<cluster>/emqx", "<cluster>/provisioner-token".
-#    Verify: bao kv list secret/server3
+# 5. Apply iot + databases ApplicationSets
+#    These create ApplicationSets that will deploy EMQX/InfluxDB2/MongoDB to server2.
+#    Server3 does not run these workloads — no server3 secrets are required here.
+#    Seed server2 secrets in OpenBao before adding server2 to the ApplicationSet generators.
 kubectl apply -f gitops/argocd-manifests/RootIoT.yaml
-
-# 6. Apply databases stage (MongoDB)
-#    ⚠️  PREREQUISITE: secret/server3/mongodb must exist in OpenBao before this step.
-#    See docs/secrets.md → "<cluster>/mongodb".
-#    Verify: bao kv list secret/server3
 kubectl apply -f gitops/argocd-manifests/RootDatabases.yaml
 
-# 7. Apply dashboards stage (Headlamp, Hubble, Longhorn UI)
+# 6. Apply dashboards stage (Headlamp, Hubble, Longhorn UI — server3 + server2)
 kubectl apply -f gitops/argocd-manifests/RootDashboards.yaml
 ```
 

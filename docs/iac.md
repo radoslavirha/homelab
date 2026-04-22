@@ -92,19 +92,24 @@ bao write auth/kubernetes-server3/role/external-secrets \
   ttl=24h
 
 # 4. ArgoCD install
-# ⚠️  PREREQUISITES: the following secrets must exist in OpenBao before ArgoCD syncs:
-#    - secret/server3/argocd → See docs/secrets.md → "server3/argocd" for the bcrypt hash command.
-#    - secret/server3/grafana → Grafana admin credentials (observability stage).
+# ⚠️  All server3 KV secrets must be seeded before ArgoCD syncs.
+#    Continue in the same port-forward session from step 3 (bao login token still active).
 
-# Seed Grafana admin credentials (observability stage):
+# Generate ArgoCD admin password hash (bcrypt):
+htpasswd -bnBC 10 "" YOUR_PASSWORD | tr -d ':\n'   # copy the output as HASH
+
+bao kv put secret/server3/argocd adminPasswordHash='<bcrypt-hash>'
 bao kv put secret/server3/grafana \
   admin-user=admin \
   admin-password=<strong-password>
+bao kv put secret/server3/external-dns api-key=<unifi-api-key>
 
-# Prerequisites: OpenBao port-forward must be running and vault credentials exported.
-kubectl port-forward -n openbao svc/openbao 8200:8200
+# Verify all three paths exist:
+bao kv list secret/server3
+
+# Apply ArgoCD (Terraform reads admin hash from OpenBao via vault provider):
 export VAULT_ADDR=http://127.0.0.1:8200
-export VAULT_TOKEN=$(cat ~/.vault-token)   # set after: bao login <root-token>
+export VAULT_TOKEN=$(cat ~/.vault-token)   # written by: bao login <root-token>
 cd iac/clusters/server3/apps && terraform init && terraform apply -auto-approve
 
 # 5. Bootstrap GitOps stages (ArgoCD root Applications)

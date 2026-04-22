@@ -85,14 +85,13 @@ MinIO is the intended S3-compatible backend for Terraform state. But MinIO itsel
 │  3. terraform vault      → OpenBao                                      │
 │     [manual: OpenBao init ceremony, unseal, KV path setup]              │
 │  4. terraform apps       → ArgoCD                                       │
-│     [manual: create sops-age-key Secret in argocd namespace]            │
 │  5. ArgoCD GitOps        → RootInfra (ESO + ClusterSecretStore)         │
 │     [manual: kubectl apply RootGateway → Traefik + ExternalDNS]         │
 │     [manual: kubectl apply RootObservability → OTel Gateway]            │
 │     [manual: kubectl apply server3/RootDashboards → OpenBaoRoute]       │
 │     [manual: kubectl apply server3/RootObservability → LGTM stack]      │
-│     [manual: kubectl apply RootIoT → EMQX + InfluxDB2]                  │
-│     [manual: kubectl apply RootDatabases → MongoDB]                    │
+│     [manual: kubectl apply RootIoT → ApplicationSets (→ server2)]       │
+│     [manual: kubectl apply RootDatabases → ApplicationSet (→ server2)]  │
 │     [manual: kubectl apply RootDashboards → Headlamp + Hubble + Longhorn] │
 │     [manual: terraform init -migrate-state for all server3 modules]     │
 │  6. Register server1 + server2 kubeconfigs in server3 ArgoCD            │
@@ -141,7 +140,7 @@ Secrets flow: OpenBao (server3 cluster) → ESO ClusterSecretStore → Kubernete
 
 - OpenBao KV path layout: `secret/<cluster>/<app>/<key>`
 - Each cluster has an ESO `ClusterSecretStore` pointed at server3 OpenBao (HTTPS over LAN)
-- The only SOPS-encrypted secrets in this repo are per-cluster `argocd.sops.yaml` (Terraform consumption)
+- No secrets are committed to the repo — all live in OpenBao, read by Terraform via the vault provider
 
 OpenBao initialization is a manual ceremony performed once after the server3 secrets stage.
 Steps are fully documented in [docs/iac.md](iac.md) under "Bootstrap sequence — Server3 cluster" (step 3).
