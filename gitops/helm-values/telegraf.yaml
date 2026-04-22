@@ -6,6 +6,12 @@ tplVersion: 2
 
 podAnnotations: {}
 
+# Telegraf runs as a pure consumer (MQTT input → InfluxDB2 output) with no
+# inbound listening ports. Disable the Service to avoid Kubernetes rejecting
+# a Service spec with no ports.
+service:
+  enabled: false
+
 env:
   - name: INFLUXDB2_TOKEN
     valueFrom:
