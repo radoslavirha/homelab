@@ -3,6 +3,11 @@
 # Role: forwarder — collects OTLP from local apps and forwards everything
 #       to the central otel-gateway on server3 via OTLP/gRPC.
 # All backend fan-out (Loki, Tempo, Prometheus) happens on server3.
+# Bearer token auth: sends Authorization header on the OTLP/gRPC exporter to server3.
+
+extraEnvsFrom:
+  - secretRef:
+      name: otel-auth-token
 
 config:
   processors:
@@ -17,6 +22,8 @@ config:
       endpoint: "otel.server3.home:4317"
       tls:
         insecure: true
+      headers:
+        Authorization: "Bearer ${env:OTEL_AUTH_TOKEN}"
 
   service:
     pipelines:

@@ -17,6 +17,7 @@ Every stage in `docs/iac.md` and `gitops/README.md` that requires secrets links 
 | `secret/<cluster>/influxdb2` | `admin-password`, `admin-token` | iot stage | any |
 | `secret/<cluster>/emqx` | `dashboard-username`, `dashboard-password` | iot stage | any |
 | `secret/<cluster>/mongodb` | `root-password` | databases stage | any |
+| `secret/otel-gateway/auth-token` | `token` | observability stage | server3, server2 |
 
 `<cluster>` is the short cluster name: `server2`, `server3`, etc.
 

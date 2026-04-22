@@ -1,8 +1,27 @@
 # OTel Gateway — server3 cluster overrides
 # Shared base values: gitops/helm-values/otel-gateway.yaml
 # Defines: resource processor (k8s.cluster.name=server3) + exporter endpoint URLs.
+# Bearer token auth: validates inbound OTLP via bearertokenauth extension.
+
+extraEnvsFrom:
+  - secretRef:
+      name: otel-auth-token
 
 config:
+  extensions:
+    bearertokenauth:
+      token: "${env:OTEL_AUTH_TOKEN}"
+
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          auth:
+            authenticator: bearertokenauth
+        http:
+          auth:
+            authenticator: bearertokenauth
+
   processors:
     resource:
       attributes:
@@ -23,6 +42,7 @@ config:
         enabled: true
 
   service:
+    extensions: [health_check, bearertokenauth]
     pipelines:
       logs:
         exporters: [otlp_http/loki]
