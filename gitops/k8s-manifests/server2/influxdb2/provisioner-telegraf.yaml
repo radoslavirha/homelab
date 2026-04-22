@@ -1,0 +1,103 @@
+---
+# InfluxDB2 PostSync provisioner: Telegraf write token — create-only (idempotent)
+# Runs on every ArgoCD sync. On first deploy:
+#   1. Ensures the "loxone" bucket exists
+#   2. Creates a write-only token scoped to the "loxone" bucket
+#   3. Writes the token to OpenBao: secret/server2/telegraf-influxdb2
+# On subsequent syncs: token already exists → skip (no-op).
+# Consumed by: ExternalSecret telegraf-influxdb2-credentials in telegraf namespace
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: influxdb2-provision-telegraf
+  namespace: iot
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      automountServiceAccountToken: false
+      containers:
+        - name: provisioner
+          image: alpine:3.20
+          env:
+            - name: INFLUX_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: influxdb2
+                  key: admin-token
+            - name: BAO_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: openbao-provision-token
+                  key: token
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -e
+              apk add --no-cache curl jq > /dev/null
+
+              INFLUX_HOST="http://influxdb2.iot.svc.cluster.local"
+              ORG="homelab"
+              BUCKET="loxone"
+              TOKEN_DESC="telegraf-write"
+              BAO_HOST="http://vault.server3.home"
+
+              # Idempotency: skip if token already exists (already in OpenBao from first run).
+              EXISTING_ID=$(curl -sf \
+                -H "Authorization: Token ${INFLUX_TOKEN}" \
+                "${INFLUX_HOST}/api/v2/authorizations?org=${ORG}" \
+                | jq -r --arg desc "${TOKEN_DESC}" \
+                  '.authorizations[] | select(.description==$desc) | .id' | head -1)
+
+              if [ -n "${EXISTING_ID}" ]; then
+                echo "Token '${TOKEN_DESC}' already exists (${EXISTING_ID}). Skipping."
+                exit 0
+              fi
+
+              # Get org ID
+              ORG_ID=$(curl -sf \
+                -H "Authorization: Token ${INFLUX_TOKEN}" \
+                "${INFLUX_HOST}/api/v2/orgs?org=${ORG}" | jq -r '.orgs[0].id')
+
+              # Ensure loxone bucket exists (idempotent)
+              BUCKET_ID=$(curl -sf \
+                -H "Authorization: Token ${INFLUX_TOKEN}" \
+                "${INFLUX_HOST}/api/v2/buckets?org=${ORG}&name=${BUCKET}" \
+                | jq -r '.buckets[0].id // empty')
+
+              if [ -z "$BUCKET_ID" ]; then
+                echo "Creating bucket '${BUCKET}'..."
+                BUCKET_ID=$(curl -sf -X POST \
+                  -H "Authorization: Token ${INFLUX_TOKEN}" \
+                  -H "Content-Type: application/json" \
+                  "${INFLUX_HOST}/api/v2/buckets" \
+                  -d "{\"name\":\"${BUCKET}\",\"orgID\":\"${ORG_ID}\",\"retentionRules\":[]}" \
+                  | jq -r '.id')
+                echo "Bucket '${BUCKET}' created: ${BUCKET_ID}"
+              fi
+
+              # Create write-only token scoped to the loxone bucket
+              NEW_TOKEN=$(curl -sf -X POST \
+                -H "Authorization: Token ${INFLUX_TOKEN}" \
+                -H "Content-Type: application/json" \
+                "${INFLUX_HOST}/api/v2/authorizations" \
+                -d "{
+                  \"description\": \"${TOKEN_DESC}\",
+                  \"orgID\": \"${ORG_ID}\",
+                  \"permissions\": [{
+                    \"action\": \"write\",
+                    \"resource\": { \"type\": \"buckets\", \"id\": \"${BUCKET_ID}\", \"orgID\": \"${ORG_ID}\" }
+                  }]
+                }" | jq -r '.token')
+
+              # Write token to OpenBao
+              curl -sf -X POST \
+                -H "X-Vault-Token: ${BAO_TOKEN}" \
+                -H "Content-Type: application/json" \
+                "${BAO_HOST}/v1/secret/data/server2/telegraf-influxdb2" \
+                -d "{\"data\": {\"token\": \"${NEW_TOKEN}\"}}"
+
+              echo "Token '${TOKEN_DESC}' created and written to OpenBao."

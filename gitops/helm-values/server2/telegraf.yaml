@@ -1,0 +1,3 @@
+# Telegraf — server2 cluster overrides
+# Shared base values: gitops/helm-values/telegraf.yaml
+# No cluster-specific Helm overrides needed; MQTT/InfluxDB2 endpoints are the same for all clusters.

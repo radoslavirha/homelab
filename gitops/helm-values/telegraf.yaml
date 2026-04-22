@@ -1,0 +1,66 @@
+# Telegraf — shared Helm values
+# Upstream values.yaml: https://github.com/influxdata/helm-charts/blob/master/charts/telegraf/values.yaml
+# Credentials come from ExternalSecrets → telegraf-influxdb2-credentials, telegraf-mqtt-credentials
+
+tplVersion: 2
+
+podAnnotations: {}
+
+env:
+  - name: INFLUXDB2_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: telegraf-influxdb2-credentials
+        key: INFLUXDB2_TOKEN
+  - name: MQTT_USERNAME
+    valueFrom:
+      secretKeyRef:
+        name: telegraf-mqtt-credentials
+        key: MQTT_USERNAME
+  - name: MQTT_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: telegraf-mqtt-credentials
+        key: MQTT_PASSWORD
+
+config:
+  inputs:
+    - mqtt_consumer:
+        servers:
+          - "tcp://emqx.iot.svc.cluster.local:1883"
+        topics:
+          - "iot/loxone/state"
+        client_id: "telegraf-consumer-loxone"
+        username: "$MQTT_USERNAME"
+        password: "$MQTT_PASSWORD"
+        data_format: "json_v2"
+        json_v2:
+          - measurement_name_path: "measurement"
+            tag:
+              - path: "room"
+                type: "string"
+            object:
+              - path: "@this"
+                excluded_keys:
+                  - "measurement"
+                  - "room"
+        tags:
+          source: "loxone"
+  processors:
+    - enum:
+        mapping:
+          field: "status"
+          dest: "status_code"
+          value_mappings:
+            healthy: 1
+            problem: 2
+            critical: 3
+  outputs:
+    - influxdb_v2:
+        urls:
+          - "http://influxdb2.iot.svc.cluster.local"
+        bucket: "loxone"
+        organization: "homelab"
+        token: "$INFLUXDB2_TOKEN"
+        tagpass:
+          source: ["loxone"]

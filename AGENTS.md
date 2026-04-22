@@ -24,13 +24,23 @@ gitops/
     headlamp.yaml           shared: httpRoute + clusterRoleBinding
     traefik.yaml            shared: hostNetwork, Gateway API provider, listeners, bare-metal service
     influxdb2.yaml          shared: org=homelab, existingSecret, Longhorn persistence 25Gi
+    mongodb.yaml            shared: root credentials existingSecret, auth enabled
+    telegraf.yaml           shared: InfluxDB2 + MQTT outputs, env secretKeyRefs
     prometheus.yaml         shared: TSDB only, remote-write receiver, Longhorn 20Gi, 30d retention
     grafana.yaml            shared: existingSecret grafana-admin, sidecar datasources+dashboards, Longhorn 5Gi
     loki.yaml               shared: Monolithic, filesystem storage, Longhorn 20Gi
     tempo.yaml              shared: local backend, OTLP receivers, metrics generator, Longhorn 20Gi
     otel-gateway.yaml       shared: Deployment mode, otel-contrib, receivers, processors, pipeline topology
     server2/
+      emqx.yaml             server2 EMQX overrides
+      external-dns.yaml     domainFilters, txtOwnerId
+      external-secrets.yaml cluster-specific overrides
+      headlamp.yaml         hostname: headlamp.server2.home
+      influxdb2.yaml        server2 Longhorn storageClass overrides
+      mongodb.yaml          server2 overrides
       otel-gateway.yaml     forwarder: single otlp/server3 exporter → otel.server3.home:4317, k8s.cluster.name=server2
+      telegraf.yaml         server2 overrides (currently empty)
+      traefik.yaml          dashboard hostname/IP, externalIPs, statusAddress.ip
     server3/
       argocd.yaml           ArgoCD helm overrides
       external-dns.yaml     domainFilters, txtOwnerId
@@ -52,7 +62,7 @@ gitops/
       infra/       ESO (AppSet, list generator)
       gateway/     Traefik (AppSet), ExternalDNS (AppSet)
       observability/ OTelGateway (AppSet)
-      iot/         InfluxDB2 (AppSet), EMQX (AppSet)
+      iot/         InfluxDB2 (AppSet), EMQX (AppSet), Telegraf (AppSet), IotInfra (AppSet, sync-wave: -1)
       databases/   MongoDB (AppSet)
       dashboards/  Headlamp (AppSet), Hubble (AppSet), Longhorn (AppSet)
     server3/
@@ -62,6 +72,15 @@ gitops/
         dashboards/ OpenBao.yaml   App: vault.server3.home HTTPRoute
         observability/ Prometheus.yaml, Grafana.yaml, Loki.yaml, Tempo.yaml
   k8s-manifests/
+    server2/
+      iot/         ExternalSecret.provisioner-token.yaml (openbao-provision-token; sync-wave -1 via IotInfra)
+      influxdb2/   ExternalSecret.yaml, HTTPRoute.yaml, provisioner-telegraf.yaml
+      emqx/        ExternalSecret.yaml, HTTPRoute.yaml, IngressRouteTCP.yaml, provisioner-telegraf.yaml
+      telegraf/    ExternalSecret.telegraf.influxdb2.yaml, ExternalSecret.telegraf.mqtt.yaml
+      external-dns/ ExternalSecret (unifi-credentials), DNSEndpoint
+      longhorn/    HTTPRoute: longhorn.server2.home → longhorn-frontend:80
+      mongodb/     ExternalSecret, HTTPRoute
+      otel-gateway/ (no manifests — forwarder only)
     server3/
       cilium/              HTTPRoute: hubble.server3.home → hubble-dashboard:80
       external-dns/        ExternalSecret (unifi-credentials), DNSEndpoint (server3.home A record)
@@ -70,8 +89,6 @@ gitops/
       openbao/             HTTPRoute: vault.server3.home → openbao:8200
       grafana/             ExternalSecret (grafana-admin), datasource ConfigMaps (prometheus/loki/tempo), HTTPRoute: grafana.server3.home
       otel-gateway/        HTTPRoute: otel.server3.home, IngressRouteTCP (otel gRPC :4317)
-    server2/
-      otel-gateway/        (no manifests — forwarder only)
 docs/             Architecture decisions, IaC guide, secrets guide, observability guide
 ```
 

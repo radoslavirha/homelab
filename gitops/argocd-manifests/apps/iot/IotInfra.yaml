@@ -1,0 +1,35 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: iot-infra
+  namespace: argocd
+  annotations:
+    # Sync before EMQX and InfluxDB2 so the shared openbao-provision-token Secret
+    # exists before their PostSync provisioner Jobs and rotation CronJobs run.
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  generators:
+    - list:
+        elements:
+          - cluster: server2
+            clusterServer: https://192.168.1.201:6443
+  template:
+    metadata:
+      name: iot-infra-{{cluster}}
+      annotations:
+        argocd.argoproj.io/sync-wave: "-1"
+    spec:
+      project: default
+      sources:
+        - repoURL: https://github.com/radoslavirha/homelab
+          targetRevision: HEAD
+          path: gitops/k8s-manifests/{{cluster}}/iot
+      destination:
+        server: '{{clusterServer}}'
+        namespace: iot
+      syncPolicy:
+        syncOptions:
+          - CreateNamespace=true
+        automated:
+          selfHeal: true
+          prune: true

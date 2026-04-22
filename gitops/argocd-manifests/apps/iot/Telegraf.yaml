@@ -1,0 +1,40 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: telegraf
+  namespace: argocd
+spec:
+  generators:
+    - list:
+        elements:
+          - cluster: server2
+            clusterServer: https://192.168.1.201:6443
+  template:
+    metadata:
+      name: telegraf-{{cluster}}
+    spec:
+      project: default
+      sources:
+        - repoURL: https://helm.influxdata.com
+          chart: telegraf
+          targetRevision: 1.8.69
+          helm:
+            releaseName: telegraf
+            valueFiles:
+              - $values/gitops/helm-values/telegraf.yaml
+              - $values/gitops/helm-values/{{cluster}}/telegraf.yaml
+        - repoURL: https://github.com/radoslavirha/homelab
+          targetRevision: HEAD
+          ref: values
+        - repoURL: https://github.com/radoslavirha/homelab
+          targetRevision: HEAD
+          path: gitops/k8s-manifests/{{cluster}}/telegraf
+      destination:
+        server: '{{clusterServer}}'
+        namespace: telegraf
+      syncPolicy:
+        syncOptions:
+          - CreateNamespace=true
+        automated:
+          selfHeal: true
+          prune: true

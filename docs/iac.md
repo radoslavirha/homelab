@@ -197,8 +197,7 @@ bao write auth/kubernetes-<cluster>/role/external-secrets \
 
 #    ── 3.e  Provisioner write policy + long-lived token ──────────────────────────────────────
 #    Provisioner Jobs (PostSync hooks) use this token to write scoped app credentials back to
-#    OpenBao after calling each datastore's management API. See docs/provisioning.md for the
-#    full PostSync Job pattern.
+#    OpenBao after calling each datastore's management API. See docs/provisioning.md.
 
 bao policy write <cluster>-provisioner - <<'EOF'
 path "secret/data/<cluster>/*" { capabilities = ["create", "update"] }
@@ -211,6 +210,7 @@ PROVISIONER_TOKEN=$(bao token create \
   -format=json | jq -r .auth.client_token)
 
 # Store the provisioner token so provisioner Jobs can consume it via ESO:
+# ExternalSecret: gitops/k8s-manifests/<cluster>/iot/ExternalSecret.provisioner-token.yaml
 bao kv put secret/<cluster>/provisioner-token token="$PROVISIONER_TOKEN"
 
 #    ── 3.f  Seed initial KV secrets ──────────────────────────────────────────────────────────
