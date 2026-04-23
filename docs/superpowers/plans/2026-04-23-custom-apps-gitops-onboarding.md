@@ -2,7 +2,7 @@
 
 **Date:** 2026-04-23  
 **Status:** Approved — Phase 1 complete  
-**Related plan:** `docs/superpowers/plans/2026-04-23-custom-apps-gitops-onboarding.md` (to be created)
+**Source repo:** `/Users/radoslavirha/dev/irha/home-server2` (reference for all values, versions, secrets)
 
 ---
 
@@ -131,10 +131,16 @@ gitops/
         base.yaml                          ← Phase 5
         production.yaml                    ← Phase 5
         sandbox.yaml                       ← Phase 5
+        variables/
+          production.yaml                  ← Phase 5 (VAR_* for Jinja2)
+          sandbox.yaml                     ← Phase 5
       interactive-map-feeder-api-iot/
         base.yaml                          ← Phase 5
         production.yaml                    ← Phase 5
         sandbox.yaml                       ← Phase 5
+        variables/
+          production.yaml                  ← Phase 5
+          sandbox.yaml                     ← Phase 5
     server2/apps/
       miot-bridge-api-iot/
         production.yaml                    ← Phase 5 (cluster override stub)
@@ -142,13 +148,15 @@ gitops/
       interactive-map-feeder-api-iot/
         production.yaml                    ← Phase 5
         sandbox.yaml                       ← Phase 5
+    server2/
+      traefik.yaml                         ← Phase 2 (add UDP entrypoints)
   k8s-manifests/server2/
     miot-bridge-api-iot/
-      production/ExternalSecret.yaml       ← Phase 5
-      sandbox/ExternalSecret.yaml          ← Phase 5
-    interactive-map-feeder-api-iot/
-      production/ExternalSecret.yaml       ← Phase 5
-      sandbox/ExternalSecret.yaml          ← Phase 5
+      production/ExternalSecret.mqtt.yaml       ← Phase 5
+      production/ExternalSecret.mongodb.yaml    ← Phase 5
+      sandbox/ExternalSecret.mqtt.yaml          ← Phase 5
+      sandbox/ExternalSecret.mongodb.yaml       ← Phase 5
+    # interactive-map-feeder-api-iot: NO ExternalSecrets (no secretRefs)
 docs/
   architecture.md                          ← Phase 6 (add rows for all new components)
 ```
@@ -188,8 +196,78 @@ bao kv put secret/server2/interactive-map-feeder-api-iot/sandbox    <key>=<value
 
 ## Open questions (for Phase 5)
 
-- What Docker image repositories/tags do these apps publish to?
-- What exact secret keys does each app need (MQTT credentials, MongoDB connection strings, etc.)?
-- Does `miot-bridge-api-iot` need UDP ingress (`IngressRouteUDP`)?
-- What `VAR_PUBLIC_DOMAIN` value should production vs sandbox use?
-- Should sandbox use a different image tag (e.g. `latest`) than production (e.g. pinned semver)?
+~~- What Docker image repositories/tags do these apps publish to?~~
+~~- What exact secret keys does each app need?~~
+~~- Does `miot-bridge-api-iot` need UDP ingress?~~
+~~- What `VAR_PUBLIC_DOMAIN` value should production vs sandbox use?~~
+~~- Should sandbox use a different image tag than production?~~
+
+All resolved from home-server2 — see concrete values below.
+
+---
+
+## Resolved Values (from home-server2)
+
+### Image versions (pinned)
+
+| App | Image | Production tag | Sandbox tag |
+|-----|-------|---------------|-------------|
+| miot-bridge-api-iot | `radoslavirha/miot-bridge` | `0.16.0` | `0.16.0` |
+| interactive-map-feeder-api-iot | `radoslavirha/interactive-map-feeder` | `0.6.0` | `0.6.0` |
+
+### Variables
+
+| Variable | Production | Sandbox |
+|----------|-----------|---------|
+| `VAR_PROTOCOL` | `http` | `http` |
+| `VAR_PUBLIC_DOMAIN` | `server2.home` | `server2.home` |
+| `VAR_SUBDOMAIN` | _(not set)_ | `sandbox` |
+| `VAR_MQTT_URL` | `mqtt://emqx-headless.iot.svc.cluster.local:1883` | same |
+| `VAR_MONGODB_URL` | `mongodb://mongodb.mongodb.svc.cluster.local:27017` | same |
+
+Note: In home-server2 EMQX was in `mqtt` namespace; in homelab it is in `iot` namespace — MQTT URL updated accordingly.
+
+### URL patterns
+
+- Production: `http://api.server2.home/iot/<pathName>`
+- Sandbox: `http://sandbox.api.server2.home/iot/<pathName>`
+
+### Secrets
+
+**miot-bridge-api-iot** has two `secretRefs`:
+- `miot-bridge-api-mqtt-credentials` → keys: `SECRET_MQTT_MIOT_BRIDGE_USERNAME`, `SECRET_MQTT_MIOT_BRIDGE_PASSWORD`
+- `miot-bridge-api-mongodb-credentials` → keys: `SECRET_MONGODB_DATABASE`, `SECRET_MONGODB_USERNAME`, `SECRET_MONGODB_PASSWORD`
+
+**interactive-map-feeder-api-iot** has **no `secretRefs`** → no ExternalSecrets needed.
+
+OpenBao KV paths (to be seeded manually):
+- `server2/miot-bridge-api-iot/production` → properties: `mqtt-username`, `mqtt-password`, `mongodb-database`, `mongodb-username`, `mongodb-password`
+- `server2/miot-bridge-api-iot/sandbox` → same properties
+
+### UDP ingress (miot-bridge only)
+
+Traefik needs two new UDP entrypoints added to `gitops/helm-values/server2/traefik.yaml`:
+- `udp-miot-prod` → port `4000`, `expose.default: false`
+- `udp-miot-sbx` → port `4001`, `expose.default: false`
+
+This is a **prerequisite** for miot-bridge to work and must be done in Phase 2 (alongside RootApps scaffolding) so Traefik is updated before the app is deployed.
+
+### OTel collector service name
+
+Helm release name for the per-namespace collector must be `otel-collector` so the auto-generated service name is `otel-collector-opentelemetry-collector` — this matches the hardcoded endpoint in the app config templates:
+```
+http://otel-collector-opentelemetry-collector:4318/v1/metrics
+```
+
+### ArgoCD Application structure (home-server2 reference)
+
+home-server2 uses singleton `Application` per (app, env). We use `ApplicationSet` with matrix generator — produces the same deployments but is cleaner. Value files passed per app:
+```
+valueFiles:
+  - $values/gitops/helm-values/apps/<app>/base.yaml
+  - $values/gitops/helm-values/apps/<app>/<env>.yaml
+  - $values/gitops/helm-values/apps/<app>/variables/<env>.yaml
+  - $values/gitops/helm-values/server2/apps/<app>/<env>.yaml   ← cluster overrides
+```
+
+k8s-manifests path (ExternalSecrets): `gitops/k8s-manifests/server2/<app>/<env>/`
