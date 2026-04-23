@@ -145,9 +145,7 @@ gitops/
       miot-bridge-api-iot/
         production.yaml                    ← Phase 5 (cluster override stub)
         sandbox.yaml                       ← Phase 5
-      interactive-map-feeder-api-iot/
-        production.yaml                    ← Phase 5
-        sandbox.yaml                       ← Phase 5
+      # interactive-map-feeder-api-iot: NO cluster overrides needed
     server2/
       traefik.yaml                         ← Phase 2 (add UDP entrypoints)
   k8s-manifests/server2/
@@ -262,12 +260,23 @@ http://otel-collector-opentelemetry-collector:4318/v1/metrics
 ### ArgoCD Application structure (home-server2 reference)
 
 home-server2 uses singleton `Application` per (app, env). We use `ApplicationSet` with matrix generator — produces the same deployments but is cleaner. Value files passed per app:
+
+**miot-bridge-api-iot:**
 ```
 valueFiles:
-  - $values/gitops/helm-values/apps/<app>/base.yaml
-  - $values/gitops/helm-values/apps/<app>/<env>.yaml
-  - $values/gitops/helm-values/apps/<app>/variables/<env>.yaml
-  - $values/gitops/helm-values/server2/apps/<app>/<env>.yaml   ← cluster overrides
+  - $values/gitops/helm-values/apps/miot-bridge-api-iot/base.yaml
+  - $values/gitops/helm-values/apps/miot-bridge-api-iot/{{env}}.yaml
+  - $values/gitops/helm-values/apps/miot-bridge-api-iot/variables/{{env}}.yaml
+  - $values/gitops/helm-values/server2/apps/miot-bridge-api-iot/{{env}}.yaml   ← cluster overrides
+```
+
+**interactive-map-feeder-api-iot:**
+```
+valueFiles:
+  - $values/gitops/helm-values/apps/interactive-map-feeder-api-iot/base.yaml
+  - $values/gitops/helm-values/apps/interactive-map-feeder-api-iot/{{env}}.yaml
+  - $values/gitops/helm-values/apps/interactive-map-feeder-api-iot/variables/{{env}}.yaml
+  # no cluster override file — no server2-specific values needed
 ```
 
 k8s-manifests path (ExternalSecrets): `gitops/k8s-manifests/server2/<app>/<env>/`
