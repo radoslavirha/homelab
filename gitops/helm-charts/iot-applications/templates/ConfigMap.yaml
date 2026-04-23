@@ -1,0 +1,17 @@
+{{- range $applicationName, $application := .Values.apps | default dict -}}
+{{- $ctx := dict "application" $application "name" $applicationName "release" $.Release "chart" $.Chart -}}
+{{- if $application.templates | default dict | len }}
+{{- range $templateName, $template := $application.templates | default dict -}}
+{{- include "iot-applications.validators.template" (dict "name" $templateName "template" $template "applicationName" $applicationName) }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "iot-applications.identifier" $ctx }}-tpl-{{ $templateName }}
+  labels: {{ include "iot-applications.meta.labels" $ctx | nindent 4 }}
+data:
+  {{ $template.file }}: |-
+    {{- $template.content | nindent 4 }}
+{{ end }}
+{{ end }}
+{{ end }}

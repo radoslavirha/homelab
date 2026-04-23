@@ -1,0 +1,23 @@
+{{- range $applicationName, $application := .Values.apps | default dict -}}
+{{- $ctx := dict "application" $application "name" $applicationName "release" $.Release "chart" $.Chart -}}
+{{- if (($application.rollout | default dict).enabled) }}
+{{- /* TODO: Implement Argo Rollout resource.
+     Strategy-specific fields:
+
+     canary:
+       - spec.strategy.canary.stableService  → {identifier}-{{ $application.rollout.canary.stableServiceRef }}
+       - spec.strategy.canary.canaryService  → {identifier}-{{ $application.rollout.canary.canaryServiceRef }}
+       - spec.strategy.canary.steps          → $application.rollout.canary.steps
+       - spec.strategy.canary.trafficRouting → $application.rollout.canary.trafficRouting (Gateway API plugin)
+       - spec.analysis                       → $application.rollout.canary.analysis
+
+     blueGreen:
+       - spec.strategy.blueGreen.activeService   → {identifier}-{{ $application.rollout.blueGreen.activeServiceRef }}
+       - spec.strategy.blueGreen.previewService  → {identifier}-{{ $application.rollout.blueGreen.previewServiceRef }}
+       - spec.strategy.blueGreen.autoPromotionEnabled
+       - spec.strategy.blueGreen.scaleDownDelaySeconds
+       - spec.strategy.blueGreen.prePromotionAnalysis
+       - spec.strategy.blueGreen.postPromotionAnalysis
+*/}}
+{{- end }}
+{{ end }}

@@ -1,0 +1,135 @@
+# apps:
+#   # Configuration for an individual application. Multiple applications can be defined here.
+#   application:
+#     # Number of replicas. Defaults to 1 if not set.
+#     replicas: 1
+
+#     image:
+#       # Required. Container image repository.
+#       repository: your-docker-repo/your-application-image
+#       # Container image tag. Defaults to "latest" if not set.
+#       tag: latest
+#       # Image pull policy. Defaults to "IfNotPresent" if not set.
+#       # https://kubernetes.io/docs/concepts/containers/images/#image-pull-policy
+#       pullPolicy: IfNotPresent
+
+#     # https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+#     resources:
+#       requests:
+#         cpu: 250m
+#         memory: 250Mi
+#       limits:
+#         cpu: 500m
+#         memory: 500Mi
+
+#     labels:
+#       # Required. Used as the component label and ingress subdomain.
+#       component: api
+#       # Required. Used as base path for ingress (/partOf/application).
+#       partOf: iot
+
+#     # Dictionary of Kubernetes Services to create for this application.
+#     # Supports multiple protocols per pod (e.g. HTTP + UDP).
+#     # For Argo Rollouts canary/blueGreen, define service pairs here using
+#     # the names expected by rollout.canary.stableServiceRef etc.
+#     services:
+#       # Each key becomes the service name suffix: {identifier}-{key}
+#       http:
+#         # Required. Whether to create this service.
+#         enabled: true
+#         # Protocol: TCP or UDP. Defaults to TCP.
+#         protocol: TCP
+#         # Service port (ClusterIP). Defaults to 80.
+#         port: 80
+#         # Container target port. Defaults to 80.
+#         targetPort: 4000
+#       udp:
+#         enabled: true
+#         protocol: UDP
+#         port: 4000
+#         targetPort: 4000
+
+#     ingress:
+#       # Required. Whether to create HTTPRoute + Middleware for this application.
+#       enabled: true
+#       # Which key from services dict to use as the HTTPRoute backend.
+#       # Required when ingress.enabled is true.
+#       serviceRef: http
+
+#     # Optional. Creates a Traefik IngressRouteUDP resource for UDP traffic.
+#     # Requires a matching UDP entrypoint configured in Traefik.
+#     udpIngress:
+#       # Required. Whether to create an IngressRouteUDP for this application.
+#       enabled: true
+#       # Required when enabled. Which key from services dict to use as the UDP backend.
+#       serviceRef: udp
+#       # Required when enabled. Name of the Traefik UDP entrypoint (must match ports in Traefik helm values).
+#       entrypoint: udp-miot-bridge
+
+#     # Dictionary of Jinja2 templates to mount into the container via initContainer.
+#     # Config content lives here (in env-specific values files) as multiline strings.
+#     # Pods automatically restart when content changes (checksum annotation).
+#     templates:
+#       # Each key is the template name. Generates one ConfigMap + initContainer.
+#       config:
+#         # Required. Destination file name inside the container.
+#         file: production.json
+#         # Required. Destination path inside the container where the file is mounted.
+#         path: /home/app/config
+#         # Required. Raw Jinja2 template content (defined in env-specific values files).
+#         # Injected variables: APPLICATION, COMPONENT, APPLICATION_GROUP, CONTAINER_PORT,
+#         # CONTAINER_UDP_PORT (when udpIngress is set), NAMESPACE, and any VAR_* / SECRET_* values from the values files.
+#         content: |
+#           {
+#             "key": "{{ VAR_EXAMPLE }}"
+#           }
+
+#     # List of Kubernetes Secret names whose keys are injected into:
+#     #   - the Jinja2 init container as JINJA_VAR_{key} env vars (for config file rendering)
+#     #   - the main application container directly (for runtime access)
+#     # Secret keys must follow the SECRET_* naming convention (e.g. SECRET_MQTT_MIOT_BRIDGE_USERNAME).
+#     # Use the keys list to explicitly declare which keys from the Secret are injected.
+#     secretRefs:
+#       - name: miot-bridge-mqtt-credentials
+#         keys:
+#           - SECRET_MQTT_MIOT_BRIDGE_USERNAME
+#           - SECRET_MQTT_MIOT_BRIDGE_PASSWORD
+
+#     # Argo Rollouts configuration. Defaults to standard Deployment when not set or enabled: false.
+#     rollout:
+#       # Set to true to emit an Argo Rollout instead of a Deployment.
+#       # Requires Argo Rollouts controller to be installed.
+#       enabled: false
+#       # Strategy: canary | blueGreen
+#       strategy: canary
+
+#       # Canary strategy options (used when strategy: canary).
+#       # Requires two services defined in the services dict: stable + canary.
+#       canary:
+#         # Key from services dict pointing to the stable service.
+#         stableServiceRef: stable
+#         # Key from services dict pointing to the canary service.
+#         canaryServiceRef: canary
+#         # Rollout steps. See: https://argoproj.github.io/argo-rollouts/features/canary/
+#         steps: []
+#         # Gateway API traffic routing via argoproj-labs/gatewayAPI plugin.
+#         trafficRouting:
+#           enabled: false
+#         # Optional AnalysisTemplate reference for automated promotion/rollback.
+#         analysis: {}
+
+#       # BlueGreen strategy options (used when strategy: blueGreen).
+#       # Requires two services defined in the services dict: active + preview.
+#       blueGreen:
+#         # Key from services dict pointing to the active (live) service.
+#         activeServiceRef: active
+#         # Key from services dict pointing to the preview service.
+#         previewServiceRef: preview
+#         # Automatically promote after all steps complete. Defaults to false (manual).
+#         autoPromotionEnabled: false
+#         # Seconds to wait before scaling down the old ReplicaSet after promotion.
+#         scaleDownDelaySeconds: 30
+#         # Optional AnalysisTemplate run before promotion.
+#         prePromotionAnalysis: {}
+#         # Optional AnalysisTemplate run after promotion.
+#         postPromotionAnalysis: {}

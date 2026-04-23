@@ -1,0 +1,23 @@
+{{- range $applicationName, $application := .Values.apps | default dict -}}
+{{- include "iot-applications.validators.image" (dict "image" $application.image "applicationName" $applicationName) }}
+{{- include "iot-applications.validators.services" (dict "services" ($application.services | default dict) "applicationName" $applicationName) }}
+{{- $ctx := dict "application" $application "name" $applicationName "release" $.Release "chart" $.Chart -}}
+{{- range $serviceName, $svc := $application.services | default dict }}
+{{- if $svc.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "iot-applications.identifier" $ctx }}-{{ $serviceName }}
+  labels: {{ include "iot-applications.meta.labels" $ctx | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector: {{ include "iot-applications.labels.selector" $ctx | nindent 4 }}
+  ports:
+    - name: {{ include "iot-applications.identifier" $ctx }}-{{ $serviceName }}
+      protocol: {{ $svc.protocol | default "TCP" }}
+      port: {{ $svc.port | default 80 }}
+      targetPort: {{ $svc.targetPort | default 80 }}
+{{ end }}
+{{ end }}
+{{ end }}

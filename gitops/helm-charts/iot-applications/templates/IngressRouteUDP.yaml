@@ -1,0 +1,21 @@
+{{- range $applicationName, $application := .Values.apps | default dict -}}
+{{- include "iot-applications.validators.udpIngress" (dict "udpIngress" ($application.udpIngress | default dict) "applicationName" $applicationName) }}
+{{- if (($application.udpIngress | default dict).enabled) }}
+{{- $ctx := dict "application" $application "name" $applicationName "release" $.Release "chart" $.Chart -}}
+{{- $refSvcName := $application.udpIngress.serviceRef | default "" -}}
+{{- $refSvc := get ($application.services | default dict) $refSvcName | default dict -}}
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRouteUDP
+metadata:
+  name: {{ include "iot-applications.identifier" $ctx }}-udp
+  labels: {{ include "iot-applications.meta.labels" $ctx | nindent 4 }}
+spec:
+  entryPoints:
+    - {{ $application.udpIngress.entrypoint }}
+  routes:
+    - services:
+        - name: {{ include "iot-applications.identifier" $ctx }}-{{ $refSvcName }}
+          port: {{ $refSvc.port | default 80 }}
+{{ end }}
+{{ end }}

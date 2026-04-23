@@ -1,0 +1,35 @@
+{{- range $applicationName, $application := .Values.apps | default dict -}}
+{{- include "iot-applications.validators.ingress" (dict "ingress" $application.ingress "applicationName" $applicationName) }}
+{{- if $application.ingress.enabled }}
+{{- $ctx := dict "application" $application "name" $applicationName "release" $.Release "chart" $.Chart -}}
+{{- $refSvcName := $application.ingress.serviceRef | default "" -}}
+{{- $refSvc := get ($application.services | default dict) $refSvcName | default dict -}}
+{{- $pathName := $application.ingress.pathName | default $applicationName -}}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ include "iot-applications.identifier" $ctx }}
+  labels: {{ include "iot-applications.meta.labels" $ctx | nindent 4 }}
+spec:
+  parentRefs:
+    - name: traefik-gateway
+      namespace: traefik
+  hostnames:
+    - {{ include "iot-applications.subdomain" $.Values.VAR_SUBDOMAIN }}{{ $application.labels.component }}.{{ $.Values.VAR_PUBLIC_DOMAIN }}
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /{{ $application.labels.partOf }}/{{ $pathName }}
+      backendRefs:
+        - name: {{ include "iot-applications.identifier" $ctx }}-{{ $refSvcName }}
+          port: {{ $refSvc.port | default 80 }}
+      filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: traefik.io
+            kind: Middleware
+            name: {{ include "iot-applications.identifier" $ctx }}-middleware-stripprefix
+{{ end }}
+{{ end }}
