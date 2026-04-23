@@ -19,7 +19,7 @@ spec:
       automountServiceAccountToken: false
       containers:
         - name: provisioner
-          image: bitnami/mongodb:8.0
+          image: bitnami/mongodb:latest
           env:
             - name: MONGO_ROOT_PASSWORD
               valueFrom:
