@@ -42,37 +42,59 @@ spec:
               BAO_HOST="http://vault.server3.home"
               BAO_PATH="server2/production/miot-bridge-api-iot"
 
-              # Idempotency: skip if user already exists in the target database
+              # Idempotency: skip if credentials already in OpenBao
+              BAO_RESPONSE=$(curl -s -H "X-Vault-Token: ${BAO_TOKEN}" \
+                "${BAO_HOST}/v1/secret/data/${BAO_PATH}")
+
+              if echo "${BAO_RESPONSE}" | grep -q '"mongodb-password"'; then
+                echo "MongoDB credentials already in OpenBao. Skipping."
+                exit 0
+              fi
+
+              DB_PASS=$(tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 24)
+
+              # Create or update MongoDB user (idempotent: reset password if user already exists)
               USER_EXISTS=$(mongosh \
                 "mongodb://root:${MONGO_ROOT_PASSWORD}@${MONGO_HOST}/admin?authSource=admin" \
                 --quiet \
                 --eval "db.getSiblingDB('${DB_NAME}').getUser('${DB_USER}') ? 'exists' : 'missing'")
 
               if [ "${USER_EXISTS}" = "exists" ]; then
-                echo "MongoDB user '${DB_USER}' already exists. Skipping."
-                exit 0
+                echo "MongoDB user '${DB_USER}' exists. Resetting password..."
+                mongosh \
+                  "mongodb://root:${MONGO_ROOT_PASSWORD}@${MONGO_HOST}/admin?authSource=admin" \
+                  --quiet \
+                  --eval "db.getSiblingDB('${DB_NAME}').changeUserPassword('${DB_USER}', '${DB_PASS}');"
+              else
+                mongosh \
+                  "mongodb://root:${MONGO_ROOT_PASSWORD}@${MONGO_HOST}/admin?authSource=admin" \
+                  --quiet \
+                  --eval "
+                    db.getSiblingDB('${DB_NAME}').createUser({
+                      user: '${DB_USER}',
+                      pwd: '${DB_PASS}',
+                      roles: [{ role: 'dbOwner', db: '${DB_NAME}' }]
+                    });
+                  "
+                echo "Created MongoDB user '${DB_USER}' in database '${DB_NAME}'."
               fi
 
-              DB_PASS=$(tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 24)
-
-              mongosh \
-                "mongodb://root:${MONGO_ROOT_PASSWORD}@${MONGO_HOST}/admin?authSource=admin" \
-                --quiet \
-                --eval "
-                  db.getSiblingDB('${DB_NAME}').createUser({
-                    user: '${DB_USER}',
-                    pwd: '${DB_PASS}',
-                    roles: [{ role: 'dbOwner', db: '${DB_NAME}' }]
-                  });
-                "
-
-              echo "Created MongoDB user '${DB_USER}' in database '${DB_NAME}'."
-
-              # Write credentials to OpenBao (merged with any existing keys at this path)
-              curl -sf -X PATCH \
+              # Write credentials to OpenBao (merge with existing keys; POST if path does not exist yet)
+              BAO_PAYLOAD="{\"data\": {\"mongodb-database\": \"${DB_NAME}\", \"mongodb-username\": \"${DB_USER}\", \"mongodb-password\": \"${DB_PASS}\"}}"
+              HTTP_STATUS=$(curl -s -o /tmp/bao_response -w "%{http_code}" -X PATCH \
                 -H "X-Vault-Token: ${BAO_TOKEN}" \
-                -H "Content-Type: application/json" \
+                -H "Content-Type: application/merge-patch+json" \
                 "${BAO_HOST}/v1/secret/data/${BAO_PATH}" \
-                -d "{\"data\": {\"mongodb-database\": \"${DB_NAME}\", \"mongodb-username\": \"${DB_USER}\", \"mongodb-password\": \"${DB_PASS}\"}}"
+                -d "${BAO_PAYLOAD}")
+
+              if [ "${HTTP_STATUS}" = "404" ]; then
+                curl -sf -X POST \
+                  -H "X-Vault-Token: ${BAO_TOKEN}" \
+                  -H "Content-Type: application/json" \
+                  "${BAO_HOST}/v1/secret/data/${BAO_PATH}" \
+                  -d "${BAO_PAYLOAD}"
+              elif [ "${HTTP_STATUS}" != "200" ]; then
+                echo "ERROR: OpenBao write failed with status ${HTTP_STATUS}"; cat /tmp/bao_response; exit 1
+              fi
 
               echo "Credentials written to OpenBao at ${BAO_PATH}."

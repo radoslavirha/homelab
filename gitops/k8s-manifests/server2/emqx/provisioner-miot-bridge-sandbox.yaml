@@ -80,31 +80,54 @@ spec:
                   }'
               fi
 
-              # Idempotency: skip if user already exists
-              HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
-                -H "${AUTH_HEADER}" \
-                "${EMQX_HOST}/api/v5/authentication/password_based:built_in_database/users/${MQTT_USER}")
+              # Idempotency: skip if credentials already in OpenBao
+              BAO_EXISTING=$(curl -s -H "X-Vault-Token: ${BAO_TOKEN}" \
+                "${BAO_HOST}/v1/secret/data/${BAO_PATH}" | jq -r '.data.data["mqtt-username"] // ""')
 
-              if [ "$HTTP_CODE" = "200" ]; then
-                echo "MQTT user '${MQTT_USER}' already exists. Skipping."
+              if [ -n "${BAO_EXISTING}" ]; then
+                echo "MQTT credentials already in OpenBao. Skipping."
                 exit 0
               fi
 
               MQTT_PASS=$(tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 24)
 
-              curl -sf -X POST \
+              # Create or update EMQX user (idempotent: update password if user already exists)
+              HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
                 -H "${AUTH_HEADER}" \
-                -H "Content-Type: application/json" \
-                "${EMQX_HOST}/api/v5/authentication/password_based:built_in_database/users" \
-                -d "{\"user_id\": \"${MQTT_USER}\", \"password\": \"${MQTT_PASS}\", \"is_superuser\": false}"
+                "${EMQX_HOST}/api/v5/authentication/password_based:built_in_database/users/${MQTT_USER}")
 
-              echo "Created MQTT user '${MQTT_USER}'."
+              if [ "${HTTP_CODE}" = "200" ]; then
+                echo "MQTT user '${MQTT_USER}' exists. Resetting password..."
+                curl -sf -X PUT \
+                  -H "${AUTH_HEADER}" \
+                  -H "Content-Type: application/json" \
+                  "${EMQX_HOST}/api/v5/authentication/password_based:built_in_database/users/${MQTT_USER}" \
+                  -d "{\"password\": \"${MQTT_PASS}\"}"
+              else
+                curl -sf -X POST \
+                  -H "${AUTH_HEADER}" \
+                  -H "Content-Type: application/json" \
+                  "${EMQX_HOST}/api/v5/authentication/password_based:built_in_database/users" \
+                  -d "{\"user_id\": \"${MQTT_USER}\", \"password\": \"${MQTT_PASS}\", \"is_superuser\": false}"
+                echo "Created MQTT user '${MQTT_USER}'."
+              fi
 
-              # Write credentials to OpenBao (merged with any existing keys at this path)
-              curl -sf -X PATCH \
+              # Write credentials to OpenBao (merge with existing keys; POST if path does not exist yet)
+              BAO_PAYLOAD="{\"data\": {\"mqtt-username\": \"${MQTT_USER}\", \"mqtt-password\": \"${MQTT_PASS}\"}}"
+              HTTP_STATUS=$(curl -s -o /tmp/bao_response -w "%{http_code}" -X PATCH \
                 -H "X-Vault-Token: ${BAO_TOKEN}" \
-                -H "Content-Type: application/json" \
+                -H "Content-Type: application/merge-patch+json" \
                 "${BAO_HOST}/v1/secret/data/${BAO_PATH}" \
-                -d "{\"data\": {\"mqtt-username\": \"${MQTT_USER}\", \"mqtt-password\": \"${MQTT_PASS}\"}}"
+                -d "${BAO_PAYLOAD}")
+
+              if [ "${HTTP_STATUS}" = "404" ]; then
+                curl -sf -X POST \
+                  -H "X-Vault-Token: ${BAO_TOKEN}" \
+                  -H "Content-Type: application/json" \
+                  "${BAO_HOST}/v1/secret/data/${BAO_PATH}" \
+                  -d "${BAO_PAYLOAD}"
+              elif [ "${HTTP_STATUS}" != "200" ]; then
+                echo "ERROR: OpenBao write failed with status ${HTTP_STATUS}"; cat /tmp/bao_response; exit 1
+              fi
 
               echo "Credentials written to OpenBao at ${BAO_PATH}."

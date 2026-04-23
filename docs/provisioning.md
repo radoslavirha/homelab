@@ -45,7 +45,8 @@ gitops/k8s-manifests/server2/iot/ExternalSecret.provisioner-token.yaml
 **One-time setup (per cluster):**
 ```bash
 bao policy write server2-provisioner - <<'EOF'
-path "secret/data/server2/*" { capabilities = ["create", "update"] }
+path "secret/data/server2/*" { capabilities = ["create", "read", "update", "patch"] }
+path "secret/metadata/server2/*" { capabilities = ["read", "list"] }
 EOF
 
 TOKEN=$(bao token create \
