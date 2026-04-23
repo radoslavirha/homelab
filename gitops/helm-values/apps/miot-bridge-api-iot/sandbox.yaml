@@ -1,0 +1,82 @@
+# miot-bridge-api-iot — sandbox overrides
+# Cluster-specific VAR_* (VAR_PUBLIC_DOMAIN, VAR_SUBDOMAIN, VAR_MQTT_URL, etc.) are in server2/apps/common/sandbox.yaml
+
+apps:
+  miot-bridge-api:
+    udpIngress:
+      entrypoint: udp-miot-sbx
+    templates:
+      config:
+        content: |
+          {
+              "serviceName": "{{ APPLICATION }}",
+              "server": {
+                  "httpPort": {{ CONTAINER_PORT }}
+              },
+              "publicURL": "{{ VAR_PROTOCOL }}://{{ VAR_SUBDOMAIN }}.{{ COMPONENT }}.{{ VAR_PUBLIC_DOMAIN }}/{{ APPLICATION_GROUP }}/{{ PATH_NAME }}",
+              "cachePath": "./cache",
+              "http": {
+                  "notifications": {
+                      "enabled": false
+                  }
+              },
+              "udp": {
+                  "enabled": true,
+                  "port": {{ CONTAINER_UDP_PORT }},
+                  "notifications": {
+                      "enabled": true,
+                      "address": "192.168.1.140:50450"
+                  }
+              },
+              "mqtt": {
+                  "enabled": true,
+                  "url": "{{ VAR_MQTT_URL }}",
+                  "clientId": "miot-bridge-api-sandbox",
+                  "username": "{{ SECRET_MQTT_MIOT_BRIDGE_USERNAME }}",
+                  "password": "{{ SECRET_MQTT_MIOT_BRIDGE_PASSWORD }}",
+                  "topicPrefix": "{{ APPLICATION_GROUP }}/{{ NAMESPACE }}/",
+                  "notifications": {
+                      "enabled": true
+                  }
+              },
+              "polling": {
+                  "enabled": true,
+                  "intervalMs": 5000,
+                  "dispatchOnChange": true,
+                  "maxErrorCount": 3,
+                  "errorSkipCycles": 20
+              },
+              "mongodb": {
+                  "enabled": true,
+                  "url": "{{ VAR_MONGODB_URL }}/{{ SECRET_MONGODB_DATABASE }}",
+                  "connectionOptions": {
+                      "user": "{{ SECRET_MONGODB_USERNAME }}",
+                      "pass": "{{ SECRET_MONGODB_PASSWORD }}"
+                  }
+              },
+              "logger": {
+                  "enabled": true,
+                  "level": "info"
+              },
+              "otel": {
+                  "debug": true,
+                  "metrics": {
+                      "enabled": true,
+                      "exporter": {
+                          "url": "http://otel-collector-opentelemetry-collector:4318/v1/metrics"
+                      }
+                  },
+                  "traces": {
+                      "enabled": true,
+                      "exporter": {
+                          "url": "http://otel-collector-opentelemetry-collector:4318/v1/traces"
+                      }
+                  },
+                  "logs": {
+                      "enabled": true,
+                      "exporter": {
+                          "url": "http://otel-collector-opentelemetry-collector:4318/v1/logs"
+                      }
+                  }
+              }
+          }

@@ -1,0 +1,36 @@
+# interactive-map-feeder-api-iot — shared base values
+# Env-specific: replicas, templates.config.content, VAR_* → production.yaml / sandbox.yaml
+# No secretRefs (no secrets needed), no udpIngress, no cluster overrides.
+
+apps:
+  interactive-map-feeder-api:
+    image:
+      repository: radoslavirha/interactive-map-feeder
+      tag: "0.6.0"
+      pullPolicy: Always
+    replicas: 2
+    resources:
+      requests:
+        cpu: 250m
+        memory: 250Mi
+      limits:
+        cpu: 500m
+        memory: 500Mi
+    labels:
+      component: api
+      partOf: iot
+    services:
+      http:
+        enabled: true
+        protocol: TCP
+        port: 80
+        targetPort: 4000
+    ingress:
+      enabled: true
+      serviceRef: http
+      pathName: interactive-map-feeder
+    templates:
+      config:
+        file: production.json
+        path: /home/app/config
+        # content defined per-env

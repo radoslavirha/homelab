@@ -1,0 +1,50 @@
+# miot-bridge-api-iot — ApplicationSet (server2 × production + sandbox)
+# Chart: gitops/helm-charts/iot-applications/ (path-based, no publishing)
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: miot-bridge-api-iot
+  namespace: argocd
+spec:
+  generators:
+    - matrix:
+        generators:
+          - list:
+              elements:
+                - cluster: server2
+                  clusterServer: https://192.168.1.201:6443
+          - list:
+              elements:
+                - env: production
+                - env: sandbox
+  template:
+    metadata:
+      name: miot-bridge-api-iot-{{cluster}}-{{env}}
+    spec:
+      project: default
+      sources:
+        - repoURL: https://github.com/radoslavirha/homelab
+          targetRevision: HEAD
+          path: gitops/helm-charts/iot-applications
+          helm:
+            releaseName: miot-bridge-api-iot
+            valueFiles:
+              - $values/gitops/helm-values/apps/miot-bridge-api-iot/base.yaml
+              - $values/gitops/helm-values/apps/miot-bridge-api-iot/{{env}}.yaml
+              - $values/gitops/helm-values/server2/apps/common/values.yaml
+              - $values/gitops/helm-values/server2/apps/common/{{env}}.yaml
+        - repoURL: https://github.com/radoslavirha/homelab
+          targetRevision: HEAD
+          ref: values
+        - repoURL: https://github.com/radoslavirha/homelab
+          targetRevision: HEAD
+          path: gitops/k8s-manifests/{{cluster}}/miot-bridge-api-iot/{{env}}
+      destination:
+        server: '{{clusterServer}}'
+        namespace: '{{env}}'
+      syncPolicy:
+        syncOptions:
+          - CreateNamespace=true
+        automated:
+          selfHeal: true
+          prune: true

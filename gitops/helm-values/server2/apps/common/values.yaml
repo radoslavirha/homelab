@@ -1,0 +1,3 @@
+# server2 cluster VARs
+# Shared across all apps deployed on server2.
+VAR_PUBLIC_DOMAIN: server2.home

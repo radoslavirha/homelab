@@ -1,0 +1,110 @@
+---
+# EMQX PostSync provisioner: miot-bridge MQTT user (sandbox) — create-only (idempotent)
+# Runs on every ArgoCD sync of the emqx ApplicationSet.
+# Creates MQTT user "miot-bridge-sandbox" and writes credentials to OpenBao.
+# Consumed by: ExternalSecret miot-bridge-api-mqtt-credentials in sandbox namespace.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: emqx-provision-miot-bridge-sandbox
+  namespace: iot
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      automountServiceAccountToken: false
+      containers:
+        - name: provisioner
+          image: alpine:3.20
+          env:
+            - name: EMQX_USER
+              valueFrom:
+                secretKeyRef:
+                  name: emqx-credentials
+                  key: EMQX_DASHBOARD__DEFAULT_USERNAME
+            - name: EMQX_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: emqx-credentials
+                  key: EMQX_DASHBOARD__DEFAULT_PASSWORD
+            - name: BAO_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: openbao-provision-token
+                  key: token
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -e
+              apk add --no-cache curl jq > /dev/null
+
+              EMQX_HOST="http://emqx.iot.svc.cluster.local:18083"
+              MQTT_USER="miot-bridge-sandbox"
+              BAO_HOST="http://vault.server3.home"
+              BAO_PATH="server2/sandbox/miot-bridge-api-iot"
+
+              echo "Obtaining EMQX Bearer token..."
+              TOKEN=$(curl -sf -X POST \
+                -H "Content-Type: application/json" \
+                "${EMQX_HOST}/api/v5/login" \
+                -d "{\"username\": \"${EMQX_USER}\", \"password\": \"${EMQX_PASS}\"}" \
+                | jq -r '.token')
+
+              if [ -z "${TOKEN}" ] || [ "${TOKEN}" = "null" ]; then
+                echo "ERROR: Failed to obtain EMQX Bearer token."
+                exit 1
+              fi
+
+              AUTH_HEADER="Authorization: Bearer ${TOKEN}"
+
+              # Ensure built-in database authenticator is configured (idempotent)
+              AUTH_EXISTS=$(curl -sf \
+                -H "${AUTH_HEADER}" \
+                "${EMQX_HOST}/api/v5/authentication" \
+                | jq '[.[] | select(.backend=="built_in_database")] | length')
+
+              if [ "${AUTH_EXISTS:-0}" -eq 0 ]; then
+                echo "Configuring built-in database authenticator..."
+                curl -sf -X POST \
+                  -H "${AUTH_HEADER}" \
+                  -H "Content-Type: application/json" \
+                  "${EMQX_HOST}/api/v5/authentication" \
+                  -d '{
+                    "mechanism": "password_based",
+                    "backend": "built_in_database",
+                    "password_hash_algorithm": {"name": "bcrypt", "salt_rounds": 10},
+                    "user_id_type": "username"
+                  }'
+              fi
+
+              # Idempotency: skip if user already exists
+              HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+                -H "${AUTH_HEADER}" \
+                "${EMQX_HOST}/api/v5/authentication/password_based:built_in_database/users/${MQTT_USER}")
+
+              if [ "$HTTP_CODE" = "200" ]; then
+                echo "MQTT user '${MQTT_USER}' already exists. Skipping."
+                exit 0
+              fi
+
+              MQTT_PASS=$(tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 24)
+
+              curl -sf -X POST \
+                -H "${AUTH_HEADER}" \
+                -H "Content-Type: application/json" \
+                "${EMQX_HOST}/api/v5/authentication/password_based:built_in_database/users" \
+                -d "{\"user_id\": \"${MQTT_USER}\", \"password\": \"${MQTT_PASS}\", \"is_superuser\": false}"
+
+              echo "Created MQTT user '${MQTT_USER}'."
+
+              # Write credentials to OpenBao (merged with any existing keys at this path)
+              curl -sf -X PATCH \
+                -H "X-Vault-Token: ${BAO_TOKEN}" \
+                -H "Content-Type: application/json" \
+                "${BAO_HOST}/v1/secret/data/${BAO_PATH}" \
+                -d "{\"data\": {\"mqtt-username\": \"${MQTT_USER}\", \"mqtt-password\": \"${MQTT_PASS}\"}}"
+
+              echo "Credentials written to OpenBao at ${BAO_PATH}."

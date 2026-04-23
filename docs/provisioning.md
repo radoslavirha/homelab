@@ -200,6 +200,42 @@ This is the cleanest solution for MongoDB: zero manual intervention after initia
 
 ---
 
+## miot-bridge-api-iot
+
+`miot-bridge-api-iot` needs scoped credentials in both EMQX (MQTT) and MongoDB. Both are provisioned by PostSync Jobs and written to OpenBao. ExternalSecrets in the `production` and `sandbox` namespaces then pull them.
+
+OpenBao KV layout:
+- `secret/server2/production/miot-bridge-api-iot` → `mqtt-username`, `mqtt-password`, `mongodb-database`, `mongodb-username`, `mongodb-password`
+- `secret/server2/sandbox/miot-bridge-api-iot` → same keys
+
+### EMQX MQTT user (PostSync Job)
+
+[`gitops/k8s-manifests/server2/emqx/provisioner-miot-bridge-production.yaml`](../gitops/k8s-manifests/server2/emqx/provisioner-miot-bridge-production.yaml)
+[`gitops/k8s-manifests/server2/emqx/provisioner-miot-bridge-sandbox.yaml`](../gitops/k8s-manifests/server2/emqx/provisioner-miot-bridge-sandbox.yaml)
+
+Run in `iot` namespace (where `openbao-provision-token` and `emqx-credentials` already exist):
+1. Checks if MQTT user `miot-bridge-{env}` exists → skip if yes
+2. Generates a random 24-char password and creates the MQTT user
+3. Writes `mqtt-username` + `mqtt-password` to OpenBao via `PATCH` (merges into existing path, preserving any MongoDB keys already written)
+
+### MongoDB database + user (PostSync Job)
+
+[`gitops/k8s-manifests/server2/mongodb/provisioner-miot-bridge-production.yaml`](../gitops/k8s-manifests/server2/mongodb/provisioner-miot-bridge-production.yaml)
+[`gitops/k8s-manifests/server2/mongodb/provisioner-miot-bridge-sandbox.yaml`](../gitops/k8s-manifests/server2/mongodb/provisioner-miot-bridge-sandbox.yaml)
+
+Run in `mongodb` namespace (where `mongodb` root password secret exists):
+1. Checks if MongoDB user `miot-bridge-{env}` already exists in database `miot-bridge-{env}` → skip if yes
+2. Generates a random 24-char password, creates database and user with `dbOwner` role
+3. Writes `mongodb-database` + `mongodb-username` + `mongodb-password` to OpenBao via `PATCH`
+
+> **Note:** The provisioner token `openbao-provision-token` must exist in both `iot` and `mongodb` namespaces. The `iot` copy is deployed by `IotInfra`. The `mongodb` copy is deployed by the MongoDB ApplicationSet via [`gitops/k8s-manifests/server2/mongodb/ExternalSecret.provisioner-token.yaml`](../gitops/k8s-manifests/server2/mongodb/ExternalSecret.provisioner-token.yaml).
+
+### No manual seeding required
+
+Unlike InfluxDB2/EMQX/MongoDB root credentials, `miot-bridge-api-iot` credentials are **entirely auto-generated** by the provisioner Jobs. No `bao kv put` step is needed for these paths.
+
+---
+
 ## Adding a new consumer app: checklist
 
 1. **Provisioner Job** — create `gitops/k8s-manifests/<cluster>/<datastore>/provisioner-<app>.yaml` with `PostSync` hook annotation

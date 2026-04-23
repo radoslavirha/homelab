@@ -1,0 +1,50 @@
+# interactive-map-feeder-api-iot — ApplicationSet (server2 × production + sandbox)
+# Chart: gitops/helm-charts/iot-applications/ (path-based, no publishing)
+# No ExternalSecrets (no secretRefs), no cluster-specific overrides.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: interactive-map-feeder-api-iot
+  namespace: argocd
+spec:
+  generators:
+    - matrix:
+        generators:
+          - list:
+              elements:
+                - cluster: server2
+                  clusterServer: https://192.168.1.201:6443
+          - list:
+              elements:
+                - env: production
+                - env: sandbox
+  template:
+    metadata:
+      name: interactive-map-feeder-api-iot-{{cluster}}-{{env}}
+    spec:
+      project: default
+      sources:
+        - repoURL: https://github.com/radoslavirha/homelab
+          targetRevision: HEAD
+          path: gitops/helm-charts/iot-applications
+          helm:
+            releaseName: interactive-map-feeder-api-iot
+            valueFiles:
+              - $values/gitops/helm-values/apps/interactive-map-feeder-api-iot/base.yaml
+              - $values/gitops/helm-values/apps/interactive-map-feeder-api-iot/{{env}}.yaml
+              - $values/gitops/helm-values/apps/common/values.yaml
+              - $values/gitops/helm-values/apps/common/{{env}}.yaml
+              - $values/gitops/helm-values/{{cluster}}/apps/common/values.yaml
+              - $values/gitops/helm-values/{{cluster}}/apps/common/{{env}}.yaml
+        - repoURL: https://github.com/radoslavirha/homelab
+          targetRevision: HEAD
+          ref: values
+      destination:
+        server: '{{clusterServer}}'
+        namespace: '{{env}}'
+      syncPolicy:
+        syncOptions:
+          - CreateNamespace=true
+        automated:
+          selfHeal: true
+          prune: true

@@ -31,7 +31,13 @@ gitops/
     loki.yaml               shared: Monolithic, filesystem storage, Longhorn 20Gi
     tempo.yaml              shared: local backend, OTLP receivers, metrics generator, Longhorn 20Gi
     otel-gateway.yaml       shared: Deployment mode, otel-contrib, receivers, processors, pipeline topology
+    apps/
+      otel-collector/       base.yaml, production.yaml, sandbox.yaml
+      miot-bridge-api-iot/  base.yaml, production.yaml, sandbox.yaml
+      interactive-map-feeder-api-iot/ base.yaml, production.yaml, sandbox.yaml
     server2/
+      apps/
+        common/             production.yaml, sandbox.yaml (shared VAR_* for all apps in each namespace)
       emqx.yaml             server2 EMQX overrides
       external-dns.yaml     domainFilters, txtOwnerId
       external-secrets.yaml cluster-specific overrides
@@ -58,6 +64,7 @@ gitops/
     RootIoT.yaml            App-of-Apps → apps/iot/
     RootDatabases.yaml      App-of-Apps → apps/databases/
     RootDashboards.yaml     App-of-Apps → apps/dashboards/
+    RootApps.yaml           App-of-Apps → apps/apps/ (custom apps: miot-bridge, interactive-map-feeder, per-namespace OTel)
     apps/
       infra/       ESO (AppSet, list generator)
       gateway/     Traefik (AppSet), ExternalDNS (AppSet)
@@ -65,6 +72,7 @@ gitops/
       iot/         InfluxDB2 (AppSet), EMQX (AppSet), Telegraf (AppSet), IotInfra (AppSet, sync-wave: -1)
       databases/   MongoDB (AppSet)
       dashboards/  Headlamp (AppSet), Hubble (AppSet), Longhorn (AppSet)
+      apps/        AppsOTelCollector (AppSet), MiotBridgeApiIot (AppSet), InteractiveMapFeederApiIot (AppSet)
     server3/
       RootDashboards.yaml App-of-Apps → server3/apps/dashboards/ (server3-only singletons)
       RootObservability.yaml App-of-Apps → server3/apps/observability/ (LGTM stack)
@@ -75,11 +83,12 @@ gitops/
     server2/
       iot/         ExternalSecret.provisioner-token.yaml (openbao-provision-token; sync-wave -1 via IotInfra)
       influxdb2/   ExternalSecret.yaml, HTTPRoute.yaml, provisioner-telegraf.yaml
-      emqx/        ExternalSecret.yaml, HTTPRoute.yaml, IngressRouteTCP.yaml, provisioner-telegraf.yaml
+      emqx/        ExternalSecret.yaml, HTTPRoute.yaml, IngressRouteTCP.yaml, provisioner-telegraf.yaml, provisioner-miot-bridge-production.yaml, provisioner-miot-bridge-sandbox.yaml
       telegraf/    ExternalSecret.telegraf.influxdb2.yaml, ExternalSecret.telegraf.mqtt.yaml
       external-dns/ ExternalSecret (unifi-credentials), DNSEndpoint
       longhorn/    HTTPRoute: longhorn.server2.home → longhorn-frontend:80
-      mongodb/     ExternalSecret, HTTPRoute
+      mongodb/     ExternalSecret, HTTPRoute, ExternalSecret.provisioner-token.yaml, provisioner-miot-bridge-production.yaml, provisioner-miot-bridge-sandbox.yaml
+      miot-bridge-api-iot/ production/ and sandbox/ — ExternalSecret.mqtt.yaml, ExternalSecret.mongodb.yaml
       otel-gateway/ (no manifests — forwarder only)
     server3/
       cilium/              HTTPRoute: hubble.server3.home → hubble-dashboard:80
@@ -127,8 +136,9 @@ All other apps use the **app-of-apps + ApplicationSet** pattern with four stages
 - **iot** stage: InfluxDB2 (server2), EMQX (server1 · server2)
 - **databases** stage: MongoDB (server2)
 - **dashboards** stage: Headlamp, Hubble UI, Longhorn UI
+- **apps** stage: custom apps — miot-bridge, interactive-map-feeder, per-namespace OTel collectors
 
-Root Application CRDs live in `gitops/argocd-manifests/` as `RootInfra.yaml` / `RootGateway.yaml` / `RootObservability.yaml` / `RootIoT.yaml` / `RootDatabases.yaml` / `RootDashboards.yaml`. Applied once manually per stage; ArgoCD self-heals from then on.
+Root Application CRDs live in `gitops/argocd-manifests/` as `RootInfra.yaml` / `RootGateway.yaml` / `RootObservability.yaml` / `RootIoT.yaml` / `RootDatabases.yaml` / `RootDashboards.yaml` / `RootApps.yaml`. Applied once manually per stage; ArgoCD self-heals from then on.
 Each Root Application discovers **ApplicationSets** in `gitops/argocd-manifests/apps/<stage>/`.
 Each ApplicationSet uses a **list generator** with one element per cluster. Adding a cluster to a stage means adding one `{cluster, clusterServer}` element to each ApplicationSet in that stage and committing.
 `destination.server` in each ApplicationSet template selects the target cluster via `{{clusterServer}}`.
@@ -143,7 +153,9 @@ Helm values use a two-layer approach:
 - **Shared base**: `gitops/helm-values/<name>.yaml` — common across all clusters
 - **Cluster overrides**: `gitops/helm-values/<cluster>/<name>.yaml` — cluster-specific values (merged last, wins)
 
-Both files are listed in `valueFiles` in the Application manifest. Only add a cluster-specific file when there are actual overrides.
+For custom apps deployed via the `apps` stage, a third layer is used:
+- **App-level values**: `gitops/helm-values/apps/<app>/` — shared + env-specific (base.yaml, production.yaml, sandbox.yaml)
+- **Cluster+namespace common**: `gitops/helm-values/<cluster>/apps/common/{env}.yaml` — shared VAR_* for all apps in a namespace (e.g. VAR_PUBLIC_DOMAIN, VAR_SUBDOMAIN)
 
 Raw Kubernetes manifests live in `gitops/k8s-manifests/<cluster>/<app>/`.
 

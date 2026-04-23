@@ -1,0 +1,39 @@
+# interactive-map-feeder-api-iot — production overrides
+# Cluster-specific VAR_* (VAR_PUBLIC_DOMAIN, VAR_PROTOCOL) are in server2/apps/interactive-map-feeder-api-iot/production.yaml
+
+apps:
+  interactive-map-feeder-api:
+    templates:
+      config:
+        content: |
+          {
+              "serviceName": "{{ APPLICATION }}",
+              "server": {
+                  "httpPort": {{ CONTAINER_PORT }}
+              },
+              "publicURL": "{{ VAR_PROTOCOL }}://{{ COMPONENT }}.{{ VAR_PUBLIC_DOMAIN }}/{{ APPLICATION_GROUP }}/{{ PATH_NAME }}",
+              "logger": {
+                  "enabled": true,
+                  "level": "info"
+              },
+              "otel": {
+                  "metrics": {
+                      "enabled": true,
+                      "exporter": {
+                          "url": "http://otel-collector-opentelemetry-collector:4318/v1/metrics"
+                      }
+                  },
+                  "traces": {
+                      "enabled": true,
+                      "exporter": {
+                          "url": "http://otel-collector-opentelemetry-collector:4318/v1/traces"
+                      }
+                  },
+                  "logs": {
+                      "enabled": true,
+                      "exporter": {
+                          "url": "http://otel-collector-opentelemetry-collector:4318/v1/logs"
+                      }
+                  }
+              }
+          }
