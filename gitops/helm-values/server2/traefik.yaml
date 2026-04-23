@@ -19,6 +19,19 @@ providers:
       ip: "192.168.1.201"
 
 ports:
+  udp-miot-prod:
+    port: 4000
+    protocol: UDP
+    # hostNetwork: true — traffic goes directly to Traefik on the host.
+    # Exposing via the Service causes kube-proxy to DNAT+SNAT packets,
+    # masquerading the client source IP and breaking UDP response routing.
+    expose:
+      default: false
+  udp-miot-sbx:
+    port: 4001
+    protocol: UDP
+    expose:
+      default: false
   mqtt:
     port: 1883
     protocol: TCP

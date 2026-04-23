@@ -1,0 +1,9 @@
+# Apps OTel Collector — sandbox overrides
+
+config:
+  processors:
+    resource:
+      attributes:
+        - key: environment
+          value: sandbox
+          action: upsert

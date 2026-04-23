@@ -1,0 +1,9 @@
+# Apps OTel Collector — production overrides
+
+config:
+  processors:
+    resource:
+      attributes:
+        - key: environment
+          value: production
+          action: upsert
