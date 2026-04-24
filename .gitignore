@@ -16,3 +16,7 @@ iac/clusters/*/secrets/
 .idea/
 *.swp
 *.swo
+
+
+# APM dependencies
+apm_modules/

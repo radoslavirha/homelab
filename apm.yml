@@ -1,0 +1,8 @@
+name: homelab
+version: 1.0.0
+description: APM project for homelab
+author: Radoslav Irha
+dependencies:
+  apm: []
+  mcp: []
+scripts: {}

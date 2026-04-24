@@ -1,0 +1,6 @@
+lockfile_version: '1'
+generated_at: '2026-04-24T08:00:07.576263+00:00'
+dependencies: []
+local_deployed_files:
+- .claude/skills/sync-docs
+- .github/skills/sync-docs
