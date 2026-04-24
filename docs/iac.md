@@ -104,8 +104,23 @@ bao kv put secret/server3/grafana \
   admin-password=<strong-password>
 bao kv put secret/server3/external-dns api-key=<unifi-api-key>
 
-# Verify all three paths exist:
+# Shared OTLP bearer token — authenticates cross-cluster OTLP from server2 → server3.
+# Stored at a non-cluster path because multiple clusters (server2, server3) read the same token.
+# server2 ESO policy (step 3.d) includes an explicit read grant for secret/otel-gateway/*.
+bao kv put secret/otel-gateway/auth-token token=$(openssl rand -base64 32 | tr -d '=+/')
+
+# Verify all paths exist:
 bao kv list secret/server3
+bao kv list secret/otel-gateway
+
+# 3.g Optional — userpass admin login (convenience, so later sessions don't need the root token)
+# Skip if you want strict root-token-only access.
+bao auth enable userpass
+bao policy write admin - <<'EOF'
+path "*" { capabilities = ["create", "read", "update", "delete", "list", "sudo"] }
+EOF
+bao write auth/userpass/users/<username> password=<password> policies=admin
+# Later: bao login -method=userpass username=<username>
 
 # Apply ArgoCD (Terraform reads admin hash from OpenBao via vault provider):
 export VAULT_ADDR=http://127.0.0.1:8200
@@ -183,10 +198,14 @@ bao write auth/kubernetes-<cluster>/config \
   token_reviewer_jwt="$REVIEWER_JWT"
 
 #    ── 3.d  ESO read-only policy + role ──────────────────────────────────────────────────────
+#    Cross-cluster read: secret/otel-gateway/* holds the shared OTLP bearer token that
+#    server2 uses to authenticate outbound OTLP to server3 — must be readable here too.
 
 bao policy write <cluster>-external-secrets - <<'EOF'
-path "secret/data/<cluster>/*"     { capabilities = ["read"] }
-path "secret/metadata/<cluster>/*" { capabilities = ["read", "list"] }
+path "secret/data/<cluster>/*"        { capabilities = ["read"] }
+path "secret/metadata/<cluster>/*"    { capabilities = ["read", "list"] }
+path "secret/data/otel-gateway/*"     { capabilities = ["read"] }
+path "secret/metadata/otel-gateway/*" { capabilities = ["read", "list"] }
 EOF
 
 bao write auth/kubernetes-<cluster>/role/external-secrets \
@@ -200,7 +219,8 @@ bao write auth/kubernetes-<cluster>/role/external-secrets \
 #    OpenBao after calling each datastore's management API. See docs/provisioning.md.
 
 bao policy write <cluster>-provisioner - <<'EOF'
-path "secret/data/<cluster>/*" { capabilities = ["create", "update"] }
+path "secret/data/<cluster>/*"     { capabilities = ["create", "read", "update", "patch"] }
+path "secret/metadata/<cluster>/*" { capabilities = ["read", "list"] }
 EOF
 
 PROVISIONER_TOKEN=$(bao token create \

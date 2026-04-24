@@ -23,6 +23,7 @@ gitops/
     external-secrets.yaml   shared: installCRDs: true
     headlamp.yaml           shared: httpRoute + clusterRoleBinding
     traefik.yaml            shared: hostNetwork, Gateway API provider, listeners, bare-metal service
+    emqx.yaml               shared: replica count, persistence, dashboard envFromSecret
     influxdb2.yaml          shared: org=homelab, existingSecret, Longhorn persistence 25Gi
     mongodb.yaml            shared: root credentials existingSecret, auth enabled
     telegraf.yaml           shared: InfluxDB2 + MQTT outputs, env secretKeyRefs
@@ -32,6 +33,7 @@ gitops/
     tempo.yaml              shared: local backend, OTLP receivers, metrics generator, Longhorn 20Gi
     otel-gateway.yaml       shared: Deployment mode, otel-contrib, receivers, processors, pipeline topology
     apps/
+      common/               values.yaml (cluster-agnostic VAR_PROTOCOL, VAR_MQTT_URL, VAR_MONGODB_URL), production.yaml, sandbox.yaml
       otel-collector/       base.yaml, production.yaml, sandbox.yaml
       miot-bridge-api-iot/  base.yaml, production.yaml, sandbox.yaml
       interactive-map-feeder-api-iot/ base.yaml, production.yaml, sandbox.yaml
@@ -84,23 +86,25 @@ gitops/
         observability/ Prometheus.yaml, Grafana.yaml, Loki.yaml, Tempo.yaml
   k8s-manifests/
     server2/
+      cilium/              HTTPRoute: hubble.server2.home → hubble-dashboard:80
+      external-secrets/    ClusterSecretStore → remote server3 OpenBao at vault.server3.home
       iot/         ExternalSecret.provisioner-token.yaml (openbao-provision-token; sync-wave -1 via IotInfra)
       influxdb2/   ExternalSecret.yaml, HTTPRoute.yaml, provisioner-telegraf.yaml
       emqx/        ExternalSecret.yaml, HTTPRoute.yaml, IngressRouteTCP.yaml, provisioner-telegraf.yaml, provisioner-miot-bridge-production.yaml, provisioner-miot-bridge-sandbox.yaml
       telegraf/    ExternalSecret.telegraf.influxdb2.yaml, ExternalSecret.telegraf.mqtt.yaml
       external-dns/ ExternalSecret (unifi-credentials), DNSEndpoint
       longhorn/    HTTPRoute: longhorn.server2.home → longhorn-frontend:80
-      mongodb/     ExternalSecret, HTTPRoute, ExternalSecret.provisioner-token.yaml, provisioner-miot-bridge-production.yaml, provisioner-miot-bridge-sandbox.yaml
+      mongodb/     ExternalSecret, IngressRouteTCP, ExternalSecret.provisioner-token.yaml, provisioner-miot-bridge-production.yaml, provisioner-miot-bridge-sandbox.yaml
       miot-bridge-api-iot/ production/ and sandbox/ — ExternalSecret.mqtt.yaml, ExternalSecret.mongodb.yaml
-      otel-gateway/ (no manifests — forwarder only)
+      otel-gateway/ ExternalSecret.otel-auth-token.yaml (shared OTLP bearer token pulled from secret/otel-gateway/auth-token)
     server3/
       cilium/              HTTPRoute: hubble.server3.home → hubble-dashboard:80
       external-dns/        ExternalSecret (unifi-credentials), DNSEndpoint (server3.home A record)
       external-secrets/    ClusterSecretStore → local OpenBao
       longhorn/            HTTPRoute: longhorn.server3.home → longhorn-frontend:80
       openbao/             HTTPRoute: vault.server3.home → openbao:8200
-      grafana/             ExternalSecret (grafana-admin), datasource ConfigMaps (prometheus/loki/tempo), HTTPRoute: grafana.server3.home
-      otel-gateway/        HTTPRoute: otel.server3.home, IngressRouteTCP (otel gRPC :4317)
+      grafana/             ExternalSecret (grafana-admin), datasource ConfigMaps (prometheus/loki/tempo), dashboard ConfigMap (traefik-opentelemetry), HTTPRoute: grafana.server3.home
+      otel-gateway/        ExternalSecret.otel-auth-token.yaml (shared OTLP bearer token), HTTPRoute: otel.server3.home, IngressRouteTCP (otel gRPC :4317)
 docs/             Architecture decisions, IaC guide, secrets guide, observability guide
 ```
 
@@ -133,13 +137,14 @@ To apply a version change: `cd iac/clusters/<cluster>/<stage> && terraform apply
 
 ### 2. ArgoCD-managed (GitOps)
 
-All other apps use the **app-of-apps + ApplicationSet** pattern with four stages:
+All other apps use the **app-of-apps + ApplicationSet** pattern with seven stages (six multi-cluster + server3-only LGTM):
 - **infra** stage: ESO + supporting K8s resources (ClusterSecretStore)
 - **gateway** stage: Traefik + ExternalDNS + ExternalSecret for Unifi credentials
-- **iot** stage: InfluxDB2 (server2), EMQX (server1 · server2)
+- **observability** stage: OTel Gateway (all clusters); server3-only LGTM stack (Prometheus, Grafana, Loki, Tempo) under `server3/apps/observability/`
+- **iot** stage: InfluxDB2 (server2), EMQX (server2), Telegraf (server2), IotInfra (server2)
 - **databases** stage: MongoDB (server2)
-- **dashboards** stage: Headlamp, Hubble UI, Longhorn UI
-- **apps** stage: custom apps — miot-bridge, interactive-map-feeder, per-namespace OTel collectors
+- **dashboards** stage: Headlamp, Hubble UI, Longhorn UI (server3 · server2); server3-only OpenBao HTTPRoute under `server3/apps/dashboards/`
+- **apps** stage: custom apps — miot-bridge-api-iot, interactive-map-feeder-api-iot, per-namespace OTel collectors
 
 Bootstrap is **two manual kubectl applies** on server3:
 
@@ -202,7 +207,7 @@ When changing any component version:
 OpenBao is deployed via `iac/clusters/server3/vault/` (Terraform-managed, server3 only).
 App secrets are stored in OpenBao and synced to all clusters via External Secrets Operator.
 After `terraform apply`, run the init ceremony manually (see `iac/clusters/server3/vault/main.tf` header).
-See [docs/secrets.md](docs/secrets.md) once that file is created.
+See [docs/secrets.md](docs/secrets.md) for the full secrets path inventory and seeding commands per stage.
 
 ## Credentials
 

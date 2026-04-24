@@ -86,8 +86,13 @@ bao kv put secret/server3/grafana \
 # ExternalDNS — UniFi API key:
 bao kv put secret/server3/external-dns api-key=<unifi-api-key>
 
+# Shared OTLP bearer token — used by every cluster's OTel Gateway.
+# Lives at a non-cluster path; server2 ESO policy has an explicit read grant for it.
+bao kv put secret/otel-gateway/auth-token token=$(openssl rand -base64 32 | tr -d '=+/')
+
 # Verify:
 bao kv list secret/server3
+bao kv list secret/otel-gateway
 ```
 
 ### Step 5 — ArgoCD
@@ -202,8 +207,11 @@ bao write auth/kubernetes-<cluster>/role/external-secrets \
   ttl=1h
 
 # Provisioner write policy + long-lived token (for PostSync credential Jobs):
+# `read` + `patch` + metadata `list` are needed so provisioner Jobs can check whether
+# credentials already exist (idempotency) before deciding to create or rotate them.
 bao policy write <cluster>-provisioner - <<'EOF'
-path "secret/data/<cluster>/*" { capabilities = ["create", "update"] }
+path "secret/data/<cluster>/*"     { capabilities = ["create", "read", "update", "patch"] }
+path "secret/metadata/<cluster>/*" { capabilities = ["read", "list"] }
 EOF
 
 PROVISIONER_TOKEN=$(bao token create \
@@ -241,6 +249,11 @@ bao kv list secret/<cluster>
 ### Step 5 — Register in ArgoCD
 
 ```bash
+# Log in to server3 ArgoCD first (required by `argocd cluster add`).
+# Admin password was seeded in OpenBao at secret/server3/argocd (bcrypt hash) during
+# server3 step 4; use the plaintext value you hashed.
+argocd login argocd.server3.home --username admin --password <plaintext-admin-password>
+
 argocd cluster add <context-name> --name <cluster>
 argocd cluster list   # note the SERVER URL for step 6
 ```

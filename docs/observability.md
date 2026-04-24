@@ -50,15 +50,15 @@ graph LR
 
 ## Components
 
-| Component | Chart | Version | Helm values |
-|-----------|-------|---------|-------------|
-| OTel Gateway | `open-telemetry/opentelemetry-collector` | 0.149.0 | [shared](../gitops/helm-values/otel-gateway.yaml) · [server3](../gitops/helm-values/server3/otel-gateway.yaml) |
-| Prometheus | `prometheus-community/prometheus` | 29.2.1 | [shared](../gitops/helm-values/prometheus.yaml) · [server3](../gitops/helm-values/server3/prometheus.yaml) |
-| Loki | `grafana-community/loki` | 13.2.0 | [shared](../gitops/helm-values/loki.yaml) |
-| Tempo | `grafana-community/tempo` | 2.0.0 | [shared](../gitops/helm-values/tempo.yaml) |
-| Grafana | `grafana-community/grafana` | 12.1.1 | [shared](../gitops/helm-values/grafana.yaml) · [server3](../gitops/helm-values/server3/grafana.yaml) |
+| Component | Chart | Version location | Helm values |
+|-----------|-------|------------------|-------------|
+| OTel Gateway | `open-telemetry/opentelemetry-collector` | [`apps/observability/OTelGateway.yaml`](../gitops/argocd-manifests/apps/observability/OTelGateway.yaml) `targetRevision` | [shared](../gitops/helm-values/otel-gateway.yaml) · [server3](../gitops/helm-values/server3/otel-gateway.yaml) |
+| Prometheus | `prometheus-community/prometheus` | [`server3/apps/observability/Prometheus.yaml`](../gitops/argocd-manifests/server3/apps/observability/Prometheus.yaml) `targetRevision` | [shared](../gitops/helm-values/prometheus.yaml) · [server3](../gitops/helm-values/server3/prometheus.yaml) |
+| Loki | `grafana-community/loki` | [`server3/apps/observability/Loki.yaml`](../gitops/argocd-manifests/server3/apps/observability/Loki.yaml) `targetRevision` | [shared](../gitops/helm-values/loki.yaml) |
+| Tempo | `grafana-community/tempo` | [`server3/apps/observability/Tempo.yaml`](../gitops/argocd-manifests/server3/apps/observability/Tempo.yaml) `targetRevision` | [shared](../gitops/helm-values/tempo.yaml) |
+| Grafana | `grafana-community/grafana` | [`server3/apps/observability/Grafana.yaml`](../gitops/argocd-manifests/server3/apps/observability/Grafana.yaml) `targetRevision` | [shared](../gitops/helm-values/grafana.yaml) · [server3](../gitops/helm-values/server3/grafana.yaml) |
 
-All charts are deployed by ArgoCD. OTel Gateway is managed by [RootObservability.yaml](../gitops/argocd-manifests/RootObservability.yaml) (ApplicationSet, all clusters). The LGTM stack (Prometheus, Grafana, Loki, Tempo) is managed by [server3/RootObservability.yaml](../gitops/argocd-manifests/server3/RootObservability.yaml) (server3 only).
+All charts are deployed by ArgoCD. OTel Gateway runs on all clusters (managed by the `OTelGateway` ApplicationSet under [`roots/RootObservability.yaml`](../gitops/argocd-manifests/roots/RootObservability.yaml)). The LGTM stack (Prometheus, Grafana, Loki, Tempo) is server3-only, managed by [`roots/server3/RootObservability.yaml`](../gitops/argocd-manifests/roots/server3/RootObservability.yaml).
 
 ## Internal service addresses
 
@@ -66,7 +66,7 @@ All charts are deployed by ArgoCD. OTel Gateway is managed by [RootObservability
 |---------|-------------------|------|
 | OTel Gateway (gRPC) | `otel-gateway-opentelemetry-collector.monitoring.svc.cluster.local` | 4317 |
 | OTel Gateway (HTTP) | `otel-gateway-opentelemetry-collector.monitoring.svc.cluster.local` | 4318 |
-| Prometheus | `prometheus.monitoring.svc.cluster.local` | 9090 |
+| Prometheus | `prometheus.monitoring.svc.cluster.local` | 80 |
 | Loki | `loki.monitoring.svc.cluster.local` | 3100 |
 | Tempo (gRPC) | `tempo.monitoring.svc.cluster.local` | 4317 |
 | Tempo (HTTP) | `tempo.monitoring.svc.cluster.local` | 3200 |
@@ -95,7 +95,7 @@ The `resource` processor is defined in the per-cluster override file (e.g. [serv
 |----------|----------|-------------|
 | `logs` | `otlphttp/loki` | `http://loki.monitoring…:3100/otlp` |
 | `traces` | `otlp/tempo` | `tempo.monitoring…:4317` (gRPC, insecure) |
-| `metrics` | `prometheusremotewrite` | `http://prometheus.monitoring…:9090/api/v1/write` |
+| `metrics` | `prometheusremotewrite` | `http://prometheus.monitoring…:80/api/v1/write` |
 
 ## Prometheus — TSDB only
 
@@ -123,11 +123,11 @@ Tempo stores traces locally at `/var/tempo/traces` with a 20 Gi Longhorn PVC and
 
 ## Grafana datasources and correlations
 
-Datasources are provisioned automatically via ConfigMaps watched by the Grafana sidecar (label `grafana_datasource: "1"`). All ConfigMaps live in [gitops/k8s-manifests/server3/grafana/](../gitops/k8s-manifests/server3/grafana/).
+Datasources are provisioned automatically via ConfigMaps watched by the Grafana sidecar (label `grafana_datasource: "1"`). All ConfigMaps live in [gitops/k8s-manifests/server3/grafana/](../gitops/k8s-manifests/server3/grafana/). Pre-shipped dashboards (label `grafana_dashboard: "1"`) are also loaded from the same directory — currently [`ConfigMap.grafana.dashboard.traefik-opentelemetry.yaml`](../gitops/k8s-manifests/server3/grafana/ConfigMap.grafana.dashboard.traefik-opentelemetry.yaml).
 
 | Datasource | UID | URL |
 |------------|-----|-----|
-| Prometheus | `prometheus` | `http://prometheus.monitoring.svc.cluster.local:9090` (default) |
+| Prometheus | `prometheus` | `http://prometheus.monitoring.svc.cluster.local` (port 80, default) |
 | Loki | `loki` | `http://loki.monitoring.svc.cluster.local:3100` |
 | Tempo | `tempo` | `http://tempo.monitoring.svc.cluster.local:3200` |
 
@@ -236,17 +236,20 @@ The OTel Gateway shared base defines receivers, processors, and pipeline topolog
 
 ```
 gitops/argocd-manifests/
-  RootObservability.yaml                       ← App-of-Apps for all clusters (apply once)
+  roots/
+    RootObservability.yaml                     ← sync-wave "3" — App-of-Apps for all clusters
+    server3/
+      RootObservability.yaml                   ← sync-wave "3" — App-of-Apps for server3 LGTM stack
   apps/observability/
     OTelGateway.yaml                           ← opentelemetry-collector chart + HTTPRoute + IngressRouteTCP (AppSet)
-  server3/
-    RootObservability.yaml                     ← App-of-Apps for server3 LGTM stack (apply once)
-    apps/observability/
-      Prometheus.yaml                          ← prometheus chart
-      Loki.yaml                                ← loki chart
-      Tempo.yaml                               ← tempo chart
-      Grafana.yaml                             ← grafana chart + ExternalSecret + datasource ConfigMaps + HTTPRoute
+  server3/apps/observability/
+    Prometheus.yaml                            ← prometheus chart
+    Loki.yaml                                  ← loki chart
+    Tempo.yaml                                 ← tempo chart
+    Grafana.yaml                               ← grafana chart + ExternalSecret + datasource ConfigMaps + HTTPRoute
 ```
+
+Both Root Applications are discovered by the meta [`Bootstrap.yaml`](../gitops/argocd-manifests/Bootstrap.yaml) (`directory.recurse: true` over `roots/`). No manual `kubectl apply` of Root Applications — the single `Bootstrap.yaml` apply on server3 owns them.
 
 Sync-waves inside each Application guarantee ordering:
 - wave `-50`: ExternalSecret + datasource ConfigMaps (must exist before Grafana starts)
@@ -254,21 +257,15 @@ Sync-waves inside each Application guarantee ordering:
 
 ## Deploying / bootstrapping
 
-1. Seed the Grafana admin secret in OpenBao (see above).
-2. Ensure Traefik is running (RootGateway must be applied first).
-3. Apply the multi-cluster root Application (OTel Gateway):
+Handled end-to-end by the server3 Bootstrap flow — no observability-specific manual steps beyond seeding secrets.
 
-```bash
-kubectl apply -f gitops/argocd-manifests/RootObservability.yaml
-```
+Prerequisites before the `RootObservability` waves sync:
 
-4. Apply the server3 LGTM stack:
+1. Seed Grafana admin secret: `bao kv put secret/server3/grafana admin-user=admin admin-password=<…>` (see [secrets.md](secrets.md)).
+2. Seed shared OTLP bearer token: `bao kv put secret/otel-gateway/auth-token token=$(openssl rand -base64 32 | tr -d '=+/')`. Every cluster's OTel Gateway reads this path via ESO. server2's ESO policy must include a read grant for `secret/otel-gateway/*` (see [iac.md](iac.md) step 3.d).
+3. Ensure `RootGateway` (wave 2) has finished — Traefik is up so HTTPRoutes bind.
 
-```bash
-kubectl apply -f gitops/argocd-manifests/server3/RootObservability.yaml
-```
-
-ArgoCD auto-syncs all four server3 Applications from that point on.
+After that, `RootObservability` and `server3/RootObservability` sync automatically in wave 3 via `Bootstrap.yaml`. No standalone applies.
 
 ## Design decisions
 

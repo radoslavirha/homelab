@@ -219,9 +219,9 @@ OpenBao KV layout:
 
 Run in `iot` namespace (where `openbao-provision-token` and `emqx-credentials` already exist):
 
-1. Checks if `mqtt-username` already exists in `secret/server2/{env}/miot-bridge-api-iot/mqtt` → skip if yes
+1. Checks if `mqtt-username` already exists in `secret/server2/{env}/miot-bridge-api-emqx` → skip if yes
 2. Generates a random 24-char password and creates (or rotates) MQTT user `miot-bridge-{env}`
-3. Writes `mqtt-username` + `mqtt-password` to OpenBao via `POST` on a service-owned path (no cross-service merge needed)
+3. Writes `mqtt-username` + `mqtt-password` to OpenBao at `secret/server2/{env}/miot-bridge-api-emqx`
 
 ### MongoDB database + user (PostSync Job)
 
@@ -230,9 +230,9 @@ Run in `iot` namespace (where `openbao-provision-token` and `emqx-credentials` a
 
 Run in `mongodb` namespace (where `mongodb` root password secret exists):
 
-1. Checks if `mongodb-password` already exists in `secret/server2/{env}/miot-bridge-api-iot/mongodb` → skip if yes
+1. Checks if `mongodb-password` already exists in `secret/server2/{env}/miot-bridge-api-mongodb` → skip if yes
 2. Generates a random 24-char password, creates (or rotates) MongoDB user `miot-bridge-{env}` in database `miot-bridge-{env}`
-3. Writes `mongodb-database` + `mongodb-username` + `mongodb-password` to OpenBao via `POST` on a service-owned path
+3. Writes `mongodb-database` + `mongodb-username` + `mongodb-password` to OpenBao at `secret/server2/{env}/miot-bridge-api-mongodb`
 
 > **Note:** The provisioner token `openbao-provision-token` must exist in both `iot` and `mongodb` namespaces. The `iot` copy is deployed by `IotInfra`. The `mongodb` copy is deployed by the MongoDB ApplicationSet via [`gitops/k8s-manifests/server2/mongodb/ExternalSecret.provisioner-token.yaml`](../gitops/k8s-manifests/server2/mongodb/ExternalSecret.provisioner-token.yaml).
 

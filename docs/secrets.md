@@ -155,8 +155,26 @@ See [provisioning.md](provisioning.md) for per-app scoped user provisioning via 
 
 ---
 
+## otel-gateway/auth-token
+
+**Required before:** observability stage on **any** cluster (OTel Gateway pod on server3 and server2 both read it via ESO).
+
+Shared OTLP bearer token. server3 OTel Gateway validates inbound OTLP; server2 OTel Gateway sends it as `Authorization: Bearer` to server3. Single value — must be identical across clusters, so the path is intentionally outside the `secret/<cluster>/…` tree.
+
+```bash
+bao kv put secret/otel-gateway/auth-token token=$(openssl rand -base64 32 | tr -d '=+/')
+
+# Verify
+bao kv get secret/otel-gateway/auth-token
+```
+
+server3 ESO reads this via the `secret/data/*` wildcard in its `read-secrets` policy. server2 (and any additional cluster) ESO needs an explicit read grant — the `<cluster>-external-secrets` policy in [iac.md](iac.md) step 3.d grants `secret/data/otel-gateway/*` in addition to `secret/data/<cluster>/*`.
+
+---
+
 ## Verify all secrets for a cluster before deploying
 
 ```bash
 bao kv list secret/<cluster>
+bao kv list secret/otel-gateway   # once, not per cluster
 ```
