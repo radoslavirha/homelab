@@ -1,11 +1,14 @@
-# RootApps — App-of-Apps for custom application stack
-# Apply once manually after RootGateway and RootInfra are running.
-# Discovers ApplicationSets in gitops/argocd-manifests/apps/apps/
+# RootApps — App-of-Apps for custom application stack.
+# Discovers ApplicationSets in gitops/argocd-manifests/apps/apps/.
+# Sync wave 4 — miot-bridge-api-iot needs MongoDB + EMQX (wave 3),
+# apps-otel-collector needs OTel Gateway (wave 3).
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
   name: root-apps
   namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
 spec:
   project: default
   source:

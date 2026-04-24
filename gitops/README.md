@@ -9,23 +9,28 @@ ArgoCD runs only on the **server3** cluster and manages workloads on all cluster
 ```
 gitops/
   argocd-manifests/
-    ArgoCD.yaml             ArgoCD self-management Application (cluster-agnostic)
-    RootInfra.yaml          App-of-Apps → apps/infra/ (all clusters)
-    RootGateway.yaml        App-of-Apps → apps/gateway/ (all clusters)
-    RootObservability.yaml  App-of-Apps → apps/observability/ (all clusters)
-    RootIoT.yaml            App-of-Apps → apps/iot/ (all clusters)
-    RootDatabases.yaml      App-of-Apps → apps/databases/ (all clusters)
-    RootDashboards.yaml     App-of-Apps → apps/dashboards/ (all clusters)
+    ArgoCD.yaml             ArgoCD self-management Application (manual apply #1)
+    Bootstrap.yaml          Meta App-of-Apps (manual apply #2) — discovers roots/
+    roots/
+      RootInfra.yaml          sync-wave: "1" — App-of-Apps → apps/infra/
+      RootGateway.yaml        sync-wave: "2" — App-of-Apps → apps/gateway/
+      RootObservability.yaml  sync-wave: "3" — App-of-Apps → apps/observability/
+      RootIoT.yaml            sync-wave: "3" — App-of-Apps → apps/iot/
+      RootDatabases.yaml      sync-wave: "3" — App-of-Apps → apps/databases/
+      RootDashboards.yaml     sync-wave: "3" — App-of-Apps → apps/dashboards/
+      RootApps.yaml           sync-wave: "4" — App-of-Apps → apps/apps/ (custom apps)
+      server3/
+        RootDashboards.yaml    sync-wave: "2" — App-of-Apps → server3/apps/dashboards/ (OpenBao HTTPRoute)
+        RootObservability.yaml sync-wave: "3" — App-of-Apps → server3/apps/observability/ (LGTM stack)
     apps/
       infra/       ESO.yaml
       gateway/     Traefik.yaml, ExternalDNS.yaml
       observability/ OTelGateway.yaml
-      iot/         InfluxDB2.yaml, EMQX.yaml
+      iot/         IotInfra.yaml, InfluxDB2.yaml, EMQX.yaml, Telegraf.yaml
       databases/   MongoDB.yaml
       dashboards/  Headlamp.yaml, Hubble.yaml, Longhorn.yaml
+      apps/        AppsOTelCollector.yaml, MiotBridgeApiIot.yaml, InteractiveMapFeederApiIot.yaml
     server3/
-      RootDashboards.yaml      App-of-Apps → server3/apps/dashboards/ (server3-only singletons)
-      RootObservability.yaml   App-of-Apps → server3/apps/observability/ (server3-only LGTM stack)
       apps/
         dashboards/   OpenBao.yaml
         observability/ Prometheus.yaml, Grafana.yaml, Loki.yaml, Tempo.yaml
@@ -72,20 +77,23 @@ gitops/
 
 ## App-of-apps pattern
 
-There are three multi-cluster root Applications and one server3-only root Application:
+`Bootstrap.yaml` is a meta App-of-Apps that recursively discovers every Root Application under `roots/`. Each Root App carries an `argocd.argoproj.io/sync-wave` annotation; ArgoCD waits for every Root in wave N to reach **Healthy** before starting wave N+1.
 
-| Root Application | Stage | Apps | Why this order |
-|-----------------|-------|------|----------------|
-| `RootInfra.yaml` | infra | ESO | ESO must be running before ExternalDNS can pull the Unifi API key |
-| `RootGateway.yaml` | gateway | Traefik, ExternalDNS | Traefik GatewayClass is needed for HTTPRoutes; ExternalDNS needs the ESO-synced secret |
-| `RootObservability.yaml` | observability | OTel Gateway | Receives telemetry from all clusters; Traefik must exist for HTTPRoutes and IngressRouteTCP |
-| `RootIoT.yaml` | iot | InfluxDB2, EMQX | IoT datastores and broker depend on ESO for secret sync; secrets must be seeded in OpenBao first |
-| `RootDatabases.yaml` | databases | MongoDB | Document databases depend on ESO for secret sync; secrets must be seeded in OpenBao first |
-| `RootDashboards.yaml` | dashboards | Headlamp, Hubble, Longhorn UI | UI layer — depends on Traefik for HTTPRoutes |
-| `server3/RootDashboards.yaml` | server3 singletons | OpenBao HTTPRoute | server3-only; Traefik must exist before HTTPRoute can bind |
-| `server3/RootObservability.yaml` | server3 observability | Prometheus, Grafana, Loki, Tempo | server3-only LGTM backends; Traefik must exist for HTTPRoutes; ESO must exist for Grafana admin secret |
+Application-CRD health assessment is enabled by a Lua `resource.customizations` entry in [gitops/helm-values/server3/argocd.yaml](helm-values/server3/argocd.yaml). Without it, Root-level waves would only order *creation* of child ApplicationSets, not workload readiness. Reference: [ArgoCD 1.7→1.8 upgrade notes](https://argo-cd.readthedocs.io/en/stable/operator-manual/upgrading/1.7-1.8).
 
-Each stage uses ApplicationSets with a list generator — one element per cluster. Adding a cluster means adding `{cluster, clusterServer}` to each ApplicationSet and committing.
+|Wave|Root App|Stage|Why this wave|
+|----|--------|-----|-------------|
+|1|`roots/RootInfra.yaml`|infra|ESO + CRDs — any other app's `ExternalSecret` fails to apply until these CRDs exist|
+|2|`roots/RootGateway.yaml`|gateway|Traefik installs the Gateway every HTTPRoute/TCPRoute in later waves references. ExternalDNS needs ESO (wave 1) for its Unifi secret|
+|2|`roots/server3/RootDashboards.yaml`|server3 singleton|OpenBao HTTPRoute at `vault.server3.home` — parallel with RootGateway; unblocks server2 ClusterSecretStore|
+|3|`roots/RootObservability.yaml`|observability|OTel Gateway — needs Traefik (wave 2) + ESO `otel-auth-token`|
+|3|`roots/server3/RootObservability.yaml`|server3 observability|Prometheus, Grafana (needs ESO admin secret), Loki, Tempo|
+|3|`roots/RootIoT.yaml`|iot|IotInfra, InfluxDB2, EMQX, Telegraf — Telegraf self-orders with resource-level sync-wave `"1"` to wait for InfluxDB2/EMQX post-sync provisioner Jobs|
+|3|`roots/RootDatabases.yaml`|databases|MongoDB — needs ESO + Traefik TCPRoute|
+|3|`roots/RootDashboards.yaml`|dashboards|Headlamp, Hubble, Longhorn UI — need Traefik HTTPRoutes|
+|4|`roots/RootApps.yaml`|apps|Custom apps: miot-bridge-api-iot needs MongoDB + EMQX, apps-otel-collector needs OTel Gateway|
+
+Each ApplicationSet uses a list generator — one element per cluster. Adding a cluster means adding `{cluster, clusterServer}` to each ApplicationSet and committing.
 
 ## Helm values — two-layer approach
 
@@ -100,78 +108,59 @@ Only create a cluster-specific file when there are actual overrides. The shared 
 
 ## Bootstrap sequence
 
-Run from the repo root after completing all Terraform stages in `docs/iac.md`.
+Run from the repo root on **server3** after completing all Terraform stages in `docs/iac.md`. Two manual applies — `Bootstrap.yaml` orders all Root Apps through sync waves 1 → 4.
 
 ### Server3 (ArgoCD runs here)
 
 ```bash
-# 1. Apply ArgoCD self-management + infra stage
+export KUBECONFIG=iac/clusters/server3/credentials/kubeconfig
+
+# 1. ArgoCD self-management
 kubectl apply -f gitops/argocd-manifests/ArgoCD.yaml
-kubectl apply -f gitops/argocd-manifests/RootInfra.yaml
-# Wait for ESO + ClusterSecretStore to become ready before continuing:
-kubectl wait --for=condition=Ready clusterSecretStore/openbao -n external-secrets --timeout=120s
 
-# 2. Apply gateway stage
-#    All server3 secrets were already seeded in docs/iac.md step 4 (argocd, grafana, external-dns).
-kubectl apply -f gitops/argocd-manifests/RootGateway.yaml
-# Wait for Traefik to be running. OpenBao is now accessible at vault.server3.home.
+# 2. Bootstrap meta App-of-Apps
+kubectl apply -f gitops/argocd-manifests/Bootstrap.yaml
 
-# 3. Apply server3-specific singleton Applications (OpenBao HTTPRoute)
-#    Applied once — ArgoCD self-heals from then on.
-kubectl apply -f gitops/argocd-manifests/server3/RootDashboards.yaml
-
-# 4. Apply observability (OTel Gateway — all clusters; then LGTM stack — server3 only)
-#    Traefik must be running before HTTPRoute and IngressRouteTCP can bind.
-kubectl apply -f gitops/argocd-manifests/RootObservability.yaml
-kubectl apply -f gitops/argocd-manifests/server3/RootObservability.yaml
-
-# 5. Apply iot + databases ApplicationSets
-#    These create ApplicationSets that will deploy EMQX/InfluxDB2/MongoDB to server2.
-#    Server3 does not run these workloads — no server3 secrets are required here.
-#    Seed server2 secrets in OpenBao before adding server2 to the ApplicationSet generators.
-kubectl apply -f gitops/argocd-manifests/RootIoT.yaml
-kubectl apply -f gitops/argocd-manifests/RootDatabases.yaml
-
-# 6. Apply dashboards stage (Headlamp, Hubble, Longhorn UI — server3 + server2)
-kubectl apply -f gitops/argocd-manifests/RootDashboards.yaml
+# Watch progress:
+kubectl get applications -n argocd -w
 ```
+
+Secrets under `secret/server3/...` must already be seeded in OpenBao before step 2 (argocd admin hash, grafana admin, external-dns unifi key) — seeded by `docs/iac.md` step 4.
 
 ### Server1 / Server2
 
-Run after completing the Terraform + OpenBao setup and `argocd cluster add` in `docs/iac.md`.
+After Terraform + OpenBao setup + `argocd cluster add` (see `docs/iac.md`):
 
-```bash
-# Add the cluster to each ApplicationSet's list generator and commit + push.
-# ArgoCD auto-generates Applications as each file is committed.
-#
-# Files to update (add one element per file):
-#   gitops/argocd-manifests/apps/infra/ESO.yaml
-#   gitops/argocd-manifests/apps/gateway/Traefik.yaml
-#   gitops/argocd-manifests/apps/gateway/ExternalDNS.yaml
-#   gitops/argocd-manifests/apps/observability/OTelGateway.yaml
-#   gitops/argocd-manifests/apps/iot/InfluxDB2.yaml
-#   gitops/argocd-manifests/apps/iot/EMQX.yaml
-#   gitops/argocd-manifests/apps/databases/MongoDB.yaml
-#   gitops/argocd-manifests/apps/dashboards/Headlamp.yaml
-#   gitops/argocd-manifests/apps/dashboards/Hubble.yaml
-#   gitops/argocd-manifests/apps/dashboards/Longhorn.yaml
-#
-# Add under spec.generators[0].list.elements in each file:
-#   - cluster: <cluster>
-#     clusterServer: <server-url>   # from: argocd cluster list
-#
-# Recommended order: infra → gateway → iot → databases → dashboards.
-# After infra: wait for ClusterSecretStore to be Ready before committing the next stage.
-#
-# Stage prerequisites — seed these in OpenBao BEFORE committing the stage:
-#   gateway stage:       secret/<cluster>/external-dns
-#   observability stage: gitops/k8s-manifests/<cluster>/otel-gateway/ (folder must exist for each new cluster)
-#   iot stage:           secret/<cluster>/influxdb2
-#                    secret/<cluster>/emqx
-#                    secret/<cluster>/provisioner-token
-#   databases stage: secret/<cluster>/mongodb
-# See docs/secrets.md for exact bao kv put commands and verification steps.
-```
+1. Add `{cluster, clusterServer}` element to each ApplicationSet list generator:
+
+   ```text
+   gitops/argocd-manifests/apps/infra/ESO.yaml
+   gitops/argocd-manifests/apps/gateway/Traefik.yaml
+   gitops/argocd-manifests/apps/gateway/ExternalDNS.yaml
+   gitops/argocd-manifests/apps/observability/OTelGateway.yaml
+   gitops/argocd-manifests/apps/iot/IotInfra.yaml
+   gitops/argocd-manifests/apps/iot/InfluxDB2.yaml
+   gitops/argocd-manifests/apps/iot/EMQX.yaml
+   gitops/argocd-manifests/apps/iot/Telegraf.yaml
+   gitops/argocd-manifests/apps/databases/MongoDB.yaml
+   gitops/argocd-manifests/apps/dashboards/Headlamp.yaml
+   gitops/argocd-manifests/apps/dashboards/Hubble.yaml
+   gitops/argocd-manifests/apps/dashboards/Longhorn.yaml
+   ```
+
+2. Commit + push. Bootstrap on server3 already owns every Root App; ArgoCD generates new per-cluster `Application`s automatically. **Do not re-run any manual `kubectl apply` for Root Apps.**
+
+3. Ordering within each generated Application is handled by resource-level sync waves (ExternalSecret `-50`/`-1`/`0`, HTTPRoute `100`, Telegraf `1`, OpenBao HTTPRoute `200`). Retries converge the cross-cluster timing.
+
+4. Seed OpenBao secrets **before** committing the cluster element:
+
+   - `secret/<cluster>/external-dns` (Unifi API key)
+   - `secret/<cluster>/influxdb2` (admin-password, admin-token)
+   - `secret/<cluster>/emqx` (dashboard-username, dashboard-password)
+   - `secret/<cluster>/mongodb` (root-password)
+   - `secret/<cluster>/provisioner-token` (long-lived write token)
+
+   See `docs/secrets.md` for exact `bao kv put` commands.
 
 ## Adding a new app
 

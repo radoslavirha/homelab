@@ -102,33 +102,29 @@ cd iac/clusters/server3/apps && terraform init && terraform apply -auto-approve
 
 ### Step 6 — GitOps stages
 
+Two manual applies. `Bootstrap.yaml` is a meta App-of-Apps that discovers every Root App under `roots/` and orders deploys with sync waves (1 → 4). Each wave waits for the previous wave's Root Apps to reach Healthy before starting.
+
 ```bash
 export KUBECONFIG=iac/clusters/server3/credentials/kubeconfig
 
-# Infra (ESO + ClusterSecretStore):
+# 1. ArgoCD self-management
 kubectl apply -f gitops/argocd-manifests/ArgoCD.yaml
-kubectl apply -f gitops/argocd-manifests/RootInfra.yaml
-kubectl wait --for=condition=Ready clusterSecretStore/openbao \
-  -n external-secrets --timeout=120s
 
-# Gateway (Traefik + ExternalDNS):
-kubectl apply -f gitops/argocd-manifests/RootGateway.yaml
-# Wait for Traefik pods to be running before continuing.
+# 2. Bootstrap meta App-of-Apps
+kubectl apply -f gitops/argocd-manifests/Bootstrap.yaml
 
-# server3-only singletons (OpenBao HTTPRoute):
-kubectl apply -f gitops/argocd-manifests/server3/RootDashboards.yaml
-
-# Observability (OTel Gateway + Prometheus + Grafana + Loki + Tempo):
-kubectl apply -f gitops/argocd-manifests/RootObservability.yaml
-kubectl apply -f gitops/argocd-manifests/server3/RootObservability.yaml
-
-# IoT + Databases ApplicationSets (deploy to server2 when server2 is added):
-kubectl apply -f gitops/argocd-manifests/RootIoT.yaml
-kubectl apply -f gitops/argocd-manifests/RootDatabases.yaml
-
-# Dashboards (Headlamp, Hubble UI, Longhorn UI):
-kubectl apply -f gitops/argocd-manifests/RootDashboards.yaml
+# Watch progress:
+kubectl get applications -n argocd -w
 ```
+
+Wave layout:
+
+|Wave|Root App(s)|Purpose|
+|----|-----------|-------|
+|1|`RootInfra`|ESO + CRDs|
+|2|`RootGateway`, `server3/RootDashboards`|Traefik + ExternalDNS · OpenBao HTTPRoute|
+|3|`RootObservability`, `server3/RootObservability`, `RootIoT`, `RootDatabases`, `RootDashboards`|OTel Gateway · LGTM · IoT · MongoDB · UI dashboards|
+|4|`RootApps`|Custom apps (miot-bridge, interactive-map-feeder, apps-otel-collector)|
 
 ---
 
@@ -273,15 +269,12 @@ gitops/argocd-manifests/apps/dashboards/Hubble.yaml
 gitops/argocd-manifests/apps/dashboards/Longhorn.yaml
 ```
 
-Commit and push in dependency order — wait for each stage to sync before committing the next:
+Commit and push. Bootstrap on server3 already owns every Root App; adding the new cluster element triggers ArgoCD to generate one `Application` per stage for the new cluster. ApplicationSet sync is parallel across stages — ordering is enforced by resource-level sync waves inside each app (ExternalSecret retries, HTTPRoute `sync-wave: "100"`, Telegraf `sync-wave: "1"`, etc.), not by per-commit staging.
 
-```
-infra → gateway → observability → iot → databases → dashboards
-```
-
-After `infra` syncs, wait for `ClusterSecretStore` to be `Ready` before committing `gateway`:
+Monitor:
 
 ```bash
+argocd app list | grep <cluster>
 kubectl wait --for=condition=Ready clusterSecretStore/openbao \
   -n external-secrets --context <cluster> --timeout=120s
 ```

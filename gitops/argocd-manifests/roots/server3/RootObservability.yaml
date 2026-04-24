@@ -1,13 +1,15 @@
-# Root Observability App-of-Apps for server3.
-# Manages server3-only observability Applications: Prometheus, Grafana, Loki, Tempo.
-# OTel Gateway is managed by the top-level RootObservability.yaml (ApplicationSet, all clusters).
-# Applied once manually after RootGateway (Traefik must exist before HTTPRoutes can bind).
-# Manual apply: kubectl apply -f gitops/argocd-manifests/server3/RootObservability.yaml
+# Server3-only Observability App-of-Apps: Prometheus, Grafana, Loki, Tempo.
+# OTel Gateway is managed by top-level RootObservability.yaml (ApplicationSet).
+# Sync wave 3 — Grafana needs ESO (wave 1) for admin secret and Traefik
+# (wave 2) for HTTPRoute. LGTM backends share the wave with no hard deps
+# on sibling Roots.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
   name: root-observability-server3
   namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
 spec:
   project: default
   source:

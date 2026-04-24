@@ -35,6 +35,11 @@ cd iac/clusters/server3/platform  && terraform init && terraform apply -auto-app
 cd iac/clusters/server3/vault     && terraform init && terraform apply -auto-approve
 cd iac/clusters/server3/apps      && terraform init && terraform apply -auto-approve
 
+# Apply GitOps Root Apps (two kubectl applies — Bootstrap orders the rest via sync waves)
+export KUBECONFIG=iac/clusters/server3/credentials/kubeconfig
+kubectl apply -f gitops/argocd-manifests/ArgoCD.yaml
+kubectl apply -f gitops/argocd-manifests/Bootstrap.yaml
+
 # Bootstrap server1 / server2 (run in order)
 cd iac/clusters/<cluster>/bootstrap && terraform init && terraform apply -auto-approve
 cd iac/clusters/<cluster>/platform  && terraform init && terraform apply -auto-approve

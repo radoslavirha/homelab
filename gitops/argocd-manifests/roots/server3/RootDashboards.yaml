@@ -1,11 +1,14 @@
-# Server3-specific Dashboards App-of-Apps: HTTPRoutes and other server3-only singleton Applications.
-# Applied once manually after RootGateway (Traefik must exist before HTTPRoutes can bind).
-# Manual apply: kubectl apply -f gitops/argocd-manifests/server3/RootDashboards.yaml
+# Server3-only Dashboards App-of-Apps: OpenBao dashboard + HTTPRoute.
+# Sync wave 2 — runs in parallel with RootGateway. Publishes the OpenBao
+# HTTPRoute at vault.server3.home so server2's ClusterSecretStore (wave 1
+# ESO on server2, internal resource-wave 100) can resolve secrets.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
   name: root-dashboards-server3
   namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
 spec:
   project: default
   source:

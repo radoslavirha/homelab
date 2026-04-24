@@ -1,18 +1,19 @@
-# Gateway App-of-Apps for server3: Traefik + ExternalDNS.
-# Applied once (manually or by ArgoCD after self-bootstrap).
-# ArgoCD auto-syncs from that point on.
-# Manual apply: kubectl apply -f gitops/argocd-manifests/server3/RootGateway.yaml
+# Infra App-of-Apps: External Secrets Operator (ESO) on all clusters.
+# Sync wave 1 — ESO operator + CRDs must exist before any other app's
+# ExternalSecret resources can apply. Managed by Bootstrap.yaml.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: root-gateway
+  name: root-infra
   namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
 spec:
   project: default
   source:
     repoURL: https://github.com/radoslavirha/homelab
     targetRevision: HEAD
-    path: gitops/argocd-manifests/apps/gateway
+    path: gitops/argocd-manifests/apps/infra
     directory:
       recurse: true
   destination:

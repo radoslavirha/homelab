@@ -1,12 +1,15 @@
-# IoT App-of-Apps: InfluxDB2, EMQX — all applicable clusters.
-# Applied once manually after RootGateway (Traefik must be running before HTTPRoutes can bind).
-# ArgoCD auto-syncs from that point on.
-# Manual apply: kubectl apply -f gitops/argocd-manifests/RootIoT.yaml
+# IoT App-of-Apps: IotInfra, InfluxDB2, EMQX, Telegraf.
+# Sync wave 3 — needs ESO (wave 1) for credentials and Traefik (wave 2)
+# for HTTPRoute/IngressRouteTCP. Telegraf is ordered internally via its
+# own resource-level sync-wave "1" to wait for the InfluxDB2/EMQX
+# post-sync provisioner Jobs.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
   name: root-iot
   namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
 spec:
   project: default
   source:

@@ -57,14 +57,19 @@ gitops/
       grafana.yaml          server3 overrides (currently empty)
       otel-gateway.yaml     exporters (Loki/Tempo/Prometheus endpoint URLs), k8s.cluster.name=server3
   argocd-manifests/
-    ArgoCD.yaml             ArgoCD self-management (cluster-agnostic)
-    RootInfra.yaml        App-of-Apps → apps/infra/
-    RootGateway.yaml      App-of-Apps → apps/gateway/
-    RootObservability.yaml  App-of-Apps → apps/observability/
-    RootIoT.yaml            App-of-Apps → apps/iot/
-    RootDatabases.yaml      App-of-Apps → apps/databases/
-    RootDashboards.yaml     App-of-Apps → apps/dashboards/
-    RootApps.yaml           App-of-Apps → apps/apps/ (custom apps: miot-bridge, interactive-map-feeder, per-namespace OTel)
+    ArgoCD.yaml             ArgoCD self-management (manual apply #1)
+    Bootstrap.yaml          Meta App-of-Apps (manual apply #2) — discovers roots/, orders via sync waves
+    roots/
+      RootInfra.yaml          sync-wave: "1" — App-of-Apps → apps/infra/
+      RootGateway.yaml        sync-wave: "2" — App-of-Apps → apps/gateway/
+      RootObservability.yaml  sync-wave: "3" — App-of-Apps → apps/observability/
+      RootIoT.yaml            sync-wave: "3" — App-of-Apps → apps/iot/
+      RootDatabases.yaml      sync-wave: "3" — App-of-Apps → apps/databases/
+      RootDashboards.yaml     sync-wave: "3" — App-of-Apps → apps/dashboards/
+      RootApps.yaml           sync-wave: "4" — App-of-Apps → apps/apps/ (custom apps)
+      server3/
+        RootDashboards.yaml    sync-wave: "2" — App-of-Apps → server3/apps/dashboards/ (OpenBao HTTPRoute)
+        RootObservability.yaml sync-wave: "3" — App-of-Apps → server3/apps/observability/ (LGTM stack)
     apps/
       infra/       ESO (AppSet, list generator)
       gateway/     Traefik (AppSet), ExternalDNS (AppSet)
@@ -74,8 +79,6 @@ gitops/
       dashboards/  Headlamp (AppSet), Hubble (AppSet), Longhorn (AppSet)
       apps/        AppsOTelCollector (AppSet), MiotBridgeApiIot (AppSet), InteractiveMapFeederApiIot (AppSet)
     server3/
-      RootDashboards.yaml App-of-Apps → server3/apps/dashboards/ (server3-only singletons)
-      RootObservability.yaml App-of-Apps → server3/apps/observability/ (LGTM stack)
       apps/
         dashboards/ OpenBao.yaml   App: vault.server3.home HTTPRoute
         observability/ Prometheus.yaml, Grafana.yaml, Loki.yaml, Tempo.yaml
@@ -138,14 +141,28 @@ All other apps use the **app-of-apps + ApplicationSet** pattern with four stages
 - **dashboards** stage: Headlamp, Hubble UI, Longhorn UI
 - **apps** stage: custom apps — miot-bridge, interactive-map-feeder, per-namespace OTel collectors
 
-Root Application CRDs live in `gitops/argocd-manifests/` as `RootInfra.yaml` / `RootGateway.yaml` / `RootObservability.yaml` / `RootIoT.yaml` / `RootDatabases.yaml` / `RootDashboards.yaml` / `RootApps.yaml`. Applied once manually per stage; ArgoCD self-heals from then on.
-Each Root Application discovers **ApplicationSets** in `gitops/argocd-manifests/apps/<stage>/`.
-Each ApplicationSet uses a **list generator** with one element per cluster. Adding a cluster to a stage means adding one `{cluster, clusterServer}` element to each ApplicationSet in that stage and committing.
-`destination.server` in each ApplicationSet template selects the target cluster via `{{clusterServer}}`.
-Version is `targetRevision` in the ApplicationSet template. ArgoCD auto-syncs on commit.
+Bootstrap is **two manual kubectl applies** on server3:
 
-Server3-specific singleton Applications live in `gitops/argocd-manifests/server3/apps/dashboards/` and are managed by `gitops/argocd-manifests/server3/RootDashboards.yaml`. Apply `server3/RootDashboards.yaml` once manually after `RootGateway` (Traefik must be running before HTTPRoutes can bind).
-- `OpenBao.yaml` — exposes OpenBao at `vault.server3.home`
+```bash
+kubectl apply -f gitops/argocd-manifests/ArgoCD.yaml      # ArgoCD self-management
+kubectl apply -f gitops/argocd-manifests/Bootstrap.yaml   # meta App-of-Apps
+```
+
+`Bootstrap.yaml` points at `gitops/argocd-manifests/roots/` with `directory.recurse: true` and manages every Root Application. Root Applications carry `argocd.argoproj.io/sync-wave` annotations that order them:
+
+- **wave 1** — `RootInfra` (ESO + CRDs; must precede any other app's ExternalSecret)
+- **wave 2** — `RootGateway` (Traefik + ExternalDNS) · `server3/RootDashboards` (OpenBao HTTPRoute — unblocks server2 ESO reaching `vault.server3.home`)
+- **wave 3** — `RootObservability` · `server3/RootObservability` · `RootIoT` · `RootDatabases` · `RootDashboards`
+- **wave 4** — `RootApps` (custom apps depending on MongoDB + EMQX + OTel Gateway)
+
+For sync waves to wait on child-Application Health (not just creation), ArgoCD's Application CRD health check is restored via a Lua `resource.customizations` entry in `gitops/helm-values/server3/argocd.yaml`. Source: [ArgoCD 1.7→1.8 upgrade notes](https://argo-cd.readthedocs.io/en/stable/operator-manual/upgrading/1.7-1.8).
+
+Each Root Application discovers **ApplicationSets** in `gitops/argocd-manifests/apps/<stage>/`. Each ApplicationSet uses a **list generator** with one element per cluster. Adding a cluster to a stage means adding one `{cluster, clusterServer}` element to each ApplicationSet in that stage and committing. `destination.server` in each template selects the target cluster via `{{clusterServer}}`. Version is `targetRevision` in the ApplicationSet template. ArgoCD auto-syncs on commit.
+
+Server3-specific singleton Applications live in `gitops/argocd-manifests/server3/apps/`:
+
+- `dashboards/OpenBao.yaml` — exposes OpenBao at `vault.server3.home` (managed by `roots/server3/RootDashboards.yaml`)
+- `observability/` — Prometheus, Grafana, Loki, Tempo (managed by `roots/server3/RootObservability.yaml`)
 
 `ArgoCD.yaml` (self-management) lives at `gitops/argocd-manifests/ArgoCD.yaml` — not under any cluster subdirectory.
 
@@ -253,7 +270,7 @@ rm -rf / any deletion of credentials
 3. Update Cilium `devices: "TODO"` to the correct network interface
 4. Bootstrap: run `terraform apply -auto-approve` for bootstrap and platform stages
 5. Register the cluster in server3 ArgoCD: `argocd cluster add <context>`
-6. Add a `{cluster, clusterServer}` element to each ApplicationSet in `gitops/argocd-manifests/apps/<stage>/*.yaml` and commit — ArgoCD auto-generates all Applications for the new cluster.
+6. Add a `{cluster, clusterServer}` element to each ApplicationSet in `gitops/argocd-manifests/apps/<stage>/*.yaml` and commit — ArgoCD auto-generates all Applications for the new cluster. No manual Root-App apply needed; `Bootstrap.yaml` on server3 already manages all Root Apps.
 
 ## Adding a new ArgoCD app
 

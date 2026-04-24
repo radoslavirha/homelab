@@ -89,14 +89,18 @@ MinIO is the intended S3-compatible backend for Terraform state. But MinIO itsel
 │  3. terraform vault      → OpenBao                                      │
 │     [manual: OpenBao init ceremony, unseal, KV path setup]              │
 │  4. terraform apps       → ArgoCD                                       │
-│  5. ArgoCD GitOps        → RootInfra (ESO + ClusterSecretStore)         │
-│     [manual: kubectl apply RootGateway → Traefik + ExternalDNS]         │
-│     [manual: kubectl apply RootObservability → OTel Gateway]            │
-│     [manual: kubectl apply server3/RootDashboards → OpenBaoRoute]       │
-│     [manual: kubectl apply server3/RootObservability → LGTM stack]      │
-│     [manual: kubectl apply RootIoT → ApplicationSets (→ server2)]       │
-│     [manual: kubectl apply RootDatabases → ApplicationSet (→ server2)]  │
-│     [manual: kubectl apply RootDashboards → Headlamp + Hubble + Longhorn] │
+│  5. ArgoCD GitOps — two kubectl applies on server3:                     │
+│     a. kubectl apply ArgoCD.yaml     → ArgoCD self-management           │
+│     b. kubectl apply Bootstrap.yaml  → meta App-of-Apps over roots/     │
+│        wave 1  RootInfra            (ESO + CRDs)                        │
+│        wave 2  RootGateway          (Traefik + ExternalDNS)             │
+│        wave 2  server3/RootDashboards (OpenBao HTTPRoute)               │
+│        wave 3  RootObservability    (OTel Gateway)                      │
+│        wave 3  server3/RootObservability (Prometheus, Grafana, Loki, Tempo) │
+│        wave 3  RootIoT              (InfluxDB2, EMQX, Telegraf, IotInfra)│
+│        wave 3  RootDatabases        (MongoDB)                           │
+│        wave 3  RootDashboards       (Headlamp, Hubble, Longhorn)        │
+│        wave 4  RootApps             (miot-bridge, interactive-map-feeder, apps-otel-collector) │
 │     [manual: terraform init -migrate-state for all server3 modules]     │
 │  6. Register server1 + server2 kubeconfigs in server3 ArgoCD            │
 └─────────────────────────────────────────────────────────────────────────┘

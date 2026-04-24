@@ -1,18 +1,19 @@
-# Infra App-of-Apps for server3: ESO + OpenBao HTTPRoute.
-# Applied once (manually or by ArgoCD after self-bootstrap).
-# ArgoCD auto-syncs from that point on.
-# Manual apply: kubectl apply -f gitops/argocd-manifests/server3/RootInfra.yaml
+# Root Observability App-of-Apps — multi-cluster OTel Gateway.
+# Sync wave 3 — needs Traefik (wave 2) for OTLP HTTPRoute/IngressRouteTCP
+# and ESO (wave 1) for the otel-auth-token ExternalSecret.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: root-infra
+  name: root-observability
   namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
 spec:
   project: default
   source:
     repoURL: https://github.com/radoslavirha/homelab
     targetRevision: HEAD
-    path: gitops/argocd-manifests/apps/infra
+    path: gitops/argocd-manifests/apps/observability
     directory:
       recurse: true
   destination:

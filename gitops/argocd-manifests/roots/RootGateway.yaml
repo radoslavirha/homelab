@@ -1,0 +1,25 @@
+# Gateway App-of-Apps: Traefik + ExternalDNS on all clusters.
+# Sync wave 2 — Traefik installs the Gateway that every HTTPRoute/TCPRoute
+# references. ExternalDNS needs ESO (wave 1) for its Unifi API secret.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root-gateway
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/radoslavirha/homelab
+    targetRevision: HEAD
+    path: gitops/argocd-manifests/apps/gateway
+    directory:
+      recurse: true
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

@@ -1,12 +1,13 @@
-# Databases App-of-Apps: MongoDB (+ future PostgreSQL, Redis, …) — all applicable clusters.
-# Applied once manually after RootGateway (Traefik must be running before TCP routes can bind).
-# ArgoCD auto-syncs from that point on.
-# Manual apply: kubectl apply -f gitops/argocd-manifests/RootDatabases.yaml
+# Databases App-of-Apps: MongoDB (+ future PostgreSQL, Redis, …).
+# Sync wave 3 — needs ESO (wave 1) for root-password and Traefik (wave 2)
+# for IngressRouteTCP.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
   name: root-databases
   namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
 spec:
   project: default
   source:
