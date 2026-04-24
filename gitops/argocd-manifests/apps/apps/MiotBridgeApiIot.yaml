@@ -31,6 +31,8 @@ spec:
             valueFiles:
               - $values/gitops/helm-values/apps/miot-bridge-api-iot/base.yaml
               - $values/gitops/helm-values/apps/miot-bridge-api-iot/{{env}}.yaml
+              - $values/gitops/helm-values/apps/common/values.yaml
+              - $values/gitops/helm-values/apps/common/{{env}}.yaml
               - $values/gitops/helm-values/server2/apps/common/values.yaml
               - $values/gitops/helm-values/server2/apps/common/{{env}}.yaml
         - repoURL: https://github.com/radoslavirha/homelab
