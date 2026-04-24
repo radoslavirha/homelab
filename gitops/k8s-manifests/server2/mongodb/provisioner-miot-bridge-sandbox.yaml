@@ -43,7 +43,7 @@ spec:
               DB_NAME="miot-bridge-sandbox"
               DB_USER="miot-bridge-sandbox"
               BAO_HOST="http://vault.server3.home"
-              BAO_PATH="server2/sandbox/miot-bridge-api-iot/mongodb"
+              BAO_PATH="server2/sandbox/miot-bridge-api-mongodb"
 
               # Idempotency: skip if credentials already in OpenBao
               BAO_RESPONSE=$(curl -s -H "X-Vault-Token: ${BAO_TOKEN}" \

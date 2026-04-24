@@ -44,7 +44,7 @@ spec:
               EMQX_HOST="http://emqx.iot.svc.cluster.local:18083"
               MQTT_USER="miot-bridge-sandbox"
               BAO_HOST="http://vault.server3.home"
-              BAO_PATH="server2/sandbox/miot-bridge-api-iot/mqtt"
+              BAO_PATH="server2/sandbox/miot-bridge-api-emqx"
 
               echo "Obtaining EMQX Bearer token..."
               TOKEN=$(curl -sf -X POST \

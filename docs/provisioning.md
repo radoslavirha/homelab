@@ -208,9 +208,9 @@ This is the cleanest solution for MongoDB: zero manual intervention after initia
 OpenBao KV layout:
 
 - `secret/server2/production/miot-bridge-api-emqx` → `mqtt-username`, `mqtt-password`
-- `secret/server2/sandbox/miot-bridge-api-iot/mqtt` → `mqtt-username`, `mqtt-password`
+- `secret/server2/sandbox/miot-bridge-api-emqx` → `mqtt-username`, `mqtt-password`
 - `secret/server2/production/miot-bridge-api-mongodb` → `mongodb-database`, `mongodb-username`, `mongodb-password`
-- `secret/server2/sandbox/miot-bridge-api-iot/mongodb` → `mongodb-database`, `mongodb-username`, `mongodb-password`
+- `secret/server2/sandbox/miot-bridge-api-mongodb` → `mongodb-database`, `mongodb-username`, `mongodb-password`
 
 ### EMQX MQTT user (PostSync Job)
 
