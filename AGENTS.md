@@ -291,3 +291,10 @@ Once MinIO is running on the server3 cluster:
 2. Run `terraform init -migrate-state` to move local state to MinIO
 3. New clusters (server1) can use MinIO from the start — no migration needed
 See [docs/iac.md](docs/iac.md) for the full migration sequence.
+
+## Skills (`.apm/skills/`)
+
+- **`sync-docs`** — after any repo change; keeps README.md, AGENTS.md, docs/architecture.md, docs/iac.md in sync
+- **`sync-obsidian`** — after any change to clusters, service hostnames, IPs, or app versions; updates `Server/Homelab Overview.md` in Obsidian for IoT planning agents
+
+`sync-docs` automatically calls `sync-obsidian` at the end of its procedure. Run `sync-obsidian` standalone when the repo docs are already correct but the Obsidian snapshot is stale.

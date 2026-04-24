@@ -157,7 +157,11 @@ find iac/clusters -maxdepth 3 -mindepth 3 -type d | sort
 find gitops -maxdepth 2 -mindepth 1 -type d | sort
 ```
 
-### 7. Do NOT Change
+### 7. Also Run sync-obsidian
+
+After updating docs, always also run the `sync-obsidian` skill to keep the Obsidian snapshot in sync. The Obsidian note at `Server/Homelab Overview.md` must reflect any hostname, IP, app version, or service changes you just documented.
+
+### 8. Do NOT Change
 
 - Architecture decision rationale (the "Why" sections) — only update if the decision itself changed
 - The `docs/secrets.md` placeholder reference — do not create or remove it
