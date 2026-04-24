@@ -37,7 +37,7 @@ spec:
           args:
             - |
               set -e
-              apt-get update -qq && apt-get install -y -qq curl > /dev/null
+              tdnf install -y curl > /dev/null 2>&1
 
               MONGO_HOST="mongodb.mongodb.svc.cluster.local:27017"
               DB_NAME="miot-bridge-production"
