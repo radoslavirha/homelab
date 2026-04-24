@@ -2,7 +2,7 @@
 # MongoDB PostSync provisioner: miot-bridge database + user (sandbox) — create-only (idempotent)
 # Runs on every ArgoCD sync of the mongodb ApplicationSet.
 # Creates database "miot-bridge-sandbox" and user "miot-bridge-sandbox" with dbOwner role.
-# Writes credentials to OpenBao merged with any existing keys (EMQX provisioner writes mqtt-* separately).
+# Writes credentials to a service-owned OpenBao path.
 # Consumed by: ExternalSecret miot-bridge-api-mongodb-credentials in sandbox namespace.
 apiVersion: batch/v1
 kind: Job
@@ -43,7 +43,7 @@ spec:
               DB_NAME="miot-bridge-sandbox"
               DB_USER="miot-bridge-sandbox"
               BAO_HOST="http://vault.server3.home"
-              BAO_PATH="server2/sandbox/miot-bridge-api-iot"
+              BAO_PATH="server2/sandbox/miot-bridge-api-iot/mongodb"
 
               # Idempotency: skip if credentials already in OpenBao
               BAO_RESPONSE=$(curl -s -H "X-Vault-Token: ${BAO_TOKEN}" \
@@ -82,21 +82,15 @@ spec:
                 echo "Created MongoDB user '${DB_USER}' in database '${DB_NAME}'."
               fi
 
-              # Write credentials to OpenBao (merge with existing keys; POST if path does not exist yet)
+              # Write credentials to a service-owned OpenBao path.
               BAO_PAYLOAD="{\"data\": {\"mongodb-database\": \"${DB_NAME}\", \"mongodb-username\": \"${DB_USER}\", \"mongodb-password\": \"${DB_PASS}\"}}"
-              HTTP_STATUS=$(curl -s -o /tmp/bao_response -w "%{http_code}" -X PATCH \
+              HTTP_STATUS=$(curl -s -o /tmp/bao_response -w "%{http_code}" -X POST \
                 -H "X-Vault-Token: ${BAO_TOKEN}" \
-                -H "Content-Type: application/merge-patch+json" \
+                -H "Content-Type: application/json" \
                 "${BAO_HOST}/v1/secret/data/${BAO_PATH}" \
                 -d "${BAO_PAYLOAD}")
 
-              if [ "${HTTP_STATUS}" = "404" ]; then
-                curl -sf -X POST \
-                  -H "X-Vault-Token: ${BAO_TOKEN}" \
-                  -H "Content-Type: application/json" \
-                  "${BAO_HOST}/v1/secret/data/${BAO_PATH}" \
-                  -d "${BAO_PAYLOAD}"
-              elif [ "${HTTP_STATUS}" != "200" ]; then
+              if [ "${HTTP_STATUS}" != "200" ]; then
                 echo "ERROR: OpenBao write failed with status ${HTTP_STATUS}"; cat /tmp/bao_response; exit 1
               fi
 

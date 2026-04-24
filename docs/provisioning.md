@@ -206,8 +206,11 @@ This is the cleanest solution for MongoDB: zero manual intervention after initia
 `miot-bridge-api-iot` needs scoped credentials in both EMQX (MQTT) and MongoDB. Both are provisioned by PostSync Jobs and written to OpenBao. ExternalSecrets in the `production` and `sandbox` namespaces then pull them.
 
 OpenBao KV layout:
-- `secret/server2/production/miot-bridge-api-iot` → `mqtt-username`, `mqtt-password`, `mongodb-database`, `mongodb-username`, `mongodb-password`
-- `secret/server2/sandbox/miot-bridge-api-iot` → same keys
+
+- `secret/server2/production/miot-bridge-api-emqx` → `mqtt-username`, `mqtt-password`
+- `secret/server2/sandbox/miot-bridge-api-iot/mqtt` → `mqtt-username`, `mqtt-password`
+- `secret/server2/production/miot-bridge-api-mongodb` → `mongodb-database`, `mongodb-username`, `mongodb-password`
+- `secret/server2/sandbox/miot-bridge-api-iot/mongodb` → `mongodb-database`, `mongodb-username`, `mongodb-password`
 
 ### EMQX MQTT user (PostSync Job)
 
@@ -215,9 +218,10 @@ OpenBao KV layout:
 [`gitops/k8s-manifests/server2/emqx/provisioner-miot-bridge-sandbox.yaml`](../gitops/k8s-manifests/server2/emqx/provisioner-miot-bridge-sandbox.yaml)
 
 Run in `iot` namespace (where `openbao-provision-token` and `emqx-credentials` already exist):
-1. Checks if MQTT user `miot-bridge-{env}` exists → skip if yes
-2. Generates a random 24-char password and creates the MQTT user
-3. Writes `mqtt-username` + `mqtt-password` to OpenBao via `PATCH` (merges into existing path, preserving any MongoDB keys already written)
+
+1. Checks if `mqtt-username` already exists in `secret/server2/{env}/miot-bridge-api-iot/mqtt` → skip if yes
+2. Generates a random 24-char password and creates (or rotates) MQTT user `miot-bridge-{env}`
+3. Writes `mqtt-username` + `mqtt-password` to OpenBao via `POST` on a service-owned path (no cross-service merge needed)
 
 ### MongoDB database + user (PostSync Job)
 
@@ -225,9 +229,10 @@ Run in `iot` namespace (where `openbao-provision-token` and `emqx-credentials` a
 [`gitops/k8s-manifests/server2/mongodb/provisioner-miot-bridge-sandbox.yaml`](../gitops/k8s-manifests/server2/mongodb/provisioner-miot-bridge-sandbox.yaml)
 
 Run in `mongodb` namespace (where `mongodb` root password secret exists):
-1. Checks if MongoDB user `miot-bridge-{env}` already exists in database `miot-bridge-{env}` → skip if yes
-2. Generates a random 24-char password, creates database and user with `dbOwner` role
-3. Writes `mongodb-database` + `mongodb-username` + `mongodb-password` to OpenBao via `PATCH`
+
+1. Checks if `mongodb-password` already exists in `secret/server2/{env}/miot-bridge-api-iot/mongodb` → skip if yes
+2. Generates a random 24-char password, creates (or rotates) MongoDB user `miot-bridge-{env}` in database `miot-bridge-{env}`
+3. Writes `mongodb-database` + `mongodb-username` + `mongodb-password` to OpenBao via `POST` on a service-owned path
 
 > **Note:** The provisioner token `openbao-provision-token` must exist in both `iot` and `mongodb` namespaces. The `iot` copy is deployed by `IotInfra`. The `mongodb` copy is deployed by the MongoDB ApplicationSet via [`gitops/k8s-manifests/server2/mongodb/ExternalSecret.provisioner-token.yaml`](../gitops/k8s-manifests/server2/mongodb/ExternalSecret.provisioner-token.yaml).
 
@@ -240,7 +245,7 @@ Unlike InfluxDB2/EMQX/MongoDB root credentials, `miot-bridge-api-iot` credential
 ## Adding a new consumer app: checklist
 
 1. **Provisioner Job** — create `gitops/k8s-manifests/<cluster>/<datastore>/provisioner-<app>.yaml` with `PostSync` hook annotation
-2. **OpenBao path** — `secret/<cluster>/<app>` (consistent with existing layout)
+2. **OpenBao path** — service-owned path such as `secret/<cluster>/<env>/<app>/<service>`
 3. **ExternalSecret in consumer namespace** — referencing the path the provisioner writes to
 4. **Provisioner token** — ensure `openbao-provision-token` Secret exists in the provisioner’s namespace (deployed by `IotInfra`-equivalent ApplicationSet)
 5. **Idempotency** — provisioner Job must check existence before creating (safe to re-run on every sync)

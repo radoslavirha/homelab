@@ -1,7 +1,7 @@
 ---
 # EMQX PostSync provisioner: miot-bridge MQTT user (production) — create-only (idempotent)
 # Runs on every ArgoCD sync of the emqx ApplicationSet.
-# Creates MQTT user "miot-bridge-production" and writes credentials to OpenBao.
+# Creates MQTT user "miot-bridge-production" and writes credentials to a service-owned OpenBao path.
 # Consumed by: ExternalSecret miot-bridge-api-mqtt-credentials in production namespace.
 apiVersion: batch/v1
 kind: Job
@@ -44,7 +44,7 @@ spec:
               EMQX_HOST="http://emqx.iot.svc.cluster.local:18083"
               MQTT_USER="miot-bridge-production"
               BAO_HOST="http://vault.server3.home"
-              BAO_PATH="server2/production/miot-bridge-api-iot"
+              BAO_PATH="server2/production/miot-bridge-api-emqx"
 
               echo "Obtaining EMQX Bearer token..."
               TOKEN=$(curl -sf -X POST \
@@ -112,21 +112,15 @@ spec:
                 echo "Created MQTT user '${MQTT_USER}'."
               fi
 
-              # Write credentials to OpenBao (merge with existing keys; POST if path does not exist yet)
+              # Write credentials to a service-owned OpenBao path.
               BAO_PAYLOAD="{\"data\": {\"mqtt-username\": \"${MQTT_USER}\", \"mqtt-password\": \"${MQTT_PASS}\"}}"
-              HTTP_STATUS=$(curl -s -o /tmp/bao_response -w "%{http_code}" -X PATCH \
+              HTTP_STATUS=$(curl -s -o /tmp/bao_response -w "%{http_code}" -X POST \
                 -H "X-Vault-Token: ${BAO_TOKEN}" \
-                -H "Content-Type: application/merge-patch+json" \
+                -H "Content-Type: application/json" \
                 "${BAO_HOST}/v1/secret/data/${BAO_PATH}" \
                 -d "${BAO_PAYLOAD}")
 
-              if [ "${HTTP_STATUS}" = "404" ]; then
-                curl -sf -X POST \
-                  -H "X-Vault-Token: ${BAO_TOKEN}" \
-                  -H "Content-Type: application/json" \
-                  "${BAO_HOST}/v1/secret/data/${BAO_PATH}" \
-                  -d "${BAO_PAYLOAD}"
-              elif [ "${HTTP_STATUS}" != "200" ]; then
+              if [ "${HTTP_STATUS}" != "200" ]; then
                 echo "ERROR: OpenBao write failed with status ${HTTP_STATUS}"; cat /tmp/bao_response; exit 1
               fi
 
