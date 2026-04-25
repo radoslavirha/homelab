@@ -1,0 +1,57 @@
+global:
+  cluster: ""
+  baoHost: ""
+  baoTokenSecret: openbao-provision-token
+
+# influxdb2:
+#   host: ""
+#   org: ""
+#   adminTokenSecret: ""
+#   adminTokenKey: admin-token
+#   jobs:
+#     <name>:
+#       syncWave: "0"
+#       buckets:
+#         - name: ""
+#           retentionSeconds: 0
+#       tasks:
+#         - name: ""
+#           flux: |
+#             ...
+#       tokens:
+#         - description: ""
+#           writeBucket: ""
+#           baoPath: ""
+#           baoKey: token
+
+# emqx:
+#   host: ""
+#   credentialsSecret: ""
+#   credentialsUsernameKey: EMQX_DASHBOARD__DEFAULT_USERNAME
+#   credentialsPasswordKey: EMQX_DASHBOARD__DEFAULT_PASSWORD
+#   jobs:
+#     <name>:
+#       syncWave: "0"
+#       users:
+#         - mqttUsername: ""
+#           baoPath: ""
+#           baoUsernameKey: username
+#           baoPasswordKey: password
+#           idempotencyStrategy: api-check  # api-check | bao-check
+
+# mongodb:
+#   host: ""
+#   adminAuthSource: admin
+#   rootPasswordSecret: ""
+#   rootPasswordKey: mongodb-root-password
+#   jobs:
+#     <name>:
+#       syncWave: "0"
+#       databases:
+#         - name: ""
+#           dbUser: ""
+#           role: dbOwner
+#           baoPath: ""
+#           baoDatabaseKey: mongodb-database
+#           baoUsernameKey: mongodb-username
+#           baoPasswordKey: mongodb-password

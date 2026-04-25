@@ -6,6 +6,11 @@ See [README.md](README.md) for cluster overview. See [docs/architecture.md](docs
 ## Repository layout
 
 ```
+.github/
+  workflows/
+    provisioner-image.yaml  builds + pushes ghcr.io/radoslavirha/homelab-provisioner on Dockerfile change
+provisioner/
+  Dockerfile                fat image: curl, jq, influx CLI, bao CLI, mongosh (debian:bookworm-slim base)
 iac/
   modules/
     bootstrap/    Talos cluster provisioning (reusable module)
@@ -18,6 +23,8 @@ iac/
     server2/      bootstrap/ platform/ helm-values/
     server3/      bootstrap/ platform/ vault/ apps/ helm-values/
 gitops/
+  helm-charts/
+    provisioner/            reusable PostSync provisioner Jobs chart (InfluxDB2, EMQX, MongoDB)
   helm-values/
     external-dns.yaml       shared: Unifi webhook provider, sources (gateway-httproute, traefik-proxy, crd), policy
     external-secrets.yaml   shared: installCRDs: true
@@ -40,6 +47,7 @@ gitops/
     server2/
       apps/
         common/             production.yaml, sandbox.yaml (shared VAR_* for all apps in each namespace)
+      provisioner/          influxdb2.yaml, emqx.yaml, mongodb.yaml — provisioner chart values per datastore
       emqx.yaml             server2 EMQX overrides
       external-dns.yaml     domainFilters, txtOwnerId
       external-secrets.yaml cluster-specific overrides
@@ -89,12 +97,12 @@ gitops/
       cilium/              HTTPRoute: hubble.server2.home → hubble-dashboard:80
       external-secrets/    ClusterSecretStore → remote server3 OpenBao at vault.server3.home
       iot/         ExternalSecret.provisioner-token.yaml (openbao-provision-token; sync-wave -1 via IotInfra)
-      influxdb2/   ExternalSecret.yaml, HTTPRoute.yaml, provisioner-telegraf.yaml
-      emqx/        ExternalSecret.yaml, HTTPRoute.yaml, IngressRouteTCP.yaml, provisioner-telegraf.yaml, provisioner-miot-bridge-production.yaml, provisioner-miot-bridge-sandbox.yaml
+      influxdb2/   ExternalSecret.yaml, HTTPRoute.yaml
+      emqx/        ExternalSecret.yaml, HTTPRoute.yaml, IngressRouteTCP.yaml
       telegraf/    ExternalSecret.telegraf.influxdb2.yaml, ExternalSecret.telegraf.mqtt.yaml
       external-dns/ ExternalSecret (unifi-credentials), DNSEndpoint
       longhorn/    HTTPRoute: longhorn.server2.home → longhorn-frontend:80
-      mongodb/     ExternalSecret, IngressRouteTCP, ExternalSecret.provisioner-token.yaml, provisioner-miot-bridge-production.yaml, provisioner-miot-bridge-sandbox.yaml
+      mongodb/     ExternalSecret, IngressRouteTCP, ExternalSecret.provisioner-token.yaml
       miot-bridge-api-iot/ production/ and sandbox/ — ExternalSecret.mqtt.yaml, ExternalSecret.mongodb.yaml
       otel-gateway/ ExternalSecret.otel-auth-token.yaml (shared OTLP bearer token pulled from secret/otel-gateway/auth-token)
     server3/

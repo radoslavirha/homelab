@@ -1,0 +1,39 @@
+global:
+  cluster: server2
+  baoHost: "http://vault.server3.home"
+  baoTokenSecret: openbao-provision-token
+
+influxdb2:
+  host: "http://influxdb2.iot.svc.cluster.local"
+  org: homelab
+  adminTokenSecret: influxdb2
+  adminTokenKey: admin-token
+
+  jobs:
+    loxone:
+      syncWave: "0"
+      buckets:
+        - name: loxone
+          retentionSeconds: 1209600
+        - name: loxone_downsample
+          retentionSeconds: 0
+      tasks:
+        - name: "Downsample Loxone"
+          flux: |
+            option task = {name: "Downsample Loxone", every: 10m}
+
+            from(bucket: "loxone")
+                |> range(start: -task.every)
+                |> aggregateWindow(every: task.every, fn: mean)
+                |> to(bucket: "loxone_downsample")
+      tokens: []
+
+    telegraf:
+      syncWave: "1"
+      buckets: []
+      tasks: []
+      tokens:
+        - description: telegraf-write
+          writeBucket: loxone
+          baoPath: telegraf-influxdb2
+          baoKey: token

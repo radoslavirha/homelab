@@ -1,0 +1,90 @@
+{{- if .Values.mongodb }}
+{{- range $jobKey, $job := .Values.mongodb.jobs }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ printf "mongodb-provision-%s" $jobKey | trunc 63 | trimSuffix "-" }}
+  labels:
+    {{- include "provisioner.labels" $ | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+    argocd.argoproj.io/sync-wave: {{ $job.syncWave | default "0" | quote }}
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      automountServiceAccountToken: false
+      containers:
+        - name: provisioner
+          image: {{ include "provisioner.image" $ }}
+          env:
+            - name: MONGO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $.Values.mongodb.rootPasswordSecret }}
+                  key: {{ $.Values.mongodb.rootPasswordKey | default "mongodb-root-password" }}
+            - name: BAO_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $.Values.global.baoTokenSecret }}
+                  key: token
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -e
+              MONGO_HOST={{ $.Values.mongodb.host | quote }}
+              AUTH_SOURCE={{ $.Values.mongodb.adminAuthSource | default "admin" | quote }}
+              BAO_HOST={{ $.Values.global.baoHost | quote }}
+              CLUSTER={{ $.Values.global.cluster | quote }}
+
+              {{- range $job.databases }}
+
+              # Database: {{ .name }}
+              BAO_EXISTING=$(bao kv get \
+                -address="${BAO_HOST}" \
+                -field={{ .baoPasswordKey | default "mongodb-password" | quote }} \
+                "secret/${CLUSTER}/{{ .baoPath }}" 2>/dev/null || true)
+
+              if [ -n "${BAO_EXISTING}" ]; then
+                echo "MongoDB credentials for '{{ .name }}' already in OpenBao. Skipping."
+              else
+                DB_PASS=$(tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 24)
+
+                USER_EXISTS=$(mongosh \
+                  "mongodb://root:${MONGO_ROOT_PASSWORD}@${MONGO_HOST}/${AUTH_SOURCE}?authSource=${AUTH_SOURCE}" \
+                  --quiet \
+                  --eval "db.getSiblingDB('{{ .name }}').getUser('{{ .dbUser }}') ? 'exists' : 'missing'")
+
+                if [ "${USER_EXISTS}" = "exists" ]; then
+                  echo "MongoDB user '{{ .dbUser }}' exists. Resetting password..."
+                  mongosh \
+                    "mongodb://root:${MONGO_ROOT_PASSWORD}@${MONGO_HOST}/${AUTH_SOURCE}?authSource=${AUTH_SOURCE}" \
+                    --quiet \
+                    --eval "db.getSiblingDB('{{ .name }}').changeUserPassword('{{ .dbUser }}', '${DB_PASS}');"
+                else
+                  mongosh \
+                    "mongodb://root:${MONGO_ROOT_PASSWORD}@${MONGO_HOST}/${AUTH_SOURCE}?authSource=${AUTH_SOURCE}" \
+                    --quiet \
+                    --eval "
+                      db.getSiblingDB('{{ .name }}').createUser({
+                        user: '{{ .dbUser }}',
+                        pwd: '${DB_PASS}',
+                        roles: [{ role: '{{ .role | default "dbOwner" }}', db: '{{ .name }}' }]
+                      });
+                    "
+                  echo "MongoDB user '{{ .dbUser }}' created in database '{{ .name }}'."
+                fi
+
+                bao kv put \
+                  -address="${BAO_HOST}" \
+                  "secret/${CLUSTER}/{{ .baoPath }}" \
+                  {{ .baoDatabaseKey | default "mongodb-database" }}={{ .name | quote }} \
+                  {{ .baoUsernameKey | default "mongodb-username" }}={{ .dbUser | quote }} \
+                  {{ .baoPasswordKey | default "mongodb-password" }}="${DB_PASS}"
+                echo "Credentials for '{{ .name }}' written to OpenBao."
+              fi
+              {{- end }}
+{{- end }}
+{{- end }}

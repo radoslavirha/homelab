@@ -8,9 +8,9 @@ Datastores like InfluxDB2, EMQX, and MongoDB need per-app credentials scoped to 
 
 Manual workflows — log in to UI, create token, copy to Vault, update consumer secret — break GitOps: credentials are not reproducible, rotation is painful, and adding a new app requires human intervention.
 
-## Solution: PostSync provisioner Jobs
+## Solution: PostSync provisioner Jobs (Helm chart)
 
-Each app that needs scoped credentials gets a **PostSync Job** that runs after every ArgoCD sync. The Job is idempotent: it checks whether the credential already exists and skips if so. On the very first sync it creates the credential and writes it to OpenBao. Subsequent syncs are no-ops.
+Each app that needs scoped credentials declares what it needs in the **provisioner Helm chart** values. The chart renders PostSync Jobs — one per named job group — that run after every ArgoCD sync. Each Job is idempotent: it checks whether the credential already exists and skips if so. On first sync it creates the credential and writes it to OpenBao. Subsequent syncs are no-ops.
 
 ```
 ArgoCD syncs app
@@ -18,15 +18,48 @@ ArgoCD syncs app
     → checks if credential exists in source system
       → if yes: exit 0 (no-op)
       → if no:  create credential in source system
-                → write to OpenBao
+                → write to OpenBao (bao kv put)
                   → ESO syncs K8s Secret from OpenBao
 ```
 
 Key properties of every provisioner Job:
 - `automountServiceAccountToken: false` — makes no K8s API calls
 - No `serviceAccountName` — accesses secrets via `secretKeyRef` (kubelet-injected, no RBAC needed)
-- Only `curl` and `jq` required — no `kubectl`
+- All Jobs use `ghcr.io/radoslavirha/homelab-provisioner` — single image with `influx` CLI, `bao` CLI, `mongosh`, `curl`, `jq`
 - Idempotent — safe to re-run on every sync
+
+### Provisioner Helm chart
+
+Chart location: `gitops/helm-charts/provisioner/`
+
+Added as a 4th `sources` entry in each datastore ApplicationSet. Per-cluster values live at `gitops/helm-values/<cluster>/provisioner/<datastore>.yaml`. To add a new resource, add an entry to the values file — no new Job YAML needed.
+
+```yaml
+# gitops/helm-values/server2/provisioner/influxdb2.yaml
+influxdb2:
+  jobs:
+    my-new-app:              # → renders Job: influxdb2-provision-my-new-app
+      syncWave: "1"
+      buckets:
+        - name: my-bucket
+          retentionSeconds: 0
+      tokens:
+        - description: my-app-write
+          writeBucket: my-bucket
+          baoPath: my-app/influxdb2
+          baoKey: token
+```
+
+### Provisioner image
+
+`provisioner/Dockerfile` — `debian:bookworm-slim` base with all tools installed via official package repos:
+
+- `influx` CLI (InfluxData deb repo) — bucket, task, auth operations
+- `bao` CLI (OpenBao GitHub release) — all OpenBao writes (`bao kv put`)
+- `mongosh` (MongoDB deb repo) — database and user operations
+- `curl` + `jq` — EMQX REST API (no remote CLI exists for EMQX)
+
+Built and pushed to `ghcr.io/radoslavirha/homelab-provisioner` via `.github/workflows/provisioner-image.yaml` on any change to `provisioner/Dockerfile`.
 
 > **Rotation:** Scheduled credential rotation is not yet implemented. See [`docs/superpowers/plans/2026-04-22-credential-rotation.md`](superpowers/plans/2026-04-22-credential-rotation.md) for the implementation plan.
 
@@ -75,14 +108,21 @@ bao kv put secret/<cluster>/influxdb2 \
 - `admin-password` — the admin UI login password. Any strong password (20+ chars).
 - `admin-token` — the operator API token used by the chart. **Any string works** (InfluxDB2 accepts arbitrary token values). Generate with: `openssl rand -base64 24 | tr -d '=+/'`
 
-### Telegraf write token (PostSync Job — create-only)
+### Loxone buckets + task + Telegraf write token (PostSync Jobs)
 
-[`gitops/k8s-manifests/server2/influxdb2/provisioner-telegraf.yaml`](../gitops/k8s-manifests/server2/influxdb2/provisioner-telegraf.yaml)
+Declared in [`gitops/helm-values/server2/provisioner/influxdb2.yaml`](../gitops/helm-values/server2/provisioner/influxdb2.yaml), rendered by the provisioner chart.
 
-1. Ensures the `loxone` bucket exists (idempotent)
-2. Checks if a token with description `telegraf-write` already exists → skip if yes
-3. Creates a write-only token scoped to the `loxone` bucket
-4. Writes `token` to OpenBao: `secret/server2/telegraf-influxdb2`
+**Job `influxdb2-provision-loxone`** (wave 0):
+
+1. Ensures `loxone` bucket exists (14-day retention)
+2. Ensures `loxone_downsample` bucket exists (infinite retention)
+3. Ensures Flux task `Downsample Loxone` exists (10m aggregation loxone → loxone_downsample)
+
+**Job `influxdb2-provision-telegraf`** (wave 1, after loxone):
+
+1. Checks if token with description `telegraf-write` already exists → skip if yes
+2. Creates a write-only token scoped to the `loxone` bucket
+3. Writes `token` to OpenBao: `secret/server2/telegraf-influxdb2`
 
 Consumed by `ExternalSecret telegraf-influxdb2-credentials` in the `telegraf` namespace.
 
@@ -113,15 +153,18 @@ bao kv put secret/<cluster>/emqx \
   dashboard-password=<password>
 ```
 
-### Telegraf MQTT user (PostSync Job — create-only)
+### MQTT users (PostSync Jobs)
 
-[`gitops/k8s-manifests/server2/emqx/provisioner-telegraf.yaml`](../gitops/k8s-manifests/server2/emqx/provisioner-telegraf.yaml)
+Declared in [`gitops/helm-values/server2/provisioner/emqx.yaml`](../gitops/helm-values/server2/provisioner/emqx.yaml), rendered by the provisioner chart.
+
+Each job group:
 
 1. Ensures the built-in database authenticator is configured (idempotent)
-2. Checks if user `telegraf` already exists (HTTP 200) → skip if yes
-3. Generates a random 24-char password and creates the MQTT user
-4. Writes `username` + `password` to OpenBao: `secret/server2/telegraf-mqtt`
+2. Checks if the MQTT user already exists (via API or OpenBao) → skip if yes
+3. Generates a random 24-char password and creates (or rotates) the user
+4. Writes `username` + `password` to the service-owned OpenBao path
 
+`telegraf` job (idempotencyStrategy: `api-check`) → `secret/server2/telegraf-mqtt`
 Consumed by `ExternalSecret telegraf-mqtt-credentials` in the `telegraf` namespace.
 
 ### EMQX API reference
@@ -214,21 +257,15 @@ OpenBao KV layout:
 
 ### EMQX MQTT user (PostSync Job)
 
-[`gitops/k8s-manifests/server2/emqx/provisioner-miot-bridge-production.yaml`](../gitops/k8s-manifests/server2/emqx/provisioner-miot-bridge-production.yaml)
-[`gitops/k8s-manifests/server2/emqx/provisioner-miot-bridge-sandbox.yaml`](../gitops/k8s-manifests/server2/emqx/provisioner-miot-bridge-sandbox.yaml)
+Declared in [`gitops/helm-values/server2/provisioner/emqx.yaml`](../gitops/helm-values/server2/provisioner/emqx.yaml) under `emqx.jobs.miot-bridge-production` and `emqx.jobs.miot-bridge-sandbox`. Runs in `iot` namespace (where `openbao-provision-token` and `emqx-credentials` already exist):
 
-Run in `iot` namespace (where `openbao-provision-token` and `emqx-credentials` already exist):
-
-1. Checks if `mqtt-username` already exists in `secret/server2/{env}/miot-bridge-api-emqx` → skip if yes
+1. Checks if `mqtt-username` already exists in `secret/server2/{env}/miot-bridge-api-emqx` → skip if yes (idempotencyStrategy: `bao-check`)
 2. Generates a random 24-char password and creates (or rotates) MQTT user `miot-bridge-{env}`
 3. Writes `mqtt-username` + `mqtt-password` to OpenBao at `secret/server2/{env}/miot-bridge-api-emqx`
 
 ### MongoDB database + user (PostSync Job)
 
-[`gitops/k8s-manifests/server2/mongodb/provisioner-miot-bridge-production.yaml`](../gitops/k8s-manifests/server2/mongodb/provisioner-miot-bridge-production.yaml)
-[`gitops/k8s-manifests/server2/mongodb/provisioner-miot-bridge-sandbox.yaml`](../gitops/k8s-manifests/server2/mongodb/provisioner-miot-bridge-sandbox.yaml)
-
-Run in `mongodb` namespace (where `mongodb` root password secret exists):
+Declared in [`gitops/helm-values/server2/provisioner/mongodb.yaml`](../gitops/helm-values/server2/provisioner/mongodb.yaml) under `mongodb.jobs.miot-bridge-production` and `mongodb.jobs.miot-bridge-sandbox`. Runs in `mongodb` namespace (where `mongodb` root password secret exists):
 
 1. Checks if `mongodb-password` already exists in `secret/server2/{env}/miot-bridge-api-mongodb` → skip if yes
 2. Generates a random 24-char password, creates (or rotates) MongoDB user `miot-bridge-{env}` in database `miot-bridge-{env}`
@@ -244,8 +281,8 @@ Unlike InfluxDB2/EMQX/MongoDB root credentials, `miot-bridge-api-iot` credential
 
 ## Adding a new consumer app: checklist
 
-1. **Provisioner Job** — create `gitops/k8s-manifests/<cluster>/<datastore>/provisioner-<app>.yaml` with `PostSync` hook annotation
-2. **OpenBao path** — service-owned path such as `secret/<cluster>/<env>/<app>/<service>`
-3. **ExternalSecret in consumer namespace** — referencing the path the provisioner writes to
-4. **Provisioner token** — ensure `openbao-provision-token` Secret exists in the provisioner’s namespace (deployed by `IotInfra`-equivalent ApplicationSet)
-5. **Idempotency** — provisioner Job must check existence before creating (safe to re-run on every sync)
+1. **Provisioner values** — add a job entry to `gitops/helm-values/<cluster>/provisioner/{influxdb2,emqx,mongodb}.yaml` for each resource the app needs. No new Job YAML file required.
+2. **OpenBao path** — choose a service-owned path such as `secret/<cluster>/<env>/<app>/<service>` and set it as `baoPath` in the values entry.
+3. **ExternalSecret in consumer namespace** — referencing the path the provisioner writes to.
+4. **Provisioner token** — ensure `openbao-provision-token` Secret exists in the provisioner’s namespace (deployed by `IotInfra`-equivalent ApplicationSet). The MongoDB provisioner runs in `mongodb` namespace and needs its own copy via `ExternalSecret.provisioner-token.yaml`.
+5. **Idempotency** — the chart handles this; choose `idempotencyStrategy: bao-check` (skip if path already in OpenBao) or `api-check` (skip if resource already exists in the service API).

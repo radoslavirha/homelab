@@ -1,0 +1,101 @@
+{{- if .Values.influxdb2 }}
+{{- range $jobKey, $job := .Values.influxdb2.jobs }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ printf "influxdb2-provision-%s" $jobKey | trunc 63 | trimSuffix "-" }}
+  labels:
+    {{- include "provisioner.labels" $ | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+    argocd.argoproj.io/sync-wave: {{ $job.syncWave | default "0" | quote }}
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      automountServiceAccountToken: false
+      containers:
+        - name: provisioner
+          image: {{ include "provisioner.image" $ }}
+          env:
+            - name: INFLUX_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $.Values.influxdb2.adminTokenSecret }}
+                  key: {{ $.Values.influxdb2.adminTokenKey | default "admin-token" }}
+            - name: BAO_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $.Values.global.baoTokenSecret }}
+                  key: token
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -e
+              INFLUX_HOST={{ $.Values.influxdb2.host | quote }}
+              ORG={{ $.Values.influxdb2.org | quote }}
+              BAO_HOST={{ $.Values.global.baoHost | quote }}
+              CLUSTER={{ $.Values.global.cluster | quote }}
+
+              influx config create \
+                --config-name default \
+                --host-url "${INFLUX_HOST}" \
+                --org "${ORG}" \
+                --token "${INFLUX_TOKEN}" \
+                --active > /dev/null
+
+              {{- range $job.buckets }}
+
+              # Bucket: {{ .name }}
+              if influx bucket list --name {{ .name | quote }} --hide-headers 2>/dev/null | grep -q {{ .name | quote }}; then
+                echo "Bucket '{{ .name }}' exists. Skipping."
+              else
+                echo "Creating bucket '{{ .name }}'..."
+                {{- if gt (int (.retentionSeconds | default 0)) 0 }}
+                influx bucket create \
+                  --name {{ .name | quote }} \
+                  --retention {{ int .retentionSeconds }}s
+                {{- else }}
+                influx bucket create \
+                  --name {{ .name | quote }}
+                {{- end }}
+                echo "Bucket '{{ .name }}' created."
+              fi
+              {{- end }}
+
+              {{- range $job.tasks }}
+
+              # Task: {{ .name }}
+              if influx task list --name {{ .name | quote }} --hide-headers 2>/dev/null | grep -q .; then
+                echo "Task '{{ .name }}' exists. Skipping."
+              else
+                echo "Creating task '{{ .name }}'..."
+                FLUX=$(printf '%s' {{ .flux | b64enc | quote }} | base64 -d)
+                printf '%s' "${FLUX}" | influx task create --flux -
+                echo "Task '{{ .name }}' created."
+              fi
+              {{- end }}
+
+              {{- range $job.tokens }}
+
+              # Token: {{ .description }}
+              if influx auth list --description {{ .description | quote }} --hide-headers 2>/dev/null | grep -q .; then
+                echo "Token '{{ .description }}' exists. Skipping."
+              else
+                echo "Creating token '{{ .description }}'..."
+                NEW_TOKEN=$(influx auth create \
+                  --description {{ .description | quote }} \
+                  --write-bucket {{ .writeBucket | quote }} \
+                  --hide-headers \
+                  | awk '{print $3}')
+                bao kv put \
+                  -address="${BAO_HOST}" \
+                  "secret/${CLUSTER}/{{ .baoPath }}" \
+                  {{ .baoKey | default "token" }}="${NEW_TOKEN}"
+                echo "Token '{{ .description }}' created and written to OpenBao."
+              fi
+              {{- end }}
+{{- end }}
+{{- end }}

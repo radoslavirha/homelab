@@ -1,0 +1,8 @@
+apiVersion: v2
+name: provisioner
+description: Reusable PostSync provisioner Jobs for InfluxDB2, EMQX, and MongoDB
+type: application
+version: 0.1.0
+maintainers:
+  - name: Radoslav Irha
+    email: radoslav.irha@gmail.com

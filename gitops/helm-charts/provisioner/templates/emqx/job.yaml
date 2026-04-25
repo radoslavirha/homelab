@@ -1,0 +1,129 @@
+{{- if .Values.emqx }}
+{{- range $jobKey, $job := .Values.emqx.jobs }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ printf "emqx-provision-%s" $jobKey | trunc 63 | trimSuffix "-" }}
+  labels:
+    {{- include "provisioner.labels" $ | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+    argocd.argoproj.io/sync-wave: {{ $job.syncWave | default "0" | quote }}
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      automountServiceAccountToken: false
+      containers:
+        - name: provisioner
+          image: {{ include "provisioner.image" $ }}
+          env:
+            - name: EMQX_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $.Values.emqx.credentialsSecret }}
+                  key: {{ $.Values.emqx.credentialsUsernameKey | default "EMQX_DASHBOARD__DEFAULT_USERNAME" }}
+            - name: EMQX_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $.Values.emqx.credentialsSecret }}
+                  key: {{ $.Values.emqx.credentialsPasswordKey | default "EMQX_DASHBOARD__DEFAULT_PASSWORD" }}
+            - name: BAO_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $.Values.global.baoTokenSecret }}
+                  key: token
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -e
+              EMQX_HOST={{ $.Values.emqx.host | quote }}
+              BAO_HOST={{ $.Values.global.baoHost | quote }}
+              CLUSTER={{ $.Values.global.cluster | quote }}
+
+              echo "Obtaining EMQX Bearer token..."
+              EMQX_BEARER=$(curl -sf -X POST \
+                -H "Content-Type: application/json" \
+                "${EMQX_HOST}/api/v5/login" \
+                -d "{\"username\": \"${EMQX_USER}\", \"password\": \"${EMQX_PASS}\"}" \
+                | jq -r '.token')
+
+              if [ -z "${EMQX_BEARER}" ] || [ "${EMQX_BEARER}" = "null" ]; then
+                echo "ERROR: Failed to obtain EMQX Bearer token."
+                exit 1
+              fi
+
+              AUTH_HEADER="Authorization: Bearer ${EMQX_BEARER}"
+
+              # Ensure built-in database authenticator is configured (idempotent)
+              AUTH_EXISTS=$(curl -sf \
+                -H "${AUTH_HEADER}" \
+                "${EMQX_HOST}/api/v5/authentication" \
+                | jq '[.[] | select(.backend=="built_in_database")] | length')
+
+              if [ "${AUTH_EXISTS:-0}" -eq 0 ]; then
+                echo "Configuring built-in database authenticator..."
+                curl -sf -X POST \
+                  -H "${AUTH_HEADER}" \
+                  -H "Content-Type: application/json" \
+                  "${EMQX_HOST}/api/v5/authentication" \
+                  -d '{
+                    "mechanism": "password_based",
+                    "backend": "built_in_database",
+                    "password_hash_algorithm": {"name": "bcrypt", "salt_rounds": 10},
+                    "user_id_type": "username"
+                  }' > /dev/null
+                echo "Authenticator configured."
+              fi
+
+              {{- range $job.users }}
+
+              # User: {{ .mqttUsername }}
+              {{- if eq (.idempotencyStrategy | default "api-check") "bao-check" }}
+              BAO_EXISTING=$(bao kv get \
+                -address="${BAO_HOST}" \
+                -field={{ .baoUsernameKey | default "username" | quote }} \
+                "secret/${CLUSTER}/{{ .baoPath }}" 2>/dev/null || true)
+              if [ -n "${BAO_EXISTING}" ]; then
+                echo "MQTT credentials for '{{ .mqttUsername }}' already in OpenBao. Skipping."
+              else
+              {{- else }}
+              HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+                -H "${AUTH_HEADER}" \
+                "${EMQX_HOST}/api/v5/authentication/password_based:built_in_database/users/{{ .mqttUsername }}")
+              if [ "${HTTP_CODE}" = "200" ]; then
+                echo "MQTT user '{{ .mqttUsername }}' already exists. Skipping."
+              else
+              {{- end }}
+                MQTT_PASS=$(tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 24)
+
+                HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+                  -H "${AUTH_HEADER}" \
+                  "${EMQX_HOST}/api/v5/authentication/password_based:built_in_database/users/{{ .mqttUsername }}")
+
+                if [ "${HTTP_CODE}" = "200" ]; then
+                  curl -sf -X PUT \
+                    -H "${AUTH_HEADER}" \
+                    -H "Content-Type: application/json" \
+                    "${EMQX_HOST}/api/v5/authentication/password_based:built_in_database/users/{{ .mqttUsername }}" \
+                    -d "{\"password\": \"${MQTT_PASS}\"}" > /dev/null
+                else
+                  curl -sf -X POST \
+                    -H "${AUTH_HEADER}" \
+                    -H "Content-Type: application/json" \
+                    "${EMQX_HOST}/api/v5/authentication/password_based:built_in_database/users" \
+                    -d "{\"user_id\": \"{{ .mqttUsername }}\", \"password\": \"${MQTT_PASS}\", \"is_superuser\": false}" > /dev/null
+                fi
+
+                bao kv put \
+                  -address="${BAO_HOST}" \
+                  "secret/${CLUSTER}/{{ .baoPath }}" \
+                  {{ .baoUsernameKey | default "username" }}={{ .mqttUsername | quote }} \
+                  {{ .baoPasswordKey | default "password" }}="${MQTT_PASS}"
+                echo "MQTT user '{{ .mqttUsername }}' provisioned and written to OpenBao."
+              fi
+              {{- end }}
+{{- end }}
+{{- end }}

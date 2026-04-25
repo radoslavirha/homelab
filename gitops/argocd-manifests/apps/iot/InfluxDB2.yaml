@@ -29,6 +29,13 @@ spec:
         - repoURL: https://github.com/radoslavirha/homelab
           targetRevision: HEAD
           path: gitops/k8s-manifests/{{cluster}}/influxdb2
+        - repoURL: https://github.com/radoslavirha/homelab
+          targetRevision: HEAD
+          path: gitops/helm-charts/provisioner
+          helm:
+            releaseName: influxdb2-provisioner
+            valueFiles:
+              - $values/gitops/helm-values/{{cluster}}/provisioner/influxdb2.yaml
       destination:
         server: '{{clusterServer}}'
         namespace: iot
