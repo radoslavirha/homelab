@@ -1,7 +1,7 @@
 ---
 # InfluxDB2 PostSync provisioner: Telegraf write token — create-only (idempotent)
-# Runs on every ArgoCD sync. On first deploy:
-#   1. Ensures the "loxone" bucket exists
+# Runs on every ArgoCD sync (wave 1, after provisioner-loxone). On first deploy:
+#   1. Looks up the "loxone" bucket (created by provisioner-loxone, wave 0)
 #   2. Creates a write-only token scoped to the "loxone" bucket
 #   3. Writes the token to OpenBao: secret/server2/telegraf-influxdb2
 # On subsequent syncs: token already exists → skip (no-op).
@@ -14,6 +14,7 @@ metadata:
   annotations:
     argocd.argoproj.io/hook: PostSync
     argocd.argoproj.io/hook-delete-policy: HookSucceeded
+    argocd.argoproj.io/sync-wave: "1"
 spec:
   template:
     spec:
@@ -62,21 +63,15 @@ spec:
                 -H "Authorization: Token ${INFLUX_TOKEN}" \
                 "${INFLUX_HOST}/api/v2/orgs?org=${ORG}" | jq -r '.orgs[0].id')
 
-              # Ensure loxone bucket exists (idempotent)
+              # Look up loxone bucket ID (created by provisioner-loxone, wave 0)
               BUCKET_ID=$(curl -sf \
                 -H "Authorization: Token ${INFLUX_TOKEN}" \
                 "${INFLUX_HOST}/api/v2/buckets?org=${ORG}&name=${BUCKET}" \
                 | jq -r '.buckets[0].id // empty')
 
-              if [ -z "$BUCKET_ID" ]; then
-                echo "Creating bucket '${BUCKET}'..."
-                BUCKET_ID=$(curl -sf -X POST \
-                  -H "Authorization: Token ${INFLUX_TOKEN}" \
-                  -H "Content-Type: application/json" \
-                  "${INFLUX_HOST}/api/v2/buckets" \
-                  -d "{\"name\":\"${BUCKET}\",\"orgID\":\"${ORG_ID}\",\"retentionRules\":[]}" \
-                  | jq -r '.id')
-                echo "Bucket '${BUCKET}' created: ${BUCKET_ID}"
+              if [ -z "${BUCKET_ID}" ]; then
+                echo "Bucket '${BUCKET}' not found. Ensure provisioner-loxone ran successfully."
+                exit 1
               fi
 
               # Create write-only token scoped to the loxone bucket

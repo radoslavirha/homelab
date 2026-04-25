@@ -1,0 +1,101 @@
+---
+# InfluxDB2 PostSync provisioner: Loxone buckets + downsampling task
+# Runs on every ArgoCD sync (wave 0, before provisioner-telegraf). Idempotent per resource.
+#   1. Ensures "loxone" bucket exists (14-day retention)
+#   2. Ensures "loxone_downsample" bucket exists (no retention — long-term)
+#   3. Ensures "Downsample Loxone" Flux task exists
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: influxdb2-provision-loxone
+  namespace: iot
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      automountServiceAccountToken: false
+      containers:
+        - name: provisioner
+          image: alpine:3.20
+          env:
+            - name: INFLUX_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: influxdb2
+                  key: admin-token
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -e
+              apk add --no-cache curl jq > /dev/null
+
+              INFLUX_HOST="http://influxdb2.iot.svc.cluster.local"
+              ORG="homelab"
+
+              ORG_ID=$(curl -sf \
+                -H "Authorization: Token ${INFLUX_TOKEN}" \
+                "${INFLUX_HOST}/api/v2/orgs?org=${ORG}" | jq -r '.orgs[0].id')
+
+              # Ensure loxone bucket exists (14-day retention)
+              BUCKET_ID=$(curl -sf \
+                -H "Authorization: Token ${INFLUX_TOKEN}" \
+                "${INFLUX_HOST}/api/v2/buckets?org=${ORG}&name=loxone" \
+                | jq -r '.buckets[0].id // empty')
+
+              if [ -z "${BUCKET_ID}" ]; then
+                echo "Creating bucket 'loxone'..."
+                curl -sf -X POST \
+                  -H "Authorization: Token ${INFLUX_TOKEN}" \
+                  -H "Content-Type: application/json" \
+                  "${INFLUX_HOST}/api/v2/buckets" \
+                  -d "{\"name\":\"loxone\",\"orgID\":\"${ORG_ID}\",\"retentionRules\":[{\"type\":\"expire\",\"everySeconds\":1209600}]}" \
+                  > /dev/null
+                echo "Bucket 'loxone' created."
+              else
+                echo "Bucket 'loxone' exists (${BUCKET_ID}). Skipping."
+              fi
+
+              # Ensure loxone_downsample bucket exists (no retention)
+              DOWNSAMPLE_ID=$(curl -sf \
+                -H "Authorization: Token ${INFLUX_TOKEN}" \
+                "${INFLUX_HOST}/api/v2/buckets?org=${ORG}&name=loxone_downsample" \
+                | jq -r '.buckets[0].id // empty')
+
+              if [ -z "${DOWNSAMPLE_ID}" ]; then
+                echo "Creating bucket 'loxone_downsample'..."
+                curl -sf -X POST \
+                  -H "Authorization: Token ${INFLUX_TOKEN}" \
+                  -H "Content-Type: application/json" \
+                  "${INFLUX_HOST}/api/v2/buckets" \
+                  -d "{\"name\":\"loxone_downsample\",\"orgID\":\"${ORG_ID}\",\"retentionRules\":[]}" \
+                  > /dev/null
+                echo "Bucket 'loxone_downsample' created."
+              else
+                echo "Bucket 'loxone_downsample' exists (${DOWNSAMPLE_ID}). Skipping."
+              fi
+
+              # Ensure Downsample Loxone task exists
+              EXISTING_TASK=$(curl -sf -G \
+                -H "Authorization: Token ${INFLUX_TOKEN}" \
+                --data-urlencode "org=${ORG}" \
+                --data-urlencode "name=Downsample Loxone" \
+                "${INFLUX_HOST}/api/v2/tasks" \
+                | jq -r '.tasks[0].id // empty')
+
+              if [ -n "${EXISTING_TASK}" ]; then
+                echo "Task 'Downsample Loxone' exists (${EXISTING_TASK}). Skipping."
+              else
+                echo "Creating task 'Downsample Loxone'..."
+                FLUX='option task = {name: "Downsample Loxone", every: 10m}\n\nfrom(bucket: "loxone")\n    |> range(start: -task.every)\n    |> aggregateWindow(every: task.every, fn: mean)\n    |> to(bucket: "loxone_downsample")'
+                curl -sf -X POST \
+                  -H "Authorization: Token ${INFLUX_TOKEN}" \
+                  -H "Content-Type: application/json" \
+                  "${INFLUX_HOST}/api/v2/tasks" \
+                  -d "$(printf '%b' "${FLUX}" | jq -Rs --arg org "${ORG}" '{org: $org, flux: .}')" \
+                  > /dev/null
+                echo "Task 'Downsample Loxone' created."
+              fi

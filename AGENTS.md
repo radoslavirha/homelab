@@ -279,10 +279,14 @@ rm -rf / any deletion of credentials
 
 ## Adding a new ArgoCD app
 
+**For apps from `radoslavirha/iot-miniservers`:** use the `onboard-to-homelab` skill from the apps repo instead of manually creating files. The skill generates all files below and opens a PR. After merge, seed OpenBao secrets listed in the PR TODO section before first ArgoCD sync. 
+
+For other apps (manual):
 1. Create `gitops/argocd-manifests/apps/<stage>/<Name>.yaml` — copy an existing ApplicationSet as template. The list generator already targets all registered clusters.
 2. Add helm values at `gitops/helm-values/<name>.yaml` (shared) and `gitops/helm-values/<cluster>/<name>.yaml` (cluster overrides)
 3. Add raw manifests to `gitops/k8s-manifests/<cluster>/<name>/` if needed
 4. Add a row to the technology stack table in `docs/architecture.md` with all required columns (see App documentation rules above)
+5. Update `docs/iot-miniservers-setup/CLAUDE-app-template.md` is not needed for non-iot-miniservers apps
 
 ## State backend migration (MinIO)
 
