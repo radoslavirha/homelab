@@ -68,12 +68,14 @@ spec:
               {{- range $job.tasks }}
 
               # Task: {{ .name }}
-              if influx task list --name {{ .name | quote }} --hide-headers 2>/dev/null | grep -q .; then
+              if influx task list --json 2>/dev/null \
+                  | jq -e --arg n {{ .name | quote }} '[.[] | select(.name == $n)] | length > 0' \
+                  > /dev/null 2>&1; then
                 echo "Task '{{ .name }}' exists. Skipping."
               else
                 echo "Creating task '{{ .name }}'..."
                 FLUX=$(printf '%s' {{ .flux | b64enc | quote }} | base64 -d)
-                printf '%s' "${FLUX}" | influx task create --flux -
+                printf '%s' "${FLUX}" | influx task create -
                 echo "Task '{{ .name }}' created."
               fi
               {{- end }}
@@ -81,15 +83,19 @@ spec:
               {{- range $job.tokens }}
 
               # Token: {{ .description }}
-              if influx auth list --description {{ .description | quote }} --hide-headers 2>/dev/null | grep -q .; then
-                echo "Token '{{ .description }}' exists. Skipping."
+              BAO_EXISTING=$(bao kv get \
+                -address="${BAO_HOST}" \
+                -field={{ .baoKey | default "token" | quote }} \
+                "secret/${CLUSTER}/{{ .baoPath }}" 2>/dev/null || true)
+              if [ -n "${BAO_EXISTING}" ]; then
+                echo "Token '{{ .description }}' already in OpenBao. Skipping."
               else
                 echo "Creating token '{{ .description }}'..."
                 NEW_TOKEN=$(influx auth create \
                   --description {{ .description | quote }} \
                   --write-bucket {{ .writeBucket | quote }} \
-                  --hide-headers \
-                  | awk '{print $3}')
+                  --json \
+                  | jq -r '.token')
                 bao kv put \
                   -address="${BAO_HOST}" \
                   "secret/${CLUSTER}/{{ .baoPath }}" \
