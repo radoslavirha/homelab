@@ -4,6 +4,8 @@ kind: Application
 metadata:
   name: tempo-server3
   namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
   sources:

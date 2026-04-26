@@ -5,6 +5,8 @@ kind: Application
 metadata:
   name: grafana-server3
   namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
   sources:
