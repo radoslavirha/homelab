@@ -45,10 +45,25 @@ influxdb2:
           retentionSeconds: 0
       tokens:
         - description: my-app-write
-          writeBucket: my-bucket
+          writeBucket: my-bucket       # optional: grant write access to a bucket
+          readBuckets:                 # optional: grant read access to one or more buckets
+            - my-bucket
           baoPath: my-app/influxdb2
           baoKey: token
+          baoCluster: server2          # optional: override target OpenBao path prefix (default: global.cluster)
+                                       # use baoCluster: server3 when a credential is consumed by server3 ESO
 ```
+
+**Token fields reference:**
+
+| Field | Required | Default | Description |
+|-------|----------|---------|-------------|
+| `description` | yes | — | InfluxDB2 authorization description (used as idempotency key) |
+| `writeBucket` | no | — | Grant write access to this bucket |
+| `readBuckets` | no | `[]` | Grant read access to these buckets |
+| `baoPath` | yes | — | OpenBao KV path suffix: `secret/<baoCluster>/<baoPath>` |
+| `baoKey` | no | `token` | Key name written to OpenBao |
+| `baoCluster` | no | `global.cluster` | Override the cluster prefix in the OpenBao path. Use `server3` when the token is consumed by server3 ESO. |
 
 ### Provisioner image
 
@@ -78,8 +93,8 @@ gitops/k8s-manifests/server2/iot/ExternalSecret.provisioner-token.yaml
 **One-time setup (per cluster):**
 ```bash
 bao policy write server2-provisioner - <<'EOF'
-path "secret/data/server2/*" { capabilities = ["create", "read", "update", "patch"] }
-path "secret/metadata/server2/*" { capabilities = ["read", "list"] }
+path "secret/data/server2/*" { capabilities = ["create", "update"] }
+path "secret/data/server3/influxdb2-grafana" { capabilities = ["create", "update"] }
 EOF
 
 TOKEN=$(bao token create \
@@ -90,6 +105,8 @@ TOKEN=$(bao token create \
 
 bao kv put secret/server2/provisioner-token token="${TOKEN}"
 ```
+
+> **Consumer-scoped paths:** Secrets are organised by who reads them, not who writes them. The `server3/influxdb2-grafana` path is written by the server2 provisioner but lives under `server3/` because it is consumed by server3 ESO. The policy grants exactly this one cross-cluster write path — no broader access.
 
 ---
 
@@ -117,6 +134,11 @@ Declared in [`gitops/helm-values/server2/provisioner/influxdb2.yaml`](../gitops/
 1. Ensures `loxone` bucket exists (14-day retention)
 2. Ensures `loxone_downsample` bucket exists (infinite retention)
 3. Ensures Flux task `Downsample Loxone` exists (10m aggregation loxone → loxone_downsample)
+4. Checks if token `grafana-read` already exists in OpenBao at `secret/server3/influxdb2-grafana` → skip if yes
+5. Creates a read-only token scoped to `loxone` + `loxone_downsample` buckets (`readBuckets`)
+6. Writes `token` to OpenBao: `secret/server3/influxdb2-grafana` (consumed by server3 Grafana)
+
+Note: token written to a server3 path using `baoCluster: server3` in the provisioner values — see provisioner template `baoCluster` field.
 
 **Job `influxdb2-provision-telegraf`** (wave 1, after loxone):
 

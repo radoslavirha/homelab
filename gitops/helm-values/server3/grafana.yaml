@@ -1,2 +1,9 @@
 # Grafana — server3 cluster overrides
 # Shared base values: gitops/helm-values/grafana.yaml
+
+extraSecretMounts:
+  - name: influxdb2-grafana
+    secretName: influxdb2-grafana
+    defaultMode: 0440
+    mountPath: /etc/secrets/influxdb2-grafana
+    readOnly: true

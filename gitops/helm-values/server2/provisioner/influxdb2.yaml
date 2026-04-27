@@ -26,7 +26,14 @@ influxdb2:
                 |> range(start: -task.every)
                 |> aggregateWindow(every: task.every, fn: mean)
                 |> to(bucket: "loxone_downsample")
-      tokens: []
+      tokens:
+        - description: grafana-read
+          readBuckets:
+            - loxone
+            - loxone_downsample
+          baoPath: influxdb2-grafana
+          baoCluster: server3
+          baoKey: token
 
     telegraf:
       syncWave: "1"

@@ -18,6 +18,7 @@ Every stage in `docs/iac.md` and `gitops/README.md` that requires secrets links 
 | `secret/<cluster>/emqx` | `dashboard-username`, `dashboard-password` | iot stage | any |
 | `secret/<cluster>/mongodb` | `root-password` | databases stage | any |
 | `secret/otel-gateway/auth-token` | `token` | observability stage | server3, server2 |
+| `secret/server3/influxdb2-grafana` | `token` | *provisioned at runtime* | server3 |
 
 `<cluster>` is the short cluster name: `server2`, `server3`, etc.
 
@@ -169,6 +170,21 @@ bao kv get secret/otel-gateway/auth-token
 ```
 
 server3 ESO reads this via the `secret/data/*` wildcard in its `read-secrets` policy. server2 (and any additional cluster) ESO needs an explicit read grant — the `<cluster>-external-secrets` policy in [iac.md](iac.md) step 3.d grants `secret/data/otel-gateway/*` in addition to `secret/data/<cluster>/*`.
+
+---
+
+## server3/influxdb2-grafana
+
+**Provisioned at runtime** by the InfluxDB2 PostSync provisioner Job on server2 (`influxdb2-provision-loxone`). No manual seeding required.
+
+The provisioner creates a read-only token scoped to the `loxone` and `loxone_downsample` buckets and writes it to this path. Server3 ESO syncs it into `monitoring/influxdb2-grafana` Secret, which Grafana mounts at `/etc/secrets/influxdb2-grafana/token`.
+
+To rotate: delete the path in OpenBao, delete the old InfluxDB2 authorization, then force-sync the InfluxDB2 Application on server2.
+
+```bash
+# Verify (after InfluxDB2 PostSync runs)
+bao kv get secret/server3/influxdb2-grafana
+```
 
 ---
 

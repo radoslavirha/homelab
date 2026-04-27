@@ -83,22 +83,29 @@ spec:
               {{- range $job.tokens }}
 
               # Token: {{ .description }}
+              {{- $baoCluster := .baoCluster | default "" }}
+              BAO_CLUSTER={{ if $baoCluster }}{{ $baoCluster | quote }}{{ else }}"${CLUSTER}"{{ end }}
               BAO_EXISTING=$(bao kv get \
                 -address="${BAO_HOST}" \
                 -field={{ .baoKey | default "token" | quote }} \
-                "secret/${CLUSTER}/{{ .baoPath }}" 2>/dev/null || true)
+                "secret/${BAO_CLUSTER}/{{ .baoPath }}" 2>/dev/null || true)
               if [ -n "${BAO_EXISTING}" ]; then
                 echo "Token '{{ .description }}' already in OpenBao. Skipping."
               else
                 echo "Creating token '{{ .description }}'..."
                 NEW_TOKEN=$(influx auth create \
                   --description {{ .description | quote }} \
+                  {{- if .writeBucket }}
                   --write-bucket {{ .writeBucket | quote }} \
+                  {{- end }}
+                  {{- range .readBuckets }}
+                  --read-bucket {{ . | quote }} \
+                  {{- end }}
                   --json \
                   | jq -r '.token')
                 bao kv put \
                   -address="${BAO_HOST}" \
-                  "secret/${CLUSTER}/{{ .baoPath }}" \
+                  "secret/${BAO_CLUSTER}/{{ .baoPath }}" \
                   {{ .baoKey | default "token" }}="${NEW_TOKEN}"
                 echo "Token '{{ .description }}' created and written to OpenBao."
               fi

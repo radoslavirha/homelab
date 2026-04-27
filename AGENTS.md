@@ -64,7 +64,7 @@ gitops/
       headlamp.yaml         hostname: headlamp.server3.home
       traefik.yaml          dashboard hostname/IP, externalIPs, statusAddress.ip, OTLP tracing endpoint
       prometheus.yaml       server3 overrides (currently empty)
-      grafana.yaml          server3 overrides (currently empty)
+      grafana.yaml          server3 overrides: extraSecretMounts for influxdb2-grafana secret
       otel-gateway.yaml     exporters (Loki/Tempo/Prometheus endpoint URLs), k8s.cluster.name=server3
   argocd-manifests/
     ArgoCD.yaml             ArgoCD self-management (manual apply #1)
@@ -111,7 +111,7 @@ gitops/
       external-secrets/    ClusterSecretStore → local OpenBao
       longhorn/            HTTPRoute: longhorn.server3.home → longhorn-frontend:80
       openbao/             HTTPRoute: vault.server3.home → openbao:8200
-      grafana/             ExternalSecret (grafana-admin), datasource ConfigMaps (prometheus/loki/tempo), dashboard ConfigMap (traefik-opentelemetry), HTTPRoute: grafana.server3.home
+      grafana/             ExternalSecret (grafana-admin), ExternalSecret (influxdb2-grafana), datasource ConfigMaps (prometheus/loki/tempo/influxdb2), dashboard ConfigMap (traefik-opentelemetry), HTTPRoute: grafana.server3.home
       otel-gateway/        ExternalSecret.otel-auth-token.yaml (shared OTLP bearer token), HTTPRoute: otel.server3.home, IngressRouteTCP (otel gRPC :4317)
 docs/             Architecture decisions, IaC guide, secrets guide, observability guide
 ```

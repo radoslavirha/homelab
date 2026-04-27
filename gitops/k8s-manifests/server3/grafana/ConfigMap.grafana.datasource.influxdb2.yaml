@@ -1,0 +1,27 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasource-influxdb2
+  namespace: monitoring
+  labels:
+    grafana_datasource: "1"
+  annotations:
+    argocd.argoproj.io/sync-wave: "-50"
+data:
+  datasource-influxdb2.yaml: |-
+    apiVersion: 1
+    datasources:
+      - name: InfluxDB2
+        type: influxdb
+        uid: influxdb2
+        access: proxy
+        url: http://influx.server2.home
+        editable: false
+        jsonData:
+          version: Flux
+          organization: homelab
+          defaultBucket: loxone
+          tlsSkipVerify: true
+        secureJsonData:
+          token: $__file{/etc/secrets/influxdb2-grafana/token}
