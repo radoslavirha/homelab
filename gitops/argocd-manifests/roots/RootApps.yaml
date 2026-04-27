@@ -1,6 +1,6 @@
 # RootApps — App-of-Apps for custom application stack.
 # Discovers ApplicationSets in gitops/argocd-manifests/apps/apps/.
-# Sync wave 4 — miot-bridge-api-iot needs MongoDB + EMQX (wave 3),
+# Sync wave 4 — miot-bridge-api needs MongoDB + EMQX (wave 3),
 # apps-otel-collector needs OTel Gateway (wave 3).
 apiVersion: argoproj.io/v1alpha1
 kind: Application

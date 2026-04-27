@@ -1,4 +1,4 @@
-# miot-bridge-api-iot — shared base values
+# miot-bridge-api — shared base values
 # Env-specific: replicas, udpIngress.entrypoint, templates.config.content, VAR_* → production.yaml / sandbox.yaml
 
 apps:

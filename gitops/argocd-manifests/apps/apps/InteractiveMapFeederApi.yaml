@@ -1,9 +1,10 @@
-# miot-bridge-api-iot — ApplicationSet (server2 × production + sandbox)
+# interactive-map-feeder-api — ApplicationSet (server2 × production + sandbox)
 # Chart: gitops/helm-charts/iot-applications/ (path-based, no publishing)
+# No ExternalSecrets (no secretRefs), no cluster-specific overrides.
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
-  name: miot-bridge-api-iot
+  name: interactive-map-feeder-api
   namespace: argocd
 spec:
   generators:
@@ -19,7 +20,7 @@ spec:
                 - env: sandbox
   template:
     metadata:
-      name: miot-bridge-api-iot-{{cluster}}-{{env}}
+      name: interactive-map-feeder-api-{{cluster}}-{{env}}
     spec:
       project: default
       sources:
@@ -27,20 +28,17 @@ spec:
           targetRevision: HEAD
           path: gitops/helm-charts/iot-applications
           helm:
-            releaseName: miot-bridge-api-iot
+            releaseName: interactive-map-feeder-api
             valueFiles:
-              - $values/gitops/helm-values/apps/miot-bridge-api-iot/base.yaml
-              - $values/gitops/helm-values/apps/miot-bridge-api-iot/{{env}}.yaml
+              - $values/gitops/helm-values/apps/interactive-map-feeder-api/base.yaml
+              - $values/gitops/helm-values/apps/interactive-map-feeder-api/{{env}}.yaml
               - $values/gitops/helm-values/apps/common/values.yaml
               - $values/gitops/helm-values/apps/common/{{env}}.yaml
-              - $values/gitops/helm-values/server2/apps/common/values.yaml
-              - $values/gitops/helm-values/server2/apps/common/{{env}}.yaml
+              - $values/gitops/helm-values/{{cluster}}/apps/common/values.yaml
+              - $values/gitops/helm-values/{{cluster}}/apps/common/{{env}}.yaml
         - repoURL: https://github.com/radoslavirha/homelab
           targetRevision: HEAD
           ref: values
-        - repoURL: https://github.com/radoslavirha/homelab
-          targetRevision: HEAD
-          path: gitops/k8s-manifests/{{cluster}}/miot-bridge-api-iot/{{env}}
       destination:
         server: '{{clusterServer}}'
         namespace: '{{env}}'

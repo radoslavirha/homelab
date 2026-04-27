@@ -266,9 +266,9 @@ This is the cleanest solution for MongoDB: zero manual intervention after initia
 
 ---
 
-## miot-bridge-api-iot
+## miot-bridge-api
 
-`miot-bridge-api-iot` needs scoped credentials in both EMQX (MQTT) and MongoDB. Both are provisioned by PostSync Jobs and written to OpenBao. ExternalSecrets in the `production` and `sandbox` namespaces then pull them.
+`miot-bridge-api` needs scoped credentials in both EMQX (MQTT) and MongoDB. Both are provisioned by PostSync Jobs and written to OpenBao. ExternalSecrets in the `production` and `sandbox` namespaces then pull them.
 
 OpenBao KV layout:
 
@@ -297,7 +297,7 @@ Declared in [`gitops/helm-values/server2/provisioner/mongodb.yaml`](../gitops/he
 
 ### No manual seeding required
 
-Unlike InfluxDB2/EMQX/MongoDB root credentials, `miot-bridge-api-iot` credentials are **entirely auto-generated** by the provisioner Jobs. No `bao kv put` step is needed for these paths.
+Unlike InfluxDB2/EMQX/MongoDB root credentials, `miot-bridge-api` credentials are **entirely auto-generated** by the provisioner Jobs. No `bao kv put` step is needed for these paths.
 
 ---
 

@@ -1,8 +1,10 @@
-# interactive-map-feeder-api-iot — sandbox overrides
+# interactive-map-feeder-api — sandbox overrides
 # Cluster-specific VAR_* (VAR_PUBLIC_DOMAIN, VAR_SUBDOMAIN, VAR_PROTOCOL) are in server2/apps/common/sandbox.yaml
 
 apps:
   interactive-map-feeder-api:
+    image:
+      tag: "0.6.0"
     templates:
       config:
         content: |

@@ -178,6 +178,6 @@ All provisioned automatically by PostSync Jobs on ArgoCD sync. Nothing requires 
 | [gitops/helm-values/telegraf.yaml](../gitops/helm-values/telegraf.yaml) | MQTT topics consumed, InfluxDB2 output, field mappings |
 | [gitops/helm-values/server2/provisioner/influxdb2.yaml](../gitops/helm-values/server2/provisioner/influxdb2.yaml) | InfluxDB2 buckets, tasks, tokens to provision |
 | [gitops/helm-values/server2/provisioner/emqx.yaml](../gitops/helm-values/server2/provisioner/emqx.yaml) | EMQX MQTT users to provision |
-| [gitops/helm-values/apps/miot-bridge-api-iot/](../gitops/helm-values/apps/miot-bridge-api-iot/) | miot-bridge-api config per env |
-| [gitops/helm-values/apps/interactive-map-feeder-api-iot/](../gitops/helm-values/apps/interactive-map-feeder-api-iot/) | map feeder config per env |
+| [gitops/helm-values/apps/miot-bridge-api/](../gitops/helm-values/apps/miot-bridge-api/) | miot-bridge-api config per env |
+| [gitops/helm-values/apps/interactive-map-feeder-api/](../gitops/helm-values/apps/interactive-map-feeder-api/) | map feeder config per env |
 | [docs/provisioning.md](./provisioning.md) | How provisioner Jobs work, how to add new resources |

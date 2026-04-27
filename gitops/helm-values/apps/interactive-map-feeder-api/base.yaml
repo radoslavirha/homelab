@@ -1,4 +1,4 @@
-# interactive-map-feeder-api-iot — shared base values
+# interactive-map-feeder-api — shared base values
 # Env-specific: replicas, templates.config.content, VAR_* → production.yaml / sandbox.yaml
 # No secretRefs (no secrets needed), no udpIngress, no cluster overrides.
 

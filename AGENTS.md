@@ -42,8 +42,8 @@ gitops/
     apps/
       common/               values.yaml (cluster-agnostic VAR_PROTOCOL, VAR_MQTT_URL, VAR_MONGODB_URL), production.yaml, sandbox.yaml
       otel-collector/       base.yaml, production.yaml, sandbox.yaml
-      miot-bridge-api-iot/  base.yaml, production.yaml, sandbox.yaml
-      interactive-map-feeder-api-iot/ base.yaml, production.yaml, sandbox.yaml
+      miot-bridge-api/  base.yaml, production.yaml, sandbox.yaml
+      interactive-map-feeder-api/ base.yaml, production.yaml, sandbox.yaml
     server2/
       apps/
         common/             production.yaml, sandbox.yaml (shared VAR_* for all apps in each namespace)
@@ -103,7 +103,7 @@ gitops/
       external-dns/ ExternalSecret (unifi-credentials), DNSEndpoint
       longhorn/    HTTPRoute: longhorn.server2.home → longhorn-frontend:80
       mongodb/     ExternalSecret, IngressRouteTCP, ExternalSecret.provisioner-token.yaml
-      miot-bridge-api-iot/ production/ and sandbox/ — ExternalSecret.mqtt.yaml, ExternalSecret.mongodb.yaml
+      miot-bridge-api/ production/ and sandbox/ — ExternalSecret.mqtt.yaml, ExternalSecret.mongodb.yaml
       otel-gateway/ ExternalSecret.otel-auth-token.yaml (shared OTLP bearer token pulled from secret/otel-gateway/auth-token)
     server3/
       cilium/              HTTPRoute: hubble.server3.home → hubble-dashboard:80
@@ -152,7 +152,7 @@ All other apps use the **app-of-apps + ApplicationSet** pattern with seven stage
 - **iot** stage: InfluxDB2 (server2), EMQX (server2), Telegraf (server2), IotInfra (server2)
 - **databases** stage: MongoDB (server2)
 - **dashboards** stage: Headlamp, Hubble UI, Longhorn UI (server3 · server2); server3-only OpenBao HTTPRoute under `server3/apps/dashboards/`
-- **apps** stage: custom apps — miot-bridge-api-iot, interactive-map-feeder-api-iot, per-namespace OTel collectors
+- **apps** stage: custom apps — miot-bridge-api, interactive-map-feeder-api, per-namespace OTel collectors
 
 Bootstrap is **two manual kubectl applies** on server3:
 

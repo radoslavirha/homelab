@@ -91,7 +91,7 @@ Application-CRD health assessment is enabled by a Lua `resource.customizations` 
 |3|`roots/RootIoT.yaml`|iot|IotInfra, InfluxDB2, EMQX, Telegraf — Telegraf self-orders with resource-level sync-wave `"1"` to wait for InfluxDB2/EMQX post-sync provisioner Jobs|
 |3|`roots/RootDatabases.yaml`|databases|MongoDB — needs ESO + Traefik TCPRoute|
 |3|`roots/RootDashboards.yaml`|dashboards|Headlamp, Hubble, Longhorn UI — need Traefik HTTPRoutes|
-|4|`roots/RootApps.yaml`|apps|Custom apps: miot-bridge-api-iot needs MongoDB + EMQX, apps-otel-collector needs OTel Gateway|
+|4|`roots/RootApps.yaml`|apps|Custom apps: miot-bridge-api needs MongoDB + EMQX, apps-otel-collector needs OTel Gateway|
 
 Each ApplicationSet uses a list generator — one element per cluster. Adding a cluster means adding `{cluster, clusterServer}` to each ApplicationSet and committing.
 

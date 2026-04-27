@@ -37,7 +37,7 @@ tags: [homelab, iot]
 
 ## Custom APIs
 
-### miot-bridge-api-iot
+### miot-bridge-api
 
 | | |
 |-|-|
@@ -47,7 +47,7 @@ tags: [homelab, iot]
 | Sandbox HTTP | http://sandbox.api.server2.home/iot/miot-bridge |
 | Sandbox UDP | 192.168.1.201:4001 |
 
-### interactive-map-feeder-api-iot
+### interactive-map-feeder-api
 
 | | |
 |-|-|

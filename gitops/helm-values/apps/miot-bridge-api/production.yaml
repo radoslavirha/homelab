@@ -1,8 +1,10 @@
-# miot-bridge-api-iot — production overrides
-# Cluster-specific VAR_* (VAR_PUBLIC_DOMAIN, VAR_MQTT_URL, etc.) are in server2/apps/miot-bridge-api-iot/production.yaml
+# miot-bridge-api — production overrides
+# Cluster-specific VAR_* (VAR_PUBLIC_DOMAIN, VAR_MQTT_URL, etc.) are in server2/apps/miot-bridge-api/production.yaml
 
 apps:
   miot-bridge-api:
+    image:
+      tag: "0.16.0"
     udpIngress:
       entrypoint: udp-miot-prod
     templates:

@@ -1,8 +1,10 @@
-# miot-bridge-api-iot — sandbox overrides
+# miot-bridge-api — sandbox overrides
 # Cluster-specific VAR_* (VAR_PUBLIC_DOMAIN, VAR_SUBDOMAIN, VAR_MQTT_URL, etc.) are in server2/apps/common/sandbox.yaml
 
 apps:
   miot-bridge-api:
+    image:
+      tag: "0.16.0"
     udpIngress:
       entrypoint: udp-miot-sbx
     templates:
