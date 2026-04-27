@@ -4,7 +4,7 @@
 apps:
   miot-bridge-api:
     image:
-      repository: radoslavirha/miot-bridge-api
+      repository: ghcr.io/radoslavirha/miot-bridge-api
       tag: "0.16.0"
       pullPolicy: Always
     replicas: 1
