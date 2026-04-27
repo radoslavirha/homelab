@@ -93,14 +93,19 @@ spec:
                 echo "Token '{{ .description }}' already in OpenBao. Skipping."
               else
                 echo "Creating token '{{ .description }}'..."
+                # influx auth create requires bucket IDs, not names — resolve each name first
+                AUTH_FLAGS=""
+                {{- if .writeBucket }}
+                BUCKET_ID=$(influx bucket list --name {{ .writeBucket | quote }} --json | jq -r '.[0].id')
+                AUTH_FLAGS="${AUTH_FLAGS} --write-bucket ${BUCKET_ID}"
+                {{- end }}
+                {{- range .readBuckets }}
+                BUCKET_ID=$(influx bucket list --name {{ . | quote }} --json | jq -r '.[0].id')
+                AUTH_FLAGS="${AUTH_FLAGS} --read-bucket ${BUCKET_ID}"
+                {{- end }}
                 NEW_TOKEN=$(influx auth create \
                   --description {{ .description | quote }} \
-                  {{- if .writeBucket }}
-                  --write-bucket {{ .writeBucket | quote }} \
-                  {{- end }}
-                  {{- range .readBuckets }}
-                  --read-bucket {{ . | quote }} \
-                  {{- end }}
+                  ${AUTH_FLAGS} \
                   --json \
                   | jq -r '.token')
                 bao kv put \
