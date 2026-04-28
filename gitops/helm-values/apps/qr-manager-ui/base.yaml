@@ -36,6 +36,6 @@ apps:
     templates:
       config:
         file: config.json
-        path: /usr/share/nginx/html
+        path: /usr/share/nginx/html/config.json
         subPath: config.json
         # content defined per-env
