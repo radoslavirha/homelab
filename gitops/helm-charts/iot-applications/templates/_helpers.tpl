@@ -22,7 +22,7 @@
 {{- define "iot-applications.validators.portRange" -}}
 {{- $sanitizedPort := int .port -}}
 {{- if or (lt $sanitizedPort 1) (gt $sanitizedPort 65535) -}}
-{{- fail (printf "Ports must always be between 1 and 65535. Provided value: %s. [apps.%s]." .port .applicationName) -}}
+{{- fail (printf "Ports must always be between 1 and 65535. Provided value: %d. [apps.%s]." $sanitizedPort .applicationName) -}}
 {{- end -}}
 {{- end -}}
 
@@ -30,14 +30,15 @@
      Input is dictionary with image: dictionary, applicationName: string
 */}}
 {{- define "iot-applications.validators.image" -}}
-{{- if not (hasKey .image "repository") -}}
+{{- $image := .image | default dict -}}
+{{- if not (hasKey $image "repository") -}}
 {{- fail (printf "Image must have a repository key. [apps.%s.image]." .applicationName) -}}
 {{- end -}}
 
-{{- if hasKey .image "pullPolicy" -}}
+{{- if hasKey $image "pullPolicy" -}}
 {{- $allowed := list "Always" "IfNotPresent" "Never" -}}
-{{- if not (has .image.pullPolicy $allowed) -}}
-{{- fail (printf "Image has invalid pullPolicy '%s'. Allowed values are: %s. [apps.%s.image]." .image.pullPolicy (join ", " $allowed) .applicationName) -}}
+{{- if not (has $image.pullPolicy $allowed) -}}
+{{- fail (printf "Image has invalid pullPolicy '%s'. Allowed values are: %s. [apps.%s.image]." $image.pullPolicy (join ", " $allowed) .applicationName) -}}
 {{- end -}}
 {{- end -}}
 
@@ -110,9 +111,25 @@
 {{- $identifier | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 
+{{/* Returns helm.sh/chart label value */}}
+{{- define "iot-applications.chart" -}}
+{{- printf "%s-%s" .chart.Name .chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{/* Returns service account name for the given application context */}}
+{{- define "iot-applications.serviceAccountName" -}}
+{{- $svcAccount := .application.serviceAccount | default dict -}}
+{{- if $svcAccount.name -}}
+{{ $svcAccount.name }}
+{{- else -}}
+{{ include "iot-applications.identifier" . }}
+{{- end -}}
+{{- end -}}
+
 {{/* Returns labels for selector */}}
 {{- define "iot-applications.labels.selector" -}}
-app: {{ include "iot-applications.identifier" . -}}
+app.kubernetes.io/name: {{ .name }}
+app.kubernetes.io/instance: {{ .release.Name -}}
 {{- end -}}
 
 {{/* Returns standard metadata labels */}}
@@ -122,5 +139,7 @@ app.kubernetes.io/name: {{ .name }}
 app.kubernetes.io/version: {{ include "iot-applications.defaults.tag" .application.image.tag }}
 app.kubernetes.io/component: {{ .application.labels.component }}
 app.kubernetes.io/part-of: {{ .application.labels.partOf }}
-app.kubernetes.io/environment: {{ .release.Namespace }}
+app.kubernetes.io/instance: {{ .release.Name }}
+app.kubernetes.io/managed-by: {{ .release.Service }}
+helm.sh/chart: {{ include "iot-applications.chart" . }}
 {{- end -}}

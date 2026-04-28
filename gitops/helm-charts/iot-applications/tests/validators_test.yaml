@@ -1,0 +1,36 @@
+suite: validator tests
+templates:
+  - templates/deployment.yaml
+tests:
+  - it: should fail when image.repository is missing
+    set:
+      apps.my-app.image.pullPolicy: IfNotPresent
+      apps.my-app.labels.component: api
+      apps.my-app.labels.partOf: iot
+      apps.my-app.ingress.enabled: false
+    asserts:
+      - failedTemplate:
+          errorMessage: "Image must have a repository key. [apps.my-app.image]."
+
+  - it: should fail when port is out of range
+    set:
+      apps.my-app.image.repository: ghcr.io/example/my-app
+      apps.my-app.labels.component: api
+      apps.my-app.labels.partOf: iot
+      apps.my-app.ingress.enabled: false
+      apps.my-app.services.http.enabled: true
+      apps.my-app.services.http.port: 99999
+    asserts:
+      - failedTemplate:
+          errorMessage: "Ports must always be between 1 and 65535. Provided value: 99999. [apps.my-app]."
+
+  - it: should fail when image pullPolicy is invalid
+    set:
+      apps.my-app.image.repository: ghcr.io/example/my-app
+      apps.my-app.image.pullPolicy: InvalidPolicy
+      apps.my-app.labels.component: api
+      apps.my-app.labels.partOf: iot
+      apps.my-app.ingress.enabled: false
+    asserts:
+      - failedTemplate:
+          errorMessage: "Image has invalid pullPolicy 'InvalidPolicy'. Allowed values are: Always, IfNotPresent, Never. [apps.my-app.image]."

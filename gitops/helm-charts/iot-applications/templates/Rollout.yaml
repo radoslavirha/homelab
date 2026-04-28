@@ -1,23 +1,225 @@
 {{- range $applicationName, $application := .Values.apps | default dict -}}
+{{- include "iot-applications.validators.image" (dict "image" $application.image "applicationName" $applicationName) }}
+{{- include "iot-applications.validators.services" (dict "services" ($application.services | default dict) "applicationName" $applicationName) }}
 {{- $ctx := dict "application" $application "name" $applicationName "release" $.Release "chart" $.Chart -}}
-{{- if (($application.rollout | default dict).enabled) }}
-{{- /* TODO: Implement Argo Rollout resource.
-     Strategy-specific fields:
-
-     canary:
-       - spec.strategy.canary.stableService  → {identifier}-{{ $application.rollout.canary.stableServiceRef }}
-       - spec.strategy.canary.canaryService  → {identifier}-{{ $application.rollout.canary.canaryServiceRef }}
-       - spec.strategy.canary.steps          → $application.rollout.canary.steps
-       - spec.strategy.canary.trafficRouting → $application.rollout.canary.trafficRouting (Gateway API plugin)
-       - spec.analysis                       → $application.rollout.canary.analysis
-
-     blueGreen:
-       - spec.strategy.blueGreen.activeService   → {identifier}-{{ $application.rollout.blueGreen.activeServiceRef }}
-       - spec.strategy.blueGreen.previewService  → {identifier}-{{ $application.rollout.blueGreen.previewServiceRef }}
-       - spec.strategy.blueGreen.autoPromotionEnabled
-       - spec.strategy.blueGreen.scaleDownDelaySeconds
-       - spec.strategy.blueGreen.prePromotionAnalysis
-       - spec.strategy.blueGreen.postPromotionAnalysis
-*/}}
+{{/* Prepare resource requests and limits in case they are not set */}}
+{{- $resources := $application.resources | default (dict) -}}
+{{- $requests := $resources.requests | default (dict) -}}
+{{- $limits := $resources.limits | default (dict) -}}
+{{/* Resolve main service for CONTAINER_PORT via ingress.serviceRef */}}
+{{- $mainServiceRef := $application.ingress.serviceRef | default "" -}}
+{{- $mainService := get ($application.services | default dict) $mainServiceRef | default dict -}}
+{{/* Resolve UDP service for CONTAINER_UDP_PORT via udpIngress.serviceRef */}}
+{{- $udpServiceRef := (($application.udpIngress | default dict).serviceRef | default "") -}}
+{{- $udpService := get ($application.services | default dict) $udpServiceRef | default dict -}}
+{{- $rollout := $application.rollout | default dict -}}
+{{- $serviceAccount := $application.serviceAccount | default dict -}}
+{{- if $rollout.enabled }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: {{ include "iot-applications.identifier" $ctx }}
+  labels: {{ include "iot-applications.meta.labels" $ctx | nindent 4 }}
+spec:
+  replicas: {{ $application.replicas | default 1 }}
+  selector:
+    matchLabels: {{ include "iot-applications.labels.selector" $ctx | nindent 6 }}
+  template:
+    metadata:
+      labels: {{ include "iot-applications.labels.selector" $ctx | nindent 8 }}
+      {{- if or $application.podAnnotations ($application.templates | default dict | len) }}
+      annotations:
+        {{- with $application.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- if $application.templates | default dict | len }}
+        checksum/config: {{ $application.templates | toJson | sha256sum }}
+        {{- end }}
+      {{- end }}
+    spec:
+      {{- if or $serviceAccount.create $serviceAccount.name }}
+      serviceAccountName: {{ include "iot-applications.serviceAccountName" $ctx }}
+      {{- end }}
+      {{- with $application.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $application.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if $application.templates | default dict | len }}
+      initContainers:
+        {{- range $templateName, $template := $application.templates | default dict }}
+        {{- include "iot-applications.validators.template" (dict "name" $templateName "template" $template "applicationName" $applicationName) }}
+        - name: {{ include "iot-applications.identifier" $ctx }}-{{ $templateName }}-jinja2
+          image: objectiflibre/jinja-init
+          env:
+            - name: VERBOSE
+              value: "1"
+            - name: JINJA_SRC_FILE
+              value: "/config_src/{{ $template.file }}"
+            - name: JINJA_DEST_FILE
+              value: "/config/{{ $template.file }}"
+            {{- range $key, $value := $.Values | default dict }}
+            {{- if hasPrefix "VAR_" $key }}
+            - name: JINJA_VAR_{{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+            {{- end }}
+            - name: JINJA_VAR_APPLICATION
+              value: {{ $applicationName | quote }}
+            - name: JINJA_VAR_PATH_NAME
+              value: {{ ($application.ingress.pathName | default $applicationName) | quote }}
+            - name: JINJA_VAR_COMPONENT
+              value: {{ $application.labels.component | quote }}
+            - name: JINJA_VAR_APPLICATION_GROUP
+              value: {{ $application.labels.partOf | quote }}
+            - name: JINJA_VAR_CONTAINER_PORT
+              value: {{ $mainService.targetPort | default 80 | toString | quote }}
+            {{- if $udpService.targetPort }}
+            - name: JINJA_VAR_CONTAINER_UDP_PORT
+              value: {{ $udpService.targetPort | toString | quote }}
+            {{- end }}
+            - name: JINJA_VAR_NAMESPACE
+              value: {{ $.Release.Namespace | quote }}
+            {{- range $secretRef := $application.secretRefs | default list }}
+            {{- range $key := $secretRef.keys | default list }}
+            - name: JINJA_VAR_{{ $key }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretRef.name }}
+                  key: {{ $key }}
+            {{- end }}
+            {{- end }}
+          volumeMounts:
+            - name: {{ include "iot-applications.identifier" $ctx }}-tpl-in-{{ $templateName }}
+              mountPath: /config_src
+            - name: {{ include "iot-applications.identifier" $ctx }}-tpl-out-{{ $templateName }}
+              mountPath: /config
+        {{- end }}
+      {{- end }}
+      containers:
+        - name: {{ include "iot-applications.identifier" $ctx }}
+          image: {{ $application.image.repository }}:{{ include "iot-applications.defaults.tag" $application.image.tag }}
+          imagePullPolicy: {{ $application.image.pullPolicy | default "IfNotPresent" }}
+          {{- with $application.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- if $application.services | default dict | len }}
+          ports:
+            {{- range $serviceName, $svc := $application.services | default dict }}
+            {{- if $svc.enabled }}
+            - name: {{ $serviceName }}
+              containerPort: {{ $svc.targetPort | default 80 }}
+              protocol: {{ $svc.protocol | default "TCP" }}
+            {{- end }}
+            {{- end }}
+          {{- end }}
+          resources:
+            requests:
+              cpu: {{ $requests.cpu | default "250m" | quote }}
+              memory: {{ $requests.memory | default "250Mi" | quote }}
+            limits:
+              cpu: {{ $limits.cpu | default "500m" | quote }}
+              memory: {{ $limits.memory | default "500Mi" | quote }}
+          {{- if $application.secretRefs | default list | len }}
+          envFrom:
+            {{- range $secretRef := $application.secretRefs | default list }}
+            - secretRef:
+                name: {{ $secretRef.name }}
+            {{- end }}
+          {{- end }}
+          {{- if $application.env | default list | len }}
+          env:
+            {{- toYaml $application.env | nindent 12 }}
+          {{- end }}
+          {{- with $application.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with $application.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with $application.startupProbe }}
+          startupProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- if $application.templates | default dict | len }}
+          volumeMounts:
+            {{- range $templateName, $template := $application.templates | default dict }}
+            {{- include "iot-applications.validators.template" (dict "name" $templateName "template" $template "applicationName" $applicationName) }}
+            - name: {{ include "iot-applications.identifier" $ctx }}-tpl-out-{{ $templateName }}
+              mountPath: {{ $template.path }}
+              {{- if $template.subPath }}
+              subPath: {{ $template.subPath }}
+              {{- end }}
+            {{- end }}
+          {{- end }}
+      {{- with $application.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $application.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $application.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if $application.templates | default dict | len }}
+      volumes:
+        {{- range $templateName, $template := $application.templates | default dict }}
+        {{- include "iot-applications.validators.template" (dict "name" $templateName "template" $template "applicationName" $applicationName) }}
+        - name: {{ include "iot-applications.identifier" $ctx }}-tpl-in-{{ $templateName }}
+          configMap:
+            name: {{ include "iot-applications.identifier" $ctx }}-tpl-{{ $templateName }}
+        - name: {{ include "iot-applications.identifier" $ctx }}-tpl-out-{{ $templateName }}
+          emptyDir: {}
+        {{- end }}
+      {{- end }}
+  strategy:
+    {{- if eq $rollout.strategy "canary" }}
+    {{- $canary := $rollout.canary | default dict }}
+    canary:
+      stableService: {{ include "iot-applications.identifier" $ctx }}-{{ $canary.stableServiceRef }}
+      canaryService: {{ include "iot-applications.identifier" $ctx }}-{{ $canary.canaryServiceRef }}
+      {{- with $canary.steps }}
+      steps:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if ($canary.trafficRouting | default dict).enabled }}
+      trafficRouting:
+        plugins:
+          argoproj-labs/gatewayAPI:
+            httpRoute: {{ include "iot-applications.identifier" $ctx }}
+            namespace: {{ $.Release.Namespace }}
+      {{- end }}
+      {{- with $canary.analysis }}
+      analysis:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    {{- else if eq $rollout.strategy "blueGreen" }}
+    {{- $blueGreen := $rollout.blueGreen | default dict }}
+    blueGreen:
+      activeService: {{ include "iot-applications.identifier" $ctx }}-{{ $blueGreen.activeServiceRef }}
+      previewService: {{ include "iot-applications.identifier" $ctx }}-{{ $blueGreen.previewServiceRef }}
+      autoPromotionEnabled: {{ $blueGreen.autoPromotionEnabled | default false }}
+      {{- with $blueGreen.scaleDownDelaySeconds }}
+      scaleDownDelaySeconds: {{ . }}
+      {{- end }}
+      {{- with $blueGreen.prePromotionAnalysis }}
+      prePromotionAnalysis:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $blueGreen.postPromotionAnalysis }}
+      postPromotionAnalysis:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    {{- end }}
 {{- end }}
 {{ end }}

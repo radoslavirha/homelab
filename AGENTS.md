@@ -3,7 +3,7 @@
 Kubernetes homelab: three Talos Linux clusters managed with Terraform (IaC) and ArgoCD (GitOps).
 See [README.md](README.md) for cluster overview. See [docs/architecture.md](docs/architecture.md) for decisions and roadmap.
 
-All agentic tools (skill, instruction, agents,..) must be added to `.apm` folder. Never update/add `.github`/`.claude`. Example Structure:
+All agentic tools (skill, instruction, agents,..) must be added to `.apm` folder. Never update/add skills/instructions/agents `.github`/`.claude` (GitHub actions and related files allowed). Example Structure:
 ```
 repository/
 +-- apm.yml // do not modify

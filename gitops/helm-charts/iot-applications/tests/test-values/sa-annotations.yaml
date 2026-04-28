@@ -1,0 +1,13 @@
+apps:
+  my-app:
+    image:
+      repository: ghcr.io/example/my-app
+    labels:
+      component: api
+      partOf: iot
+    ingress:
+      enabled: false
+    serviceAccount:
+      create: true
+      annotations:
+        custom-annotation: my-value

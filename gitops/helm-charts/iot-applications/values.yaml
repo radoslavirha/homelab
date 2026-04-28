@@ -1,18 +1,32 @@
+# apps is a map of application configurations. Each key defines one application.
 # apps:
-#   # Configuration for an individual application. Multiple applications can be defined here.
 #   application:
-#     # Number of replicas. Defaults to 1 if not set.
+#     # replicas is the number of pod replicas. Defaults to 1.
 #     replicas: 1
 
 #     image:
-#       # Required. Container image repository.
+#       # image.repository is the container image repository (required).
 #       repository: your-docker-repo/your-application-image
-#       # Container image tag. Defaults to "latest" if not set.
+#       # image.tag is the container image tag. Defaults to "latest".
 #       tag: latest
-#       # Image pull policy. Defaults to "IfNotPresent" if not set.
+#       # image.pullPolicy is the image pull policy. Defaults to "IfNotPresent".
 #       # https://kubernetes.io/docs/concepts/containers/images/#image-pull-policy
 #       pullPolicy: IfNotPresent
 
+#     # imagePullSecrets is a list of image pull secrets for private registries.
+#     # https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
+#     imagePullSecrets:
+#       - name: my-registry-secret
+
+#     # serviceAccount is the Kubernetes ServiceAccount configuration for the pod.
+#     # When serviceAccount.create is true, a ServiceAccount is created and referenced automatically.
+#     # When serviceAccount.create is false, set serviceAccount.name to reference an existing one.
+#     serviceAccount:
+#       create: false
+#       name: ""
+#       annotations: {}
+
+#     # resources defines CPU and memory requests and limits.
 #     # https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
 #     resources:
 #       requests:
@@ -23,25 +37,25 @@
 #         memory: 500Mi
 
 #     labels:
-#       # Required. Used as the component label and ingress subdomain.
+#       # labels.component is used as the component label and ingress subdomain (required).
 #       component: api
-#       # Required. Used as base path for ingress (/partOf/application).
+#       # labels.partOf is used as the base path for ingress (/partOf/application) (required).
 #       partOf: iot
 
-#     # Dictionary of Kubernetes Services to create for this application.
+#     # services is a map of Kubernetes Services to create for this application.
 #     # Supports multiple protocols per pod (e.g. HTTP + UDP).
-#     # For Argo Rollouts canary/blueGreen, define service pairs here using
+#     # For Argo Rollouts canary/blueGreen, define service pairs using
 #     # the names expected by rollout.canary.stableServiceRef etc.
 #     services:
 #       # Each key becomes the service name suffix: {identifier}-{key}
 #       http:
-#         # Required. Whether to create this service.
+#         # services.http.enabled controls whether this service is created (required).
 #         enabled: true
-#         # Protocol: TCP or UDP. Defaults to TCP.
+#         # services.http.protocol is the protocol: TCP or UDP. Defaults to TCP.
 #         protocol: TCP
-#         # Service port (ClusterIP). Defaults to 80.
+#         # services.http.port is the ClusterIP service port. Defaults to 80.
 #         port: 80
-#         # Container target port. Defaults to 80.
+#         # services.http.targetPort is the container target port. Defaults to 80.
 #         targetPort: 4000
 #       udp:
 #         enabled: true
@@ -50,100 +64,157 @@
 #         targetPort: 4000
 
 #     ingress:
-#       # Required. Whether to create HTTPRoute + Middleware for this application.
+#       # ingress.enabled controls whether an HTTPRoute + Middleware are created (required).
 #       enabled: true
-#       # Which key from services dict to use as the HTTPRoute backend.
+#       # ingress.serviceRef is the key from the services map to use as the HTTPRoute backend.
 #       # Required when ingress.enabled is true.
 #       serviceRef: http
-#       # Optional. Whether to create a Traefik stripPrefix Middleware and attach it to the HTTPRoute.
-#       # Defaults to true. Set to false for UI apps that handle their own base path (e.g. nginx sub-path).
+#       # ingress.stripPrefix controls whether a Traefik stripPrefix Middleware is created and attached.
+#       # Defaults to true. Set to false for UI apps that handle their own base path.
 #       stripPrefix: false
 
-#     # Optional. Creates a Traefik IngressRouteUDP resource for UDP traffic.
+#     # udpIngress creates a Traefik IngressRouteUDP resource for UDP traffic.
 #     # Requires a matching UDP entrypoint configured in Traefik.
 #     udpIngress:
-#       # Required. Whether to create an IngressRouteUDP for this application.
+#       # udpIngress.enabled controls whether an IngressRouteUDP is created (required).
 #       enabled: true
-#       # Required when enabled. Which key from services dict to use as the UDP backend.
+#       # udpIngress.serviceRef is the key from the services map to use as the UDP backend.
+#       # Required when udpIngress.enabled is true.
 #       serviceRef: udp
-#       # Required when enabled. Name of the Traefik UDP entrypoint (must match ports in Traefik helm values).
+#       # udpIngress.entrypoint is the name of the Traefik UDP entrypoint.
+#       # Required when udpIngress.enabled is true. Must match ports in Traefik helm values.
 #       entrypoint: udp-miot-bridge
 
-#     # Dictionary of Jinja2 templates to mount into the container via initContainer.
-#     # Config content lives here (in env-specific values files) as multiline strings.
+#     # templates is a map of Jinja2 templates to mount into the container via initContainer.
+#     # Config content lives in env-specific values files as multiline strings.
 #     # Pods automatically restart when content changes (checksum annotation).
 #     templates:
 #       # Each key is the template name. Generates one ConfigMap + initContainer.
 #       config:
-#         # Required. Destination file name inside the container.
+#         # templates.config.file is the destination file name inside the container (required).
 #         file: production.json
-#         # Required. Destination path inside the container where the file is mounted.
+#         # templates.config.path is the destination path inside the container (required).
 #         # For directory mounts (APIs): path: /home/app/config  → file lands at path/file
 #         # For single-file mounts (UIs): path: /usr/share/nginx/html/config.json + subPath: config.json
 #         path: /home/app/config
-#         # Optional. When set, mounts only this file from the emptyDir instead of the whole directory.
+#         # templates.config.subPath mounts only this file from the emptyDir instead of the whole directory.
 #         # Use for UIs where the app's serving root must not be shadowed by the volume mount.
 #         # subPath: config.json
-#         # Required. Raw Jinja2 template content (defined in env-specific values files).
+#         # templates.config.content is the raw Jinja2 template content (required, defined in env-specific values files).
 #         # Injected variables: APPLICATION, COMPONENT, APPLICATION_GROUP, CONTAINER_PORT,
-#         # CONTAINER_UDP_PORT (when udpIngress is set), NAMESPACE, and any VAR_* / SECRET_* values from the values files.
+#         # CONTAINER_UDP_PORT (when udpIngress is set), NAMESPACE, and any VAR_* / SECRET_* values.
 #         content: |
 #           {
 #             "key": "{{ VAR_EXAMPLE }}"
 #           }
 
-#     # Optional. List of static environment variables injected directly into the main container.
+#     # env is a list of static environment variables injected into the main container.
 #     # Supports any valid Kubernetes env entry (value, valueFrom, secretKeyRef, etc.).
 #     env:
 #       - name: NGINX_BASE_PATH
 #         value: /my-app
 
-#     # List of Kubernetes Secret names whose keys are injected into:
+#     # podAnnotations is a map of extra annotations added to the pod template.
+#     # checksum/config is added automatically when templates are defined.
+#     podAnnotations: {}
+
+#     # podSecurityContext is the pod-level security context applied to all containers.
+#     # https://kubernetes.io/docs/tasks/configure-pod-container/security-context/
+#     podSecurityContext: {}
+#       # runAsNonRoot: true
+#       # runAsUser: 1000
+#       # fsGroup: 2000
+
+#     # containerSecurityContext is the container-level security context.
+#     containerSecurityContext: {}
+#       # allowPrivilegeEscalation: false
+#       # readOnlyRootFilesystem: true
+#       # capabilities:
+#       #   drop: [ALL]
+
+#     # livenessProbe is the liveness probe configuration. Omitted when not set.
+#     # https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
+#     livenessProbe: {}
+#       # httpGet:
+#       #   path: /health
+#       #   port: http
+#       # initialDelaySeconds: 10
+#       # periodSeconds: 30
+
+#     # readinessProbe is the readiness probe configuration. Omitted when not set.
+#     readinessProbe: {}
+#       # httpGet:
+#       #   path: /ready
+#       #   port: http
+#       # initialDelaySeconds: 5
+#       # periodSeconds: 10
+
+#     # startupProbe is the startup probe configuration. Omitted when not set.
+#     startupProbe: {}
+
+#     # strategy is the Deployment update strategy.
+#     # https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#strategy
+#     strategy: {}
+#       # type: RollingUpdate
+#       # rollingUpdate:
+#       #   maxSurge: 1
+#       #   maxUnavailable: 0
+
+#     # nodeSelector is a map of node labels for pod scheduling.
+#     nodeSelector: {}
+
+#     # tolerations is a list of tolerations for pod scheduling.
+#     tolerations: []
+
+#     # affinity is the affinity rules for pod scheduling.
+#     affinity: {}
+
+#     # secretRefs is a list of Kubernetes Secret names whose keys are injected into:
 #     #   - the Jinja2 init container as JINJA_VAR_{key} env vars (for config file rendering)
 #     #   - the main application container directly (for runtime access)
 #     # Secret keys must follow the SECRET_* naming convention (e.g. SECRET_MQTT_MIOT_BRIDGE_USERNAME).
-#     # Use the keys list to explicitly declare which keys from the Secret are injected.
+#     # Use secretRefs[].keys to explicitly declare which keys from the Secret are injected.
 #     secretRefs:
 #       - name: miot-bridge-mqtt-credentials
 #         keys:
 #           - SECRET_MQTT_MIOT_BRIDGE_USERNAME
 #           - SECRET_MQTT_MIOT_BRIDGE_PASSWORD
 
-#     # Argo Rollouts configuration. Defaults to standard Deployment when not set or enabled: false.
+#     # rollout is the Argo Rollouts configuration. Defaults to standard Deployment when not set or enabled: false.
 #     rollout:
-#       # Set to true to emit an Argo Rollout instead of a Deployment.
+#       # rollout.enabled controls whether an Argo Rollout is emitted instead of a Deployment.
 #       # Requires Argo Rollouts controller to be installed.
 #       enabled: false
-#       # Strategy: canary | blueGreen
+#       # rollout.strategy is the rollout strategy: canary | blueGreen.
 #       strategy: canary
 
-#       # Canary strategy options (used when strategy: canary).
-#       # Requires two services defined in the services dict: stable + canary.
+#       # canary is the canary strategy options (used when rollout.strategy is canary).
+#       # Requires two services defined in the services map: stable + canary.
 #       canary:
-#         # Key from services dict pointing to the stable service.
+#         # canary.stableServiceRef is the key from the services map pointing to the stable service.
 #         stableServiceRef: stable
-#         # Key from services dict pointing to the canary service.
+#         # canary.canaryServiceRef is the key from the services map pointing to the canary service.
 #         canaryServiceRef: canary
-#         # Rollout steps. See: https://argoproj.github.io/argo-rollouts/features/canary/
+#         # canary.steps is the list of rollout steps. See: https://argoproj.github.io/argo-rollouts/features/canary/
 #         steps: []
-#         # Gateway API traffic routing via argoproj-labs/gatewayAPI plugin.
+#         # canary.trafficRouting is the Gateway API traffic routing via argoproj-labs/gatewayAPI plugin.
 #         trafficRouting:
 #           enabled: false
-#         # Optional AnalysisTemplate reference for automated promotion/rollback.
+#         # canary.analysis is an optional AnalysisTemplate reference for automated promotion/rollback.
 #         analysis: {}
 
-#       # BlueGreen strategy options (used when strategy: blueGreen).
-#       # Requires two services defined in the services dict: active + preview.
+#       # blueGreen is the blueGreen strategy options (used when rollout.strategy is blueGreen).
+#       # Requires two services defined in the services map: active + preview.
 #       blueGreen:
-#         # Key from services dict pointing to the active (live) service.
+#         # blueGreen.activeServiceRef is the key from the services map pointing to the active (live) service.
 #         activeServiceRef: active
-#         # Key from services dict pointing to the preview service.
+#         # blueGreen.previewServiceRef is the key from the services map pointing to the preview service.
 #         previewServiceRef: preview
-#         # Automatically promote after all steps complete. Defaults to false (manual).
+#         # blueGreen.autoPromotionEnabled controls automatic promotion after all steps complete. Defaults to false.
 #         autoPromotionEnabled: false
-#         # Seconds to wait before scaling down the old ReplicaSet after promotion.
+#         # blueGreen.scaleDownDelaySeconds is the seconds to wait before scaling down the old ReplicaSet after promotion.
 #         scaleDownDelaySeconds: 30
-#         # Optional AnalysisTemplate run before promotion.
+#         # blueGreen.prePromotionAnalysis is an optional AnalysisTemplate run before promotion.
 #         prePromotionAnalysis: {}
-#         # Optional AnalysisTemplate run after promotion.
+#         # blueGreen.postPromotionAnalysis is an optional AnalysisTemplate run after promotion.
 #         postPromotionAnalysis: {}

@@ -1,0 +1,93 @@
+suite: httproute tests
+templates:
+  - templates/httproute.yaml
+tests:
+  - it: should create HTTPRoute when ingress is enabled
+    set:
+      VAR_PUBLIC_DOMAIN: example.com
+      apps.my-app.image.repository: ghcr.io/example/my-app
+      apps.my-app.labels.component: api
+      apps.my-app.labels.partOf: iot
+      apps.my-app.ingress.enabled: true
+      apps.my-app.ingress.serviceRef: http
+      apps.my-app.services.http.enabled: true
+      apps.my-app.services.http.port: 80
+      apps.my-app.services.http.targetPort: 4000
+    asserts:
+      - isKind:
+          of: HTTPRoute
+
+  - it: should NOT create HTTPRoute when ingress is disabled
+    set:
+      apps.my-app.image.repository: ghcr.io/example/my-app
+      apps.my-app.labels.component: api
+      apps.my-app.labels.partOf: iot
+      apps.my-app.ingress.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should use component as hostname subdomain
+    set:
+      VAR_PUBLIC_DOMAIN: example.com
+      apps.my-app.image.repository: ghcr.io/example/my-app
+      apps.my-app.labels.component: api
+      apps.my-app.labels.partOf: iot
+      apps.my-app.ingress.enabled: true
+      apps.my-app.ingress.serviceRef: http
+      apps.my-app.services.http.enabled: true
+      apps.my-app.services.http.port: 80
+      apps.my-app.services.http.targetPort: 4000
+    asserts:
+      - equal:
+          path: spec.hostnames[0]
+          value: api.example.com
+
+  - it: should prepend subdomain when VAR_SUBDOMAIN set
+    set:
+      VAR_PUBLIC_DOMAIN: example.com
+      VAR_SUBDOMAIN: staging
+      apps.my-app.image.repository: ghcr.io/example/my-app
+      apps.my-app.labels.component: api
+      apps.my-app.labels.partOf: iot
+      apps.my-app.ingress.enabled: true
+      apps.my-app.ingress.serviceRef: http
+      apps.my-app.services.http.enabled: true
+      apps.my-app.services.http.port: 80
+      apps.my-app.services.http.targetPort: 4000
+    asserts:
+      - equal:
+          path: spec.hostnames[0]
+          value: staging.api.example.com
+
+  - it: should add stripPrefix filter by default
+    set:
+      VAR_PUBLIC_DOMAIN: example.com
+      apps.my-app.image.repository: ghcr.io/example/my-app
+      apps.my-app.labels.component: api
+      apps.my-app.labels.partOf: iot
+      apps.my-app.ingress.enabled: true
+      apps.my-app.ingress.serviceRef: http
+      apps.my-app.services.http.enabled: true
+      apps.my-app.services.http.port: 80
+      apps.my-app.services.http.targetPort: 4000
+    asserts:
+      - equal:
+          path: spec.rules[0].filters[0].type
+          value: ExtensionRef
+
+  - it: should NOT add stripPrefix filter when disabled
+    set:
+      VAR_PUBLIC_DOMAIN: example.com
+      apps.my-app.image.repository: ghcr.io/example/my-app
+      apps.my-app.labels.component: api
+      apps.my-app.labels.partOf: iot
+      apps.my-app.ingress.enabled: true
+      apps.my-app.ingress.serviceRef: http
+      apps.my-app.ingress.stripPrefix: false
+      apps.my-app.services.http.enabled: true
+      apps.my-app.services.http.port: 80
+      apps.my-app.services.http.targetPort: 4000
+    asserts:
+      - isNull:
+          path: spec.rules[0].filters

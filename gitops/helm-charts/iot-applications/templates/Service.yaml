@@ -14,7 +14,7 @@ spec:
   type: ClusterIP
   selector: {{ include "iot-applications.labels.selector" $ctx | nindent 4 }}
   ports:
-    - name: {{ include "iot-applications.identifier" $ctx }}-{{ $serviceName }}
+    - name: {{ $serviceName }}
       protocol: {{ $svc.protocol | default "TCP" }}
       port: {{ $svc.port | default 80 }}
       targetPort: {{ $svc.targetPort | default 80 }}

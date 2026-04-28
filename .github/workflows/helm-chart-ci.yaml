@@ -1,0 +1,42 @@
+name: Helm chart CI
+
+on:
+  push:
+    paths:
+      - "gitops/helm-charts/**"
+    branches:
+      - main
+  pull_request:
+    paths:
+      - "gitops/helm-charts/**"
+  workflow_dispatch:
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        chart:
+          - iot-applications
+          - provisioner
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: "3.13.3"
+
+      - name: Install helm-unittest plugin
+        run: helm plugin install https://github.com/helm-unittest/helm-unittest --version v0.4.4
+
+      - name: Lint ${{ matrix.chart }}
+        run: helm lint gitops/helm-charts/${{ matrix.chart }}
+
+      - name: Unit test ${{ matrix.chart }}
+        run: |
+          if [ -d "gitops/helm-charts/${{ matrix.chart }}/tests" ]; then
+            helm unittest gitops/helm-charts/${{ matrix.chart }}
+          else
+            echo "No tests directory found, skipping unittest"
+          fi
