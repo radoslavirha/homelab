@@ -116,6 +116,10 @@ spec:
                 name: {{ $secretRef.name }}
             {{- end }}
           {{- end }}
+          {{- if $application.env | default list | len }}
+          env:
+            {{- toYaml $application.env | nindent 12 }}
+          {{- end }}
           {{- if $application.templates | default dict | len }}
           volumeMounts:
             {{- /* Add volumes with substituted config files from Jinja2 container. */}}

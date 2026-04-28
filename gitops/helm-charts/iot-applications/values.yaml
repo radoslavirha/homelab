@@ -89,6 +89,12 @@
 #             "key": "{{ VAR_EXAMPLE }}"
 #           }
 
+#     # Optional. List of static environment variables injected directly into the main container.
+#     # Supports any valid Kubernetes env entry (value, valueFrom, secretKeyRef, etc.).
+#     env:
+#       - name: NGINX_BASE_PATH
+#         value: /my-app
+
 #     # List of Kubernetes Secret names whose keys are injected into:
 #     #   - the Jinja2 init container as JINJA_VAR_{key} env vars (for config file rendering)
 #     #   - the main application container directly (for runtime access)
