@@ -18,7 +18,7 @@ apps:
         memory: 128Mi
     labels:
       component: apps
-      partOf: ""
+      partOf: iot
     services:
       http:
         enabled: true
