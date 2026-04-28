@@ -25,11 +25,13 @@ spec:
       backendRefs:
         - name: {{ include "iot-applications.identifier" $ctx }}-{{ $refSvcName }}
           port: {{ $refSvc.port | default 80 }}
+      {{- if ne ($application.ingress.stripPrefix | default true) false }}
       filters:
         - type: ExtensionRef
           extensionRef:
             group: traefik.io
             kind: Middleware
             name: {{ include "iot-applications.identifier" $ctx }}-middleware-stripprefix
+      {{- end }}
 {{ end }}
 {{ end }}

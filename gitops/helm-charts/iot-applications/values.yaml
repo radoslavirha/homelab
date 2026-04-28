@@ -55,6 +55,9 @@
 #       # Which key from services dict to use as the HTTPRoute backend.
 #       # Required when ingress.enabled is true.
 #       serviceRef: http
+#       # Optional. Whether to create a Traefik stripPrefix Middleware and attach it to the HTTPRoute.
+#       # Defaults to true. Set to false for UI apps that handle their own base path (e.g. nginx sub-path).
+#       stripPrefix: false
 
 #     # Optional. Creates a Traefik IngressRouteUDP resource for UDP traffic.
 #     # Requires a matching UDP entrypoint configured in Traefik.

@@ -29,6 +29,7 @@ apps:
       enabled: true
       serviceRef: http
       pathName: qr-manager
+      stripPrefix: false
     env:
       - name: NGINX_BASE_PATH
         value: /qr-manager

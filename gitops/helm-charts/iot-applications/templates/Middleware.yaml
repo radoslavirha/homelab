@@ -3,6 +3,7 @@
 {{- if $application.ingress.enabled }}
 {{- $ctx := dict "application" $application "name" $applicationName "release" $.Release "chart" $.Chart -}}
 {{- $pathName := $application.ingress.pathName | default $applicationName -}}
+{{- if ne ($application.ingress.stripPrefix | default true) false }}
 ---
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
@@ -13,5 +14,6 @@ spec:
   stripPrefix:
     prefixes:
       - /{{ $pathName }}
+{{- end }}
 {{ end }}
 {{ end }}
