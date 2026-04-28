@@ -25,7 +25,8 @@ spec:
       backendRefs:
         - name: {{ include "iot-applications.identifier" $ctx }}-{{ $refSvcName }}
           port: {{ $refSvc.port | default 80 }}
-      {{- if ne ($application.ingress.stripPrefix | default true) false }}
+      {{- $stripPrefix := dig "stripPrefix" true ($application.ingress | default dict) -}}
+      {{- if $stripPrefix }}
       filters:
         - type: ExtensionRef
           extensionRef:
