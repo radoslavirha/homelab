@@ -6,7 +6,7 @@ apps:
   interactive-map-feeder-api:
     image:
       repository: ghcr.io/radoslavirha/interactive-map-feeder-api
-      tag: "0.6.0"
+      tag: "0.7.0"
       pullPolicy: Always
     replicas: 2
     resources:
