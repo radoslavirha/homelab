@@ -13,7 +13,7 @@ apps:
               "server": {
                   "httpPort": {{ CONTAINER_PORT }}
               },
-              "publicURL": "{{ VAR_PROTOCOL }}://{{ VAR_SUBDOMAIN }}.{{ COMPONENT }}.{{ VAR_PUBLIC_DOMAIN }}/{{ APPLICATION_GROUP }}/{{ PATH_NAME }}",
+              "publicURL": "{{ VAR_PROTOCOL }}://{{ VAR_SUBDOMAIN }}.{{ COMPONENT }}.{{ VAR_PUBLIC_DOMAIN }}/{{ PATH_NAME }}",
               "logger": {
                   "enabled": true,
                   "level": "info"

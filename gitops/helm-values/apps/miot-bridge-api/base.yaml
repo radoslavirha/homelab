@@ -32,7 +32,7 @@ apps:
     ingress:
       enabled: true
       serviceRef: http
-      pathName: miot-bridge
+      pathName: iot/miot-bridge
     udpIngress:
       enabled: true
       serviceRef: udp

@@ -28,7 +28,7 @@ apps:
     ingress:
       enabled: true
       serviceRef: http
-      pathName: interactive-map-feeder
+      pathName: iot/interactive-map-feeder
     templates:
       config:
         file: production.json

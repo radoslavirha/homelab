@@ -27,7 +27,7 @@ apps:
     ingress:
       enabled: true
       serviceRef: http
-      pathName: qr-manager
+      pathName: iot/qr-manager
     secretRefs:
       - name: qr-manager-api-mongodb-credentials
         keys:

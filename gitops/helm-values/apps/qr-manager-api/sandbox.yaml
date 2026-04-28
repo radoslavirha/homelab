@@ -13,7 +13,7 @@ apps:
                   "httpPort": {{ CONTAINER_PORT }}
               },
               "redirect": {
-                  "baseURL": "{{ VAR_PROTOCOL }}://{{ VAR_SUBDOMAIN }}.{{ COMPONENT }}.{{ VAR_PUBLIC_DOMAIN }}/{{ APPLICATION_GROUP }}/{{ PATH_NAME }}"
+                  "baseURL": "{{ VAR_PROTOCOL }}://{{ VAR_SUBDOMAIN }}.{{ COMPONENT }}.{{ VAR_PUBLIC_DOMAIN }}/{{ PATH_NAME }}"
               },
               "mongodb": {
                   "enabled": true,
