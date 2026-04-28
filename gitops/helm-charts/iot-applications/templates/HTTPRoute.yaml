@@ -21,7 +21,7 @@ spec:
     - matches:
         - path:
             type: PathPrefix
-            value: /{{ $application.labels.partOf }}/{{ $pathName }}
+            value: /{{- if $application.labels.partOf }}{{ $application.labels.partOf }}/{{ end }}{{ $pathName }}
       backendRefs:
         - name: {{ include "iot-applications.identifier" $ctx }}-{{ $refSvcName }}
           port: {{ $refSvc.port | default 80 }}

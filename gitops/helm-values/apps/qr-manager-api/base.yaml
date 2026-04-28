@@ -1,0 +1,41 @@
+# qr-manager-api — shared base values
+# Env-specific: image.tag, templates.config.content → production.yaml / sandbox.yaml
+
+apps:
+  qr-manager-api:
+    image:
+      repository: ghcr.io/radoslavirha/qr-manager-api
+      tag: "0.2.1"
+      pullPolicy: Always
+    replicas: 1
+    resources:
+      requests:
+        cpu: 250m
+        memory: 250Mi
+      limits:
+        cpu: 500m
+        memory: 500Mi
+    labels:
+      component: api
+      partOf: iot
+    services:
+      http:
+        enabled: true
+        protocol: TCP
+        port: 80
+        targetPort: 4000
+    ingress:
+      enabled: true
+      serviceRef: http
+      pathName: qr-manager
+    secretRefs:
+      - name: qr-manager-api-mongodb-credentials
+        keys:
+          - SECRET_MONGODB_DATABASE
+          - SECRET_MONGODB_USERNAME
+          - SECRET_MONGODB_PASSWORD
+    templates:
+      config:
+        file: production.json
+        path: /home/app/config
+        # content defined per-env

@@ -3,6 +3,19 @@
 Kubernetes homelab: three Talos Linux clusters managed with Terraform (IaC) and ArgoCD (GitOps).
 See [README.md](README.md) for cluster overview. See [docs/architecture.md](docs/architecture.md) for decisions and roadmap.
 
+All agentic tools (skill, instruction, agents,..) must be added to `.apm` folder. Never update/add `.github`/`.claude`. Example Structure:
+```
+repository/
++-- apm.yml // do not modify
++-- .apm/
+|   +-- skills/
+|   |   +-- example-skill/
+|   |       +-- SKILL.md
+|   +-- agents/
+|   |   +-- example.agent.md
+|   +-- instructions/
+```
+
 ## Repository layout
 
 ```
@@ -44,6 +57,8 @@ gitops/
       otel-collector/       base.yaml, production.yaml, sandbox.yaml
       miot-bridge-api/  base.yaml, production.yaml, sandbox.yaml
       interactive-map-feeder-api/ base.yaml, production.yaml, sandbox.yaml
+      qr-manager-api/   base.yaml, production.yaml, sandbox.yaml
+      qr-manager-ui/    base.yaml, production.yaml, sandbox.yaml
     server2/
       apps/
         common/             production.yaml, sandbox.yaml (shared VAR_* for all apps in each namespace)
@@ -87,7 +102,7 @@ gitops/
       iot/         InfluxDB2 (AppSet), EMQX (AppSet), Telegraf (AppSet), IotInfra (AppSet, sync-wave: -1)
       databases/   MongoDB (AppSet)
       dashboards/  Headlamp (AppSet), Hubble (AppSet), Longhorn (AppSet)
-      apps/        AppsOTelCollector (AppSet), MiotBridgeApiIot (AppSet), InteractiveMapFeederApiIot (AppSet)
+      apps/        AppsOTelCollector (AppSet), MiotBridgeApi (AppSet), InteractiveMapFeederApi (AppSet), QrManagerApi (AppSet), QrManagerUi (AppSet)
     server3/
       apps/
         dashboards/ OpenBao.yaml   App: vault.server3.home HTTPRoute
@@ -104,6 +119,7 @@ gitops/
       longhorn/    HTTPRoute: longhorn.server2.home → longhorn-frontend:80
       mongodb/     ExternalSecret, IngressRouteTCP, ExternalSecret.provisioner-token.yaml
       miot-bridge-api/ production/ and sandbox/ — ExternalSecret.mqtt.yaml, ExternalSecret.mongodb.yaml
+      qr-manager-api/ production/ and sandbox/ — ExternalSecret.mongodb.yaml
       otel-gateway/ ExternalSecret.otel-auth-token.yaml (shared OTLP bearer token pulled from secret/otel-gateway/auth-token)
     server3/
       cilium/              HTTPRoute: hubble.server3.home → hubble-dashboard:80
@@ -152,7 +168,7 @@ All other apps use the **app-of-apps + ApplicationSet** pattern with seven stage
 - **iot** stage: InfluxDB2 (server2), EMQX (server2), Telegraf (server2), IotInfra (server2)
 - **databases** stage: MongoDB (server2)
 - **dashboards** stage: Headlamp, Hubble UI, Longhorn UI (server3 · server2); server3-only OpenBao HTTPRoute under `server3/apps/dashboards/`
-- **apps** stage: custom apps — miot-bridge-api, interactive-map-feeder-api, per-namespace OTel collectors
+- **apps** stage: custom apps — miot-bridge-api, interactive-map-feeder-api, qr-manager-api, qr-manager-ui, per-namespace OTel collectors
 
 Bootstrap is **two manual kubectl applies** on server3:
 

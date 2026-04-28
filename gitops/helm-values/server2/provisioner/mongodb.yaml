@@ -31,3 +31,25 @@ mongodb:
           baoDatabaseKey: mongodb-database
           baoUsernameKey: mongodb-username
           baoPasswordKey: mongodb-password
+
+    qr-manager-production:
+      syncWave: "0"
+      databases:
+        - name: qr-manager-production
+          dbUser: qr-manager-production
+          role: dbOwner
+          baoPath: production/qr-manager-api-mongodb
+          baoDatabaseKey: mongodb-database
+          baoUsernameKey: mongodb-username
+          baoPasswordKey: mongodb-password
+
+    qr-manager-sandbox:
+      syncWave: "0"
+      databases:
+        - name: qr-manager-sandbox
+          dbUser: qr-manager-sandbox
+          role: dbOwner
+          baoPath: sandbox/qr-manager-api-mongodb
+          baoDatabaseKey: mongodb-database
+          baoUsernameKey: mongodb-username
+          baoPasswordKey: mongodb-password

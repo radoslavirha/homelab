@@ -1,0 +1,51 @@
+# qr-manager-api — sandbox overrides
+
+apps:
+  qr-manager-api:
+    image:
+      tag: "0.2.1"
+    templates:
+      config:
+        content: |
+          {
+              "serviceName": "{{ APPLICATION }}",
+              "server": {
+                  "httpPort": {{ CONTAINER_PORT }}
+              },
+              "redirect": {
+                  "baseURL": "{{ VAR_PROTOCOL }}://{{ VAR_SUBDOMAIN }}.{{ COMPONENT }}.{{ VAR_PUBLIC_DOMAIN }}/{{ APPLICATION_GROUP }}/{{ PATH_NAME }}"
+              },
+              "mongodb": {
+                  "enabled": true,
+                  "url": "{{ VAR_MONGODB_URL }}/{{ SECRET_MONGODB_DATABASE }}",
+                  "connectionOptions": {
+                      "user": "{{ SECRET_MONGODB_USERNAME }}",
+                      "pass": "{{ SECRET_MONGODB_PASSWORD }}"
+                  }
+              },
+              "logger": {
+                  "enabled": true,
+                  "level": "info"
+              },
+              "otel": {
+                  "debug": true,
+                  "metrics": {
+                      "enabled": true,
+                      "exporter": {
+                          "url": "http://otel-collector-opentelemetry-collector:4318/v1/metrics"
+                      }
+                  },
+                  "traces": {
+                      "enabled": true,
+                      "exporter": {
+                          "url": "http://otel-collector-opentelemetry-collector:4318/v1/traces"
+                      }
+                  },
+                  "logs": {
+                      "enabled": true,
+                      "exporter": {
+                          "url": "http://otel-collector-opentelemetry-collector:4318/v1/logs"
+                      }
+                  }
+              }
+          }

@@ -122,7 +122,10 @@ spec:
             {{- range $templateName, $template := $application.templates | default dict }}
             {{- include "iot-applications.validators.template" (dict "name" $templateName "template" $template "applicationName" $applicationName) }}
             - name: {{ include "iot-applications.identifier" $ctx }}-tpl-out-{{ $templateName }}
-              mountPath: {{ $template.path }}
+              mountPath: {{ if $template.subPath }}{{ $template.path }}/{{ $template.subPath }}{{ else }}{{ $template.path }}{{ end }}
+              {{- if $template.subPath }}
+              subPath: {{ $template.subPath }}
+              {{- end }}
             {{- end }}
           {{- end }}
       {{- if $application.templates | default dict | len }}

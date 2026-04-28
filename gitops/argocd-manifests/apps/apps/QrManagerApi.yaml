@@ -1,0 +1,52 @@
+# qr-manager-api — ApplicationSet (server2 × production + sandbox)
+# Chart: gitops/helm-charts/iot-applications/ (path-based, no publishing)
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: qr-manager-api
+  namespace: argocd
+spec:
+  generators:
+    - matrix:
+        generators:
+          - list:
+              elements:
+                - cluster: server2
+                  clusterServer: https://192.168.1.201:6443
+          - list:
+              elements:
+                - env: production
+                - env: sandbox
+  template:
+    metadata:
+      name: qr-manager-api-{{cluster}}-{{env}}
+    spec:
+      project: default
+      sources:
+        - repoURL: https://github.com/radoslavirha/homelab
+          targetRevision: HEAD
+          path: gitops/helm-charts/iot-applications
+          helm:
+            releaseName: qr-manager-api
+            valueFiles:
+              - $values/gitops/helm-values/apps/qr-manager-api/base.yaml
+              - $values/gitops/helm-values/apps/qr-manager-api/{{env}}.yaml
+              - $values/gitops/helm-values/apps/common/values.yaml
+              - $values/gitops/helm-values/apps/common/{{env}}.yaml
+              - $values/gitops/helm-values/{{cluster}}/apps/common/values.yaml
+              - $values/gitops/helm-values/{{cluster}}/apps/common/{{env}}.yaml
+        - repoURL: https://github.com/radoslavirha/homelab
+          targetRevision: HEAD
+          ref: values
+        - repoURL: https://github.com/radoslavirha/homelab
+          targetRevision: HEAD
+          path: gitops/k8s-manifests/{{cluster}}/qr-manager-api/{{env}}
+      destination:
+        server: '{{clusterServer}}'
+        namespace: '{{env}}'
+      syncPolicy:
+        syncOptions:
+          - CreateNamespace=true
+        automated:
+          selfHeal: true
+          prune: true

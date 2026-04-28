@@ -1,0 +1,13 @@
+# qr-manager-ui — sandbox overrides
+
+apps:
+  qr-manager-ui:
+    image:
+      tag: "0.2.1"
+    templates:
+      config:
+        content: |
+          {
+              "apiBaseURL": "{{ VAR_PROTOCOL }}://{{ VAR_SUBDOMAIN }}.api.{{ VAR_PUBLIC_DOMAIN }}/iot/qr-manager",
+              "basePath": "/qr-manager"
+          }

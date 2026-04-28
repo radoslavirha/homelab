@@ -39,8 +39,10 @@ For each app in `gitops/argocd-manifests/apps/apps/` (skip `AppsOTelCollector`):
 Source: `gitops/helm-values/apps/<app>/base.yaml` (image, component label, pathName), `gitops/helm-values/server2/apps/common/values.yaml` (`VAR_PUBLIC_DOMAIN`)
 
 URL pattern:
-- Production: `http://<component>.<VAR_PUBLIC_DOMAIN>/iot/<pathName>`
-- Sandbox: `http://sandbox.<component>.<VAR_PUBLIC_DOMAIN>/iot/<pathName>`
+- Production: `http://<component>.<VAR_PUBLIC_DOMAIN>/<partOf>/<pathName>` (when partOf non-empty, e.g. `iot`)
+- Production: `http://<component>.<VAR_PUBLIC_DOMAIN>/<pathName>` (when partOf is empty)
+- Sandbox: `http://sandbox.<component>.<VAR_PUBLIC_DOMAIN>/<partOf>/<pathName>` (when partOf non-empty)
+- Sandbox: `http://sandbox.<component>.<VAR_PUBLIC_DOMAIN>/<pathName>` (when partOf is empty)
 - UDP (if `udpIngress` present): `<externalIP>:<port>` from `gitops/helm-values/server2/traefik.yaml` ports
 
 ## Procedure

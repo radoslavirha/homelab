@@ -54,11 +54,29 @@ tags: [homelab, iot]
 | Image | radoslavirha/interactive-map-feeder:<tag> |
 | Production HTTP | http://api.server2.home/iot/interactive-map-feeder |
 | Sandbox HTTP | http://sandbox.api.server2.home/iot/interactive-map-feeder |
+
+### qr-manager-api
+
+| | |
+|-|-|
+| Image | ghcr.io/radoslavirha/qr-manager-api:<tag> |
+| Production HTTP | http://api.server2.home/iot/qr-manager |
+| Sandbox HTTP | http://sandbox.api.server2.home/iot/qr-manager |
+| Short URL | http://qr.home (→ production) |
+
+### qr-manager-ui
+
+| | |
+|-|-|
+| Image | ghcr.io/radoslavirha/qr-manager-ui:<tag> |
+| Production HTTP | http://apps.server2.home/qr-manager |
+| Sandbox HTTP | http://sandbox.apps.server2.home/qr-manager |
 ```
 
 ## Notes on Populating
 
 - `<tag>` — read from `image.tag` in `gitops/helm-values/apps/<app>/base.yaml`
+- URL path: `/<partOf>/<pathName>` when `partOf` non-empty; `/<pathName>` when `partOf` is empty
 - If new API added: add section under "Custom APIs", same table format
 - If hostname/IP changed: update the affected row
 - Omit sandbox rows if app has no sandbox variant

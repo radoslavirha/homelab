@@ -301,6 +301,29 @@ Unlike InfluxDB2/EMQX/MongoDB root credentials, `miot-bridge-api` credentials ar
 
 ---
 
+## qr-manager-api
+
+`qr-manager-api` needs scoped MongoDB credentials. Provisioned by a PostSync Job and written to OpenBao. ExternalSecret in the `production` and `sandbox` namespaces then pulls them.
+
+OpenBao KV layout:
+
+- `secret/server2/production/qr-manager-api-mongodb` → `mongodb-database`, `mongodb-username`, `mongodb-password`
+- `secret/server2/sandbox/qr-manager-api-mongodb` → `mongodb-database`, `mongodb-username`, `mongodb-password`
+
+### MongoDB database + user (PostSync Job)
+
+Declared in [`gitops/helm-values/server2/provisioner/mongodb.yaml`](../gitops/helm-values/server2/provisioner/mongodb.yaml) under `mongodb.jobs.qr-manager-production` and `mongodb.jobs.qr-manager-sandbox`. Runs in `mongodb` namespace:
+
+1. Checks if `mongodb-password` already exists in `secret/server2/{env}/qr-manager-api-mongodb` → skip if yes
+2. Generates a random 24-char password, creates (or rotates) MongoDB user `qr-manager-{env}` in database `qr-manager-{env}`
+3. Writes `mongodb-database` + `mongodb-username` + `mongodb-password` to OpenBao at `secret/server2/{env}/qr-manager-api-mongodb`
+
+### No manual seeding required
+
+`qr-manager-api` MongoDB credentials are **entirely auto-generated** by the provisioner Jobs. No `bao kv put` step is needed for these paths.
+
+---
+
 ## Adding a new consumer app: checklist
 
 1. **Provisioner values** — add a job entry to `gitops/helm-values/<cluster>/provisioner/{influxdb2,emqx,mongodb}.yaml` for each resource the app needs. No new Job YAML file required.

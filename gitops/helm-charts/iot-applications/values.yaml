@@ -75,7 +75,12 @@
 #         # Required. Destination file name inside the container.
 #         file: production.json
 #         # Required. Destination path inside the container where the file is mounted.
+#         # For directory mounts (APIs): path: /home/app/config  → file lands at path/file
+#         # For single-file mounts (UIs): path: /usr/share/nginx/html/config.json + subPath: config.json
 #         path: /home/app/config
+#         # Optional. When set, mounts only this file from the emptyDir instead of the whole directory.
+#         # Use for UIs where the app's serving root must not be shadowed by the volume mount.
+#         # subPath: config.json
 #         # Required. Raw Jinja2 template content (defined in env-specific values files).
 #         # Injected variables: APPLICATION, COMPONENT, APPLICATION_GROUP, CONTAINER_PORT,
 #         # CONTAINER_UDP_PORT (when udpIngress is set), NAMESPACE, and any VAR_* / SECRET_* values from the values files.

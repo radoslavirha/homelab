@@ -1,0 +1,37 @@
+# qr-manager-ui — shared base values
+# Env-specific: image.tag, templates.config.content → production.yaml / sandbox.yaml
+# No secretRefs (no secrets needed), no udpIngress, no cluster-specific overrides.
+
+apps:
+  qr-manager-ui:
+    image:
+      repository: ghcr.io/radoslavirha/qr-manager-ui
+      tag: "0.2.1"
+      pullPolicy: Always
+    replicas: 1
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
+    labels:
+      component: apps
+      partOf: ""
+    services:
+      http:
+        enabled: true
+        protocol: TCP
+        port: 80
+        targetPort: 80
+    ingress:
+      enabled: true
+      serviceRef: http
+      pathName: qr-manager
+    templates:
+      config:
+        file: config.json
+        path: /usr/share/nginx/html
+        subPath: config.json
+        # content defined per-env
