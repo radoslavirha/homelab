@@ -106,7 +106,7 @@
 
 {{/* Returns object identifier composed of component, partOf, and name */}}
 {{- define "iot-applications.identifier" -}}
-{{- $identifier := printf "%s-%s-%s" .application.labels.component .application.labels.partOf .name }}
+{{- $identifier := ternary (printf "%s-%s" .application.labels.component .name) (printf "%s-%s-%s" .application.labels.component .application.labels.partOf .name) (empty .application.labels.partOf) }}
 {{- $identifier | trunc 63 | trimSuffix "-" -}}
 {{- end -}}
 

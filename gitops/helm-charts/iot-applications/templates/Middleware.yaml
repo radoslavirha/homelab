@@ -12,6 +12,6 @@ metadata:
 spec:
   stripPrefix:
     prefixes:
-      - /{{ $application.labels.partOf }}/{{ $pathName }}
+      - /{{- if $application.labels.partOf }}{{ $application.labels.partOf }}/{{ end }}{{ $pathName }}
 {{ end }}
 {{ end }}
