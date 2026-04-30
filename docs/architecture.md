@@ -42,6 +42,18 @@ Multi-cluster Kubernetes homelab: three Talos Linux nodes managed with a shared 
 | [Tempo](https://grafana.com/oss/tempo/) | Distributed tracing backend; OTLP gRPC/HTTP receiver | server3 | ArgoCD `observability` | [tempo](https://artifacthub.io/packages/helm/grafana-community/tempo) | [shared](../gitops/helm-values/tempo.yaml) | [values.yaml](https://github.com/grafana-community/helm-charts/blob/main/charts/tempo/values.yaml) |
 | [OpenTelemetry Collector](https://opentelemetry.io/docs/collector/) | OTLP gateway; server3: fan-out to Prometheus/Loki/Tempo; server2: forwarder → server3 | server3 · server2 | ArgoCD `observability` (AppSet) | [opentelemetry-collector](https://artifacthub.io/packages/helm/opentelemetry-helm-charts/opentelemetry-collector) | [shared](../gitops/helm-values/otel-gateway.yaml) · [server3](../gitops/helm-values/server3/otel-gateway.yaml) · [server2](../gitops/helm-values/server2/otel-gateway.yaml) | [values.yaml](https://github.com/open-telemetry/opentelemetry-helm-charts/blob/main/charts/opentelemetry-collector/values.yaml) |
 
+## ServiceAccounts
+
+Each backend API has a dedicated Kubernetes ServiceAccount (preparation for future API-to-API authentication with projected tokens, mTLS, or gRPC):
+
+| Service | ServiceAccount Name | Environment | Namespace | Scope |
+|---------|-------------------|-------------|-----------|-------|
+| miot-bridge-api | `api-iot-miot-bridge-api` | production / sandbox | `production` / `sandbox` | server2; receives MQTT messages and stores in MongoDB |
+| interactive-map-feeder-api | `api-iot-interactive-map-feeder-api` | production / sandbox | `production` / `sandbox` | server2; feeds map state from external sources |
+| qr-manager-api | `api-iot-qr-manager-api` | production / sandbox | `production` / `sandbox` | server2; manages QR code shortcuts and stores in MongoDB |
+
+All ServiceAccounts have `automountServiceAccountToken: false` — tokens are not auto-mounted. When API-to-API communication is enabled, projected tokens will be mounted on-demand via the Deployment spec.
+
 ## Multi-cluster design decisions
 
 ### Why Terraform for bootstrap + platform + ArgoCD install (server3 only)?

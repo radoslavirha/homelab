@@ -8,6 +8,9 @@ apps:
       tag: "0.2.1"
       pullPolicy: Always
     replicas: 1
+    serviceAccount:
+      create: true
+      automountServiceAccountToken: false
     resources:
       requests:
         cpu: 250m
