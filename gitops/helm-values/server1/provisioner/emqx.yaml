@@ -1,0 +1,38 @@
+global:
+  cluster: server1
+  baoHost: "http://vault.server3.home"
+  baoTokenSecret: openbao-provision-token
+
+emqx:
+  host: "http://emqx.iot.svc.cluster.local:18083"
+  credentialsSecret: emqx-credentials
+  credentialsUsernameKey: EMQX_DASHBOARD__DEFAULT_USERNAME
+  credentialsPasswordKey: EMQX_DASHBOARD__DEFAULT_PASSWORD
+
+  jobs:
+    telegraf:
+      syncWave: "0"
+      users:
+        - mqttUsername: telegraf
+          baoPath: telegraf-mqtt
+          baoUsernameKey: username
+          baoPasswordKey: password
+          idempotencyStrategy: api-check
+
+    miot-bridge-production:
+      syncWave: "0"
+      users:
+        - mqttUsername: miot-bridge-production
+          baoPath: production/miot-bridge-api-emqx
+          baoUsernameKey: mqtt-username
+          baoPasswordKey: mqtt-password
+          idempotencyStrategy: bao-check
+
+    miot-bridge-sandbox:
+      syncWave: "0"
+      users:
+        - mqttUsername: miot-bridge-sandbox
+          baoPath: sandbox/miot-bridge-api-emqx
+          baoUsernameKey: mqtt-username
+          baoPasswordKey: mqtt-password
+          idempotencyStrategy: bao-check
