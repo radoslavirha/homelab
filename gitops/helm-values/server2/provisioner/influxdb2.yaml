@@ -31,7 +31,7 @@ influxdb2:
           readBuckets:
             - loxone
             - loxone_downsample
-          baoPath: influxdb2-grafana
+          baoPath: server2-influxdb2-grafana
           baoCluster: server3
           baoKey: token
 
