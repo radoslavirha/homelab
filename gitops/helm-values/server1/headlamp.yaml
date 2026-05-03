@@ -1,4 +1,4 @@
-# Headlamp — server2 cluster overrides
+# Headlamp —  cluster overrides
 # Shared base values: gitops/helm-values/headlamp.yaml
 
 httpRoute:

@@ -1,0 +1,55 @@
+global:
+  cluster: server1
+  baoHost: "http://vault.server3.home"
+  baoTokenSecret: openbao-provision-token
+
+mongodb:
+  host: "mongodb.mongodb.svc.cluster.local:27017"
+  adminAuthSource: admin
+  rootPasswordSecret: mongodb
+  rootPasswordKey: mongodb-root-password
+
+  jobs:
+    miot-bridge-production:
+      syncWave: "0"
+      databases:
+        - name: miot-bridge-production
+          dbUser: miot-bridge-production
+          role: dbOwner
+          baoPath: production/miot-bridge-api-mongodb
+          baoDatabaseKey: mongodb-database
+          baoUsernameKey: mongodb-username
+          baoPasswordKey: mongodb-password
+
+    miot-bridge-sandbox:
+      syncWave: "0"
+      databases:
+        - name: miot-bridge-sandbox
+          dbUser: miot-bridge-sandbox
+          role: dbOwner
+          baoPath: sandbox/miot-bridge-api-mongodb
+          baoDatabaseKey: mongodb-database
+          baoUsernameKey: mongodb-username
+          baoPasswordKey: mongodb-password
+
+    qr-manager-production:
+      syncWave: "0"
+      databases:
+        - name: qr-manager-production
+          dbUser: qr-manager-production
+          role: dbOwner
+          baoPath: production/qr-manager-api-mongodb
+          baoDatabaseKey: mongodb-database
+          baoUsernameKey: mongodb-username
+          baoPasswordKey: mongodb-password
+
+    qr-manager-sandbox:
+      syncWave: "0"
+      databases:
+        - name: qr-manager-sandbox
+          dbUser: qr-manager-sandbox
+          role: dbOwner
+          baoPath: sandbox/qr-manager-api-mongodb
+          baoDatabaseKey: mongodb-database
+          baoUsernameKey: mongodb-username
+          baoPasswordKey: mongodb-password
