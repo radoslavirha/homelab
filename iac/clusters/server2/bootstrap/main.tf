@@ -51,7 +51,7 @@ module "bootstrap" {
   # ── OS install disk ────────────────────────────────────────────────────────
   # Discovery: talosctl get disks -n 192.168.1.201 --insecure
   # SK hynix BC501 HFM256GDJTNG-8310A (ND88N747210509206)
-  install_disk_selector = { wwid = "eui.ace42e8170382260" }  # TODO: pin to specific disk wwid
+  install_disk_selector = { wwid = "eui.ace42e8170382260" }
 
   # ── Longhorn data disks ────────────────────────────────────────────────────
   # KINGSTON SHFS37A — dedicated SATA SSD mounted at /var/lib/longhorn

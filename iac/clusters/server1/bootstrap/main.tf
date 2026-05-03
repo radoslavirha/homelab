@@ -50,12 +50,14 @@ module "bootstrap" {
 
   # ── OS install disk ────────────────────────────────────────────────────────
   # Discovery: talosctl get disks -n 192.168.1.200 --insecure
-  install_disk_selector = { type = "nvme" }  # TODO: pin to specific disk wwid
+  # SK hynix BC501 HFM256GDJTNG-8310A
+  install_disk_selector = { wwid = "eui.ace42e81750c78a0" }
 
   # ── Longhorn data disks ────────────────────────────────────────────────────
-  # longhorn_disks  = {
-  #   "192.168.1.200" = "/dev/disk/by-id/XXX"
-  # }
+  # Micron MTFDDAK25 — dedicated SATA SSD mounted at /var/lib/longhorn
+  longhorn_disks  = {
+    "192.168.1.200" = "/dev/disk/by-id/wwn-0x500a0751265f9efe"
+  }
 
   # ── Credentials output ─────────────────────────────────────────────────────
   credentials_dir = "${path.root}/../credentials"

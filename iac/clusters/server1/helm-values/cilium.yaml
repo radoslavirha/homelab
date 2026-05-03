@@ -1,4 +1,3 @@
 # Cilium CNI — server1 cluster overrides
 # Base values are defined in iac/clusters/helm-values/cilium.yaml
-# TODO: Primary interface — talosctl get links -n 192.168.1.201
 devices: "eno1"

@@ -252,7 +252,7 @@ bao kv list secret/<cluster>
 # Log in to server3 ArgoCD first (required by `argocd cluster add`).
 # Admin password was seeded in OpenBao at secret/server3/argocd (bcrypt hash) during
 # server3 step 4; use the plaintext value you hashed.
-argocd login argocd.server3.home --username admin --password <plaintext-admin-password>
+argocd login argocd.server3.home --username admin --password <plaintext-admin-password> --grpc-web --insecure --plaintext
 
 argocd cluster add <context-name> --name <cluster>
 argocd cluster list   # note the SERVER URL for step 6

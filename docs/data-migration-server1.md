@@ -1,283 +1,180 @@
 # Data Migration from Old Server1
 
-Migrate InfluxDB and MongoDB data from the old standalone Debian server1 to the new Kubernetes-managed services on server2.
+Migrate InfluxDB2 and MongoDB data from the old server1 Kubernetes cluster (Debian) to the new server1 Kubernetes cluster (Talos Linux).
 
-**Source:** old server1 (Debian, SSH accessible)  
-**Target:** server2 Kubernetes cluster — InfluxDB2 in `iot` namespace, MongoDB in `mongodb` namespace  
-**Access to target:** `kubectl port-forward` (no SSH to Talos nodes)
+**Source:** old server1 — Kubernetes on Debian, InfluxDB2 in `monitoring` namespace, MongoDB in `mongodb` namespace  
+**Target:** new server1 — Kubernetes on Talos Linux, InfluxDB2 in `iot` namespace, MongoDB in `mongodb` namespace  
+**Access:** `kubectl port-forward` on both ends — all commands run from your Mac
 
 ## Scope
 
 | Service | Migrate | Skip |
 |---------|---------|------|
-| InfluxDB — bucket `loxone` | yes | — |
-| InfluxDB — bucket `loxone_downsample` | yes | — |
-| InfluxDB — tokens, users | **no** | provisioner creates these |
+| InfluxDB2 — bucket `loxone` | yes | — |
+| InfluxDB2 — bucket `loxone_downsample` | yes | — |
+| InfluxDB2 — tokens, users | **no** | provisioner creates these |
 | MongoDB — `miot-bridge` data | yes | — |
 | MongoDB — `miot-bridge-sandbox` data | yes | — |
 | MongoDB — users, credentials | **no** | provisioner creates these |
 
-> **Prerequisite:** Run this migration **after** the IoT and Databases ArgoCD stages have synced and the provisioner Jobs have completed. The provisioner creates the target buckets (`loxone`, `loxone_downsample`) and target databases (`miot-bridge-production`, `miot-bridge-sandbox`) before data is imported.
-
----
+> **Important:** The migration is split into two phases separated by the OS swap:
+> - **Phase 1 (before wipe):** export data from the old cluster while it is still running
+> - **Phase 2 (after new cluster is ready):** import into the new Talos cluster once ArgoCD + provisioner have completed
 
 ## Prerequisites
 
-Local machine needs:
-
 ```bash
-# kubectl + kubeconfig for server2
-export KUBECONFIG=iac/clusters/server2/credentials/kubeconfig
+# Path to old kubeconfig (new cluster kubeconfig available after Talos bootstrap)
+OLD_KC=~/.kube/old-server1-kubeconfig           # your old Debian k8s kubeconfig
 
-# influx CLI (for InfluxDB2 import)
-# https://docs.influxdata.com/influxdb/v2/tools/influx-cli/
+# influx CLI — must match source InfluxDB2 version (2.7)
+brew install influxdb-cli
+influx version   # should show 2.7.x
 
 # mongodump / mongorestore
-brew install mongodb-database-tools   # macOS
+brew install mongodb-database-tools
 ```
 
 ---
 
-## Step 0: Check source versions
+## Phase 1: Export from old cluster (before OS swap)
 
-SSH into old server1 and check versions:
+Do this while the old Debian cluster is still running. Keep the port-forwards open until all exports are done.
 
-```bash
-ssh old-server1
-
-# InfluxDB version
-influxd version
-# or: influx version
-
-# MongoDB version
-mongod --version
-```
-
-> The steps below cover both InfluxDB **v1.x** and **v2.x** sources. Follow the section that matches.
-
----
-
-## Step 1: Retrieve target credentials
-
-Get the admin credentials from OpenBao before starting:
+### Step 1: Retrieve old credentials
 
 ```bash
 # InfluxDB2 admin token
-bao kv get secret/server2/influxdb2
-# use value of field: admin-token
+kubectl --kubeconfig=$OLD_KC get secret -n monitoring influxdb2-auth -o jsonpath='{.data.admin-token}' | base64 -d
 
 # MongoDB root password
-bao kv get secret/server2/mongodb
-# use value of field: mongodb-root-password
+kubectl --kubeconfig=$OLD_KC get secret -n mongodb mongodb -o jsonpath='{.data.mongodb-root-password}' | base64 -d
 ```
 
----
+> Adjust secret names above if they differ in your old cluster.
 
-## Step 2: Open port-forwards to target services
+### Step 2: Open source port-forwards
 
-Run these in separate terminal tabs and keep them open throughout the migration:
+Run in separate terminal tabs:
 
 ```bash
-# InfluxDB2 — http://localhost:8086
-kubectl port-forward -n iot svc/influxdb2 8086:80
+# InfluxDB2 source — http://localhost:18086
+kubectl --kubeconfig=$OLD_KC port-forward -n monitoring svc/influxdb2 18086:80
 
-# MongoDB — localhost:27017
-kubectl port-forward -n mongodb svc/mongodb 27017:27017
+# MongoDB source — localhost:27018
+kubectl --kubeconfig=$OLD_KC port-forward -n mongodb svc/mongodb 27018:27017
 ```
 
----
-
-## Step 3: Migrate InfluxDB
-
-### Verify target buckets exist
+### Step 3: Backup InfluxDB2 buckets
 
 ```bash
-influx bucket list \
-  --host http://localhost:8086 \
-  --token <admin-token> \
-  --org homelab
-```
+OLD_INFLUX_TOKEN=<old-admin-token>
 
-Both `loxone` and `loxone_downsample` must appear before continuing.
-
----
-
-### If source is InfluxDB 1.x
-
-#### 3a. Export line protocol from old server1
-
-```bash
-ssh old-server1
-
-# Check data and WAL paths (adjust if non-default)
-ls /var/lib/influxdb/data/
-ls /var/lib/influxdb/wal/
-
-# Export loxone database as line protocol
-influx_inspect export \
-  --datadir /var/lib/influxdb/data \
-  --waldir  /var/lib/influxdb/wal \
-  --database loxone \
-  --out /tmp/loxone.lp
-
-# Export loxone_downsample database
-influx_inspect export \
-  --datadir /var/lib/influxdb/data \
-  --waldir  /var/lib/influxdb/wal \
-  --database loxone_downsample \
-  --out /tmp/loxone_downsample.lp
-```
-
-#### 3b. Strip export headers
-
-`influx_inspect export` prepends `# DDL` / `# DML` comment lines that InfluxDB2 rejects. Strip them:
-
-```bash
-# On old server1 — create clean files
-grep -v '^#' /tmp/loxone.lp            > /tmp/loxone_clean.lp
-grep -v '^#' /tmp/loxone_downsample.lp > /tmp/loxone_downsample_clean.lp
-```
-
-#### 3c. Copy files to local machine
-
-```bash
-scp old-server1:/tmp/loxone_clean.lp            ./loxone.lp
-scp old-server1:/tmp/loxone_downsample_clean.lp ./loxone_downsample.lp
-```
-
-#### 3d. Import into InfluxDB2 (via port-forward)
-
-```bash
-# Import loxone
-influx write \
-  --host  http://localhost:8086 \
-  --org   homelab \
-  --bucket loxone \
-  --token <admin-token> \
-  --format lp \
-  --file  loxone.lp
-
-# Import loxone_downsample
-influx write \
-  --host   http://localhost:8086 \
-  --org    homelab \
-  --bucket loxone_downsample \
-  --token  <admin-token> \
-  --format lp \
-  --file   loxone_downsample.lp
-```
-
-> **Large datasets:** InfluxDB2 accepts a `--compression gzip` flag. If the export files are very large, compress them first and add `--compression gzip` to the import command.
-
----
-
-### If source is InfluxDB 2.x
-
-#### 3a. Backup on old server1
-
-```bash
-ssh old-server1
-
-# Full backup (includes metadata + data)
-influx backup /tmp/influx-backup \
-  --host  http://localhost:8086 \
-  --token <old-admin-token>
-```
-
-#### 3b. Copy backup to local machine
-
-```bash
-scp -r old-server1:/tmp/influx-backup ./influx-backup
-```
-
-#### 3c. Restore specific buckets (via port-forward)
-
-Restore each bucket by name. The `--org` flag maps to the target org:
-
-```bash
-influx restore ./influx-backup \
-  --host   http://localhost:8086 \
-  --token  <admin-token> \
-  --org    homelab \
+influx backup ./influx-backup-loxone \
+  --host   http://localhost:18086 \
+  --token  $OLD_INFLUX_TOKEN \
+  --org    home-server \
   --bucket loxone
 
-influx restore ./influx-backup \
-  --host   http://localhost:8086 \
-  --token  <admin-token> \
-  --org    homelab \
+influx backup ./influx-backup-loxone-downsample \
+  --host   http://localhost:18086 \
+  --token  $OLD_INFLUX_TOKEN \
+  --org    home-server \
   --bucket loxone_downsample
 ```
 
-> If the source org name differs from `homelab`, add `--org-id <old-org-id>` to map it. Get the old org id with `influx org list` on old server1.
-
----
-
-## Step 4: Migrate MongoDB
-
-### Check old database/collection names
-
-Before dumping, confirm the exact database and collection names on old server1:
+### Step 4: Dump MongoDB databases
 
 ```bash
-ssh old-server1
-mongosh  # or mongo if v4
+OLD_MONGO_PASS=<old-mongodb-root-password>
 
-show dbs
-use <database-name>
-show collections
-```
-
-Identify which database holds the `miot-bridge` collections. Likely candidates:
-
-| Old structure | Target database on new server2 |
-|---|---|
-| database `miot-bridge`, any collections | `miot-bridge-production` |
-| database `miot-bridge-sandbox`, any collections | `miot-bridge-sandbox` |
-
----
-
-### 4a. Dump from old server1
-
-Dump each database as an archive. Adjust `--username` / `--password` to the old server1 MongoDB admin credentials.
-
-```bash
-ssh old-server1
-
-# Dump miot-bridge database
 mongodump \
+  --host localhost:27018 \
+  --username root \
+  --password "$OLD_MONGO_PASS" \
+  --authenticationDatabase admin \
   --db miot-bridge \
-  --archive=/tmp/miot-bridge.archive \
+  --archive=miot-bridge.archive \
   --gzip
 
-# Dump miot-bridge-sandbox database (if it exists as a separate database)
 mongodump \
+  --host localhost:27018 \
+  --username root \
+  --password "$OLD_MONGO_PASS" \
+  --authenticationDatabase admin \
   --db miot-bridge-sandbox \
-  --archive=/tmp/miot-bridge-sandbox.archive \
+  --archive=miot-bridge-sandbox.archive \
   --gzip
 ```
 
-> If old server1 has auth enabled, add: `--username admin --password <password> --authenticationDatabase admin`
-
----
-
-### 4b. Copy archives to local machine
+Verify the files exist before proceeding:
 
 ```bash
-scp old-server1:/tmp/miot-bridge.archive         ./miot-bridge.archive
-scp old-server1:/tmp/miot-bridge-sandbox.archive  ./miot-bridge-sandbox.archive
+ls -lh influx-backup-loxone/ influx-backup-loxone-downsample/ miot-bridge.archive miot-bridge-sandbox.archive
 ```
 
+**Now you can wipe and reinstall the OS.**
+
 ---
 
-### 4c. Restore into target databases (via port-forward)
+## Phase 2: Import into new cluster (after Talos bootstrap)
 
-The new database names on server2 are `miot-bridge-production` and `miot-bridge-sandbox`.  
-Use `--nsFrom` / `--nsTo` to remap the namespace if the old database name differs.
+Wait until:
+1. Talos cluster is bootstrapped (`iac/clusters/server1/bootstrap` + `platform` applied)
+2. ArgoCD IoT and Databases stages have synced
+3. Provisioner Jobs have completed — they create the target buckets (`loxone`, `loxone_downsample`) and databases (`miot-bridge-production`, `miot-bridge-sandbox`)
 
 ```bash
-MONGO_ROOT_PASS=<mongodb-root-password>
+NEW_KC=iac/clusters/server1/credentials/kubeconfig
+```
 
-# Restore miot-bridge → miot-bridge-production
+### Step 5: Retrieve new credentials
+
+```bash
+# InfluxDB2 admin token
+bao kv get secret/server1/influxdb2
+# use value of field: admin-token
+
+# MongoDB root password
+bao kv get secret/server1/mongodb
+# use value of field: mongodb-root-password
+```
+
+### Step 6: Open target port-forwards
+
+```bash
+# InfluxDB2 target — http://localhost:8086
+kubectl --kubeconfig=$NEW_KC port-forward -n iot svc/influxdb2 8086:80
+
+# MongoDB target — localhost:27017
+kubectl --kubeconfig=$NEW_KC port-forward -n mongodb svc/mongodb 27017:27017
+```
+
+### Step 7: Restore InfluxDB2 buckets
+
+```bash
+NEW_INFLUX_TOKEN=<new-admin-token>
+
+influx restore ./influx-backup-loxone \
+  --host   http://localhost:8086 \
+  --token  $NEW_INFLUX_TOKEN \
+  --org    homelab \
+  --org-id d18e0dd923d39236 \
+  --bucket loxone
+
+influx restore ./influx-backup-loxone-downsample \
+  --host   http://localhost:8086 \
+  --token  $NEW_INFLUX_TOKEN \
+  --org    homelab \
+  --org-id d18e0dd923d39236 \
+  --bucket loxone_downsample
+```
+
+### Step 8: Restore MongoDB databases
+
+```bash
+MONGO_ROOT_PASS=<new-mongodb-root-password>
+
 mongorestore \
   --host localhost:27017 \
   --username root \
@@ -288,7 +185,6 @@ mongorestore \
   --archive=miot-bridge.archive \
   --gzip
 
-# Restore miot-bridge-sandbox → miot-bridge-sandbox
 mongorestore \
   --host localhost:27017 \
   --username root \
@@ -300,36 +196,20 @@ mongorestore \
   --gzip
 ```
 
-> If old and new db names are already the same you can omit `--nsFrom` / `--nsTo`.  
-> Add `--drop` only if you need to replace existing data (destructive — ask before using).
+> Add `--drop` only if you need to overwrite existing data (destructive).
 
 ---
 
-## Step 5: Verify
+## Step 9: Verify
 
 ### InfluxDB2
 
 ```bash
-# Row counts per bucket (replace time range as needed)
 influx query \
   --host  http://localhost:8086 \
-  --token <admin-token> \
+  --token $NEW_INFLUX_TOKEN \
   --org   homelab \
-  '
-  import "influxdata/influxdb/schema"
-  schema.measurements(bucket: "loxone")
-  '
-
-# Quick point count for a measurement
-influx query \
-  --host  http://localhost:8086 \
-  --token <admin-token> \
-  --org   homelab \
-  '
-  from(bucket: "loxone")
-    |> range(start: -7d)
-    |> count()
-  '
+  'from(bucket: "loxone") |> range(start: -7d) |> count()'
 ```
 
 ### MongoDB
@@ -339,25 +219,20 @@ mongosh "mongodb://root:${MONGO_ROOT_PASS}@localhost:27017/admin"
 
 use miot-bridge-production
 db.stats()
-show collections
 
 use miot-bridge-sandbox
 db.stats()
-show collections
 ```
 
 ---
 
-## Step 6: Cleanup
+## Step 10: Cleanup
 
 ```bash
-# Kill port-forwards
+# Kill all port-forwards
 pkill -f "kubectl port-forward"
 
 # Remove local dump files
-rm -f loxone.lp loxone_downsample.lp miot-bridge.archive miot-bridge-sandbox.archive
-rm -rf influx-backup
-
-# Remove temp files on old server1
-ssh old-server1 'rm -f /tmp/loxone*.lp /tmp/miot-bridge*.archive /tmp/influx-backup'
+rm -rf influx-backup-loxone influx-backup-loxone-downsample
+rm -f miot-bridge.archive miot-bridge-sandbox.archive
 ```
