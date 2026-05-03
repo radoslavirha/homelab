@@ -1,0 +1,23 @@
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: hubble-dashboard
+  namespace: kube-system
+  labels:
+    app.kubernetes.io/name: hubble-dashboard
+    app.kubernetes.io/component: observability
+    app.kubernetes.io/part-of: cilium
+  annotations:
+    argocd.argoproj.io/sync-wave: "100"
+spec:
+  parentRefs:
+    - name: traefik-gateway
+      namespace: traefik
+  hostnames:
+    - hubble.server1.home
+  rules:
+    - backendRefs:
+        - name: hubble-ui
+          namespace: kube-system
+          port: 80

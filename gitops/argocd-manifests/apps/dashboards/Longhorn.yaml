@@ -7,10 +7,12 @@ spec:
   generators:
     - list:
         elements:
-          - cluster: server3
-            clusterServer: https://kubernetes.default.svc
+          - cluster: server1
+            clusterServer: https://192.168.1.200:6443
           - cluster: server2
             clusterServer: https://192.168.1.201:6443
+          - cluster: server3
+            clusterServer: https://kubernetes.default.svc
   template:
     metadata:
       name: longhorn-dashboard-{{cluster}}
