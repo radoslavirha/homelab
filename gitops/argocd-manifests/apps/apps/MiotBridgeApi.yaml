@@ -11,6 +11,8 @@ spec:
         generators:
           - list:
               elements:
+                - cluster: server1
+                  clusterServer: https://192.168.1.200:6443
                 - cluster: server2
                   clusterServer: https://192.168.1.201:6443
           - list:
@@ -33,8 +35,8 @@ spec:
               - $values/gitops/helm-values/apps/miot-bridge-api/{{env}}.yaml
               - $values/gitops/helm-values/apps/common/values.yaml
               - $values/gitops/helm-values/apps/common/{{env}}.yaml
-              - $values/gitops/helm-values/server2/apps/common/values.yaml
-              - $values/gitops/helm-values/server2/apps/common/{{env}}.yaml
+              - $values/gitops/helm-values/{{cluster}}/apps/common/values.yaml
+              - $values/gitops/helm-values/{{cluster}}/apps/common/{{env}}.yaml
         - repoURL: https://github.com/radoslavirha/homelab
           targetRevision: HEAD
           ref: values
