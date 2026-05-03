@@ -1,0 +1,13 @@
+# Bare A record for server2.home → 192.168.1.201
+apiVersion: externaldns.k8s.io/v1alpha1
+kind: DNSEndpoint
+metadata:
+  name: server1-home
+  namespace: external-dns
+spec:
+  endpoints:
+    - dnsName: server1.home
+      recordType: A
+      recordTTL: 180
+      targets:
+        - 192.168.1.200

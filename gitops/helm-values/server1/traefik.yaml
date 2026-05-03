@@ -1,0 +1,46 @@
+# Traefik — server1 cluster overrides
+# Shared base values: gitops/helm-values/traefik.yaml
+
+ingressRoute:
+  dashboard:
+    enabled: true
+    matchRule: "Host(`traefik.server1.home`) && (PathPrefix(`/dashboard`) || PathPrefix(`/api`))"
+    entryPoints: [web]
+    annotations:
+      external-dns.alpha.kubernetes.io/target: "192.168.1.200"
+
+service:
+  externalIPs:
+    - 192.168.1.200
+
+providers:
+  kubernetesGateway:
+    statusAddress:
+      ip: "192.168.1.200"
+
+ports:
+  udp-miot-prod:
+    port: 4000
+    protocol: UDP
+    # hostNetwork: true — traffic goes directly to Traefik on the host.
+    # Exposing via the Service causes kube-proxy to DNAT+SNAT packets,
+    # masquerading the client source IP and breaking UDP response routing.
+    expose:
+      default: false
+  udp-miot-sbx:
+    port: 4001
+    protocol: UDP
+    expose:
+      default: false
+  mqtt:
+    port: 1883
+    protocol: TCP
+    expose:
+      default: true
+    exposedPort: 1883
+  mongodb:
+    port: 27017
+    protocol: TCP
+    expose:
+      default: true
+    exposedPort: 27017
