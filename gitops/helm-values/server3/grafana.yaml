@@ -2,8 +2,13 @@
 # Shared base values: gitops/helm-values/grafana.yaml
 
 extraSecretMounts:
-  - name: influxdb2-grafana
-    secretName: influxdb2-grafana
+  - name: server1-influxdb2-grafana
+    secretName: server1-influxdb2-grafana
     defaultMode: 0440
-    mountPath: /etc/secrets/influxdb2-grafana
+    mountPath: /etc/secrets/server1-influxdb2-grafana
+    readOnly: true
+  - name: server2-influxdb2-grafana
+    secretName: server2-influxdb2-grafana
+    defaultMode: 0440
+    mountPath: /etc/secrets/server2-influxdb2-grafana
     readOnly: true
