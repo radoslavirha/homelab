@@ -1,0 +1,655 @@
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: kube-prometheus-stack-grafana-dashboard-loxone
+  namespace: monitoring
+  annotations:
+    argocd.argoproj.io/sync-wave: "-50"
+  labels:
+    grafana_dashboard: "1"
+data:
+  dashboard.loxone.json: |
+    {
+      "annotations": {
+        "list": [
+          {
+            "builtIn": 1,
+            "datasource": {
+              "type": "grafana",
+              "uid": "-- Grafana --"
+            },
+            "enable": true,
+            "hide": true,
+            "iconColor": "rgba(0, 211, 255, 1)",
+            "name": "Annotations & Alerts",
+            "type": "dashboard"
+          }
+        ]
+      },
+      "editable": true,
+      "fiscalYearStartMonth": 0,
+      "graphTooltip": 2,
+      "id": 1,
+      "links": [],
+      "panels": [
+        {
+          "datasource": {
+            "type": "influxdb",
+            "uid": "${datasource}"
+          },
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "Temperature",
+                "axisPlacement": "right",
+                "axisSoftMax": 25,
+                "axisSoftMin": 17,
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "smooth",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "showValues": false,
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": 0
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              },
+              "unit": "celsius"
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byFrameRefID",
+                  "options": "B"
+                },
+                "properties": [
+                  {
+                    "id": "displayName",
+                    "value": "Desired temperature ${__field.labels.room}"
+                  },
+                  {
+                    "id": "custom.lineStyle",
+                    "value": {
+                      "dash": [
+                        10,
+                        10
+                      ],
+                      "fill": "dash"
+                    }
+                  },
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "dark-red",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byFrameRefID",
+                  "options": "C"
+                },
+                "properties": [
+                  {
+                    "id": "custom.axisPlacement",
+                    "value": "left"
+                  },
+                  {
+                    "id": "custom.axisLabel",
+                    "value": "Valve open"
+                  },
+                  {
+                    "id": "custom.axisSoftMin",
+                    "value": 0
+                  },
+                  {
+                    "id": "custom.axisSoftMax",
+                    "value": 100
+                  },
+                  {
+                    "id": "unit",
+                    "value": "percent"
+                  },
+                  {
+                    "id": "displayName",
+                    "value": "Valve open ${__field.labels.room}"
+                  },
+                  {
+                    "id": "custom.lineStyle",
+                    "value": {
+                      "dash": [
+                        10,
+                        10
+                      ],
+                      "fill": "dash"
+                    }
+                  },
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "dark-blue",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byFrameRefID",
+                  "options": "A"
+                },
+                "properties": [
+                  {
+                    "id": "displayName",
+                    "value": "${__field.labels.room}"
+                  },
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "dark-green",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byFrameRefID",
+                  "options": "D"
+                },
+                "properties": [
+                  {
+                    "id": "custom.lineStyle",
+                    "value": {
+                      "dash": [
+                        10,
+                        10
+                      ],
+                      "fill": "dash"
+                    }
+                  },
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "dark-green",
+                      "mode": "fixed"
+                    }
+                  },
+                  {
+                    "id": "displayName",
+                    "value": "Valve temperature ${__field.labels.room}"
+                  }
+                ]
+              }
+            ]
+          },
+          "gridPos": {
+            "h": 16,
+            "w": 24,
+            "x": 0,
+            "y": 0
+          },
+          "id": 1,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "right",
+              "showLegend": true
+            },
+            "tooltip": {
+              "hideZeros": false,
+              "mode": "single",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "12.3.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "influxdb",
+                "uid": "${datasource}"
+              },
+              "hide": false,
+              "query": "from(bucket:\"${bucket}\")\n|> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n|> filter(fn: (r) => r._measurement == \"loxone_touch\" )\n|> filter(fn: (r) => r._field == \"temperature\")\n|> filter(fn: (r) => r.room =~ /${rooms:regex}/)",
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "influxdb",
+                "uid": "${datasource}"
+              },
+              "hide": false,
+              "query": "lastKnown = from(bucket:\"${bucket}\")\n  |> range(start: -14d, stop: v.timeRangeStart)\n  |> filter(fn: (r) => r._measurement == \"loxone_desired\")\n  |> filter(fn: (r) => r._field == \"temperature\")\n  |> filter(fn: (r) => r.room =~ /${rooms:regex}/)\n  |> last()\n\ncurrent = from(bucket:\"${bucket}\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"loxone_desired\" )\n  |> filter(fn: (r) => r._field == \"temperature\")\n  |> filter(fn: (r) => r.room =~ /${rooms:regex}/)\n\nunion(tables: [lastKnown, current])\n  |> aggregateWindow(every: 5m, fn: last, createEmpty: true)\n  |> fill(usePrevious: true)",
+              "refId": "B"
+            },
+            {
+              "datasource": {
+                "type": "influxdb",
+                "uid": "${datasource}"
+              },
+              "hide": false,
+              "query": "from(bucket:\"${bucket}\")\n|> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n|> filter(fn: (r) => r._measurement == \"loxone_valve\" )\n|> filter(fn: (r) => r._field == \"open\")\n|> filter(fn: (r) => r.room =~ /${rooms:regex}/)",
+              "refId": "C"
+            },
+            {
+              "datasource": {
+                "type": "influxdb",
+                "uid": "${datasource}"
+              },
+              "hide": false,
+              "query": "from(bucket:\"${bucket}\")\n|> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n|> filter(fn: (r) => r._measurement == \"loxone_valve\" )\n|> filter(fn: (r) => r._field == \"temperature\")\n|> filter(fn: (r) => r.room =~ /${rooms:regex}/)",
+              "refId": "D"
+            }
+          ],
+          "title": "Temperature",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "influxdb",
+            "uid": "${datasource}"
+          },
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "Humidity",
+                "axisPlacement": "right",
+                "axisSoftMax": 95,
+                "axisSoftMin": 50,
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "smooth",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "showValues": false,
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": 0
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              },
+              "unit": "humidity"
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byFrameRefID",
+                  "options": "A"
+                },
+                "properties": [
+                  {
+                    "id": "displayName",
+                    "value": "${__field.labels.room}"
+                  },
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "dark-green",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byFrameRefID",
+                  "options": "B"
+                },
+                "properties": [
+                  {
+                    "id": "displayName",
+                    "value": "Desired ${__field.labels.room}"
+                  },
+                  {
+                    "id": "custom.lineStyle",
+                    "value": {
+                      "dash": [
+                        10,
+                        10
+                      ],
+                      "fill": "dash"
+                    }
+                  },
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "dark-red",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "gridPos": {
+            "h": 15,
+            "w": 16,
+            "x": 0,
+            "y": 16
+          },
+          "id": 2,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "right",
+              "showLegend": true
+            },
+            "tooltip": {
+              "hideZeros": false,
+              "mode": "single",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "12.3.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "influxdb",
+                "uid": "${datasource}"
+              },
+              "query": "from(bucket:\"${bucket}\")\n|> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n|> filter(fn: (r) => r._measurement == \"loxone_touch\" )\n|> filter(fn: (r) => r._field == \"humidity\")\n|> filter(fn: (r) => r.room =~ /${rooms:regex}/)",
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "influxdb",
+                "uid": "${datasource}"
+              },
+              "hide": false,
+              "query": "lastKnown = from(bucket:\"${bucket}\")\n  |> range(start: -14d, stop: v.timeRangeStart)\n  |> filter(fn: (r) => r._measurement == \"loxone_desired\")\n  |> filter(fn: (r) => r._field == \"humidity\")\n  |> filter(fn: (r) => r.room =~ /${rooms:regex}/)\n  |> last()\n\ncurrent = from(bucket:\"${bucket}\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"loxone_desired\" )\n  |> filter(fn: (r) => r._field == \"humidity\")\n  |> filter(fn: (r) => r.room =~ /${rooms:regex}/)\n\nunion(tables: [lastKnown, current])\n  |> aggregateWindow(every: 5m, fn: last, createEmpty: true)\n  |> fill(usePrevious: true)",
+              "refId": "B"
+            }
+          ],
+          "title": "Humidity",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "influxdb",
+            "uid": "${datasource}"
+          },
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "Humidity",
+                "axisPlacement": "right",
+                "axisSoftMax": 100,
+                "axisSoftMin": 0,
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineInterpolation": "smooth",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "showValues": false,
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "dashed+area"
+                }
+              },
+              "mappings": [],
+              "max": 100,
+              "min": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": 0
+                  },
+                  {
+                    "color": "transparent",
+                    "value": 25
+                  }
+                ]
+              },
+              "unit": "percent"
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byFrameRefID",
+                  "options": "A"
+                },
+                "properties": [
+                  {
+                    "id": "displayName",
+                    "value": "${__field.labels.room}"
+                  }
+                ]
+              }
+            ]
+          },
+          "gridPos": {
+            "h": 15,
+            "w": 8,
+            "x": 16,
+            "y": 16
+          },
+          "id": 3,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "right",
+              "showLegend": true
+            },
+            "tooltip": {
+              "hideZeros": false,
+              "mode": "single",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "12.3.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "influxdb",
+                "uid": "${datasource}"
+              },
+              "query": "from(bucket:\"${bucket}\")\n|> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n|> filter(fn: (r) => r._measurement == \"loxone_valve\" )\n|> filter(fn: (r) => r._field == \"battery\")\n|> filter(fn: (r) => r.room =~ /${rooms:regex}/)",
+              "refId": "A"
+            }
+          ],
+          "title": "Battery",
+          "type": "timeseries"
+        }
+      ],
+      "preload": false,
+      "refresh": "5s",
+      "schemaVersion": 42,
+      "tags": [],
+      "templating": {
+        "list": [
+          {
+            "current": {},
+            "hide": 0,
+            "includeAll": false,
+            "label": "InfluxDB",
+            "name": "datasource",
+            "options": [],
+            "query": "influxdb",
+            "refresh": 1,
+            "type": "datasource"
+          },
+          {
+            "allValue": ".*",
+            "allowCustomValue": false,
+            "current": {
+              "text": "All",
+              "value": [
+                "$__all"
+              ]
+            },
+            "datasource": {
+              "type": "influxdb",
+              "uid": "${datasource}"
+            },
+            "definition": "import \"influxdata/influxdb/schema\"\nschema.tagValues(bucket: \"loxone\", tag: \"room\")",
+            "includeAll": true,
+            "label": "Room",
+            "name": "rooms",
+            "options": [],
+            "query": {
+              "query": "import \"influxdata/influxdb/schema\"\nschema.tagValues(bucket: \"loxone\", tag: \"room\")"
+            },
+            "refresh": 2,
+            "regex": "",
+            "sort": 1,
+            "type": "query"
+          },
+          {
+            "current": {
+              "text": "false",
+              "value": "false"
+            },
+            "label": "Long-term",
+            "name": "longterm",
+            "options": [
+              {
+                "text": "true",
+                "value": "true"
+              },
+              {
+                "text": "false",
+                "value": "false"
+              }
+            ],
+            "type": "switch"
+          },
+          {
+            "allowCustomValue": false,
+            "current": {
+              "text": "loxone",
+              "value": "loxone"
+            },
+            "datasource": {
+              "type": "influxdb",
+              "uid": "${datasource}"
+            },
+            "definition": "import \"array\"\nif \"${longterm}\" == \"true\" then\n  array.from(rows: [{_value: \"loxone_downsample\"}])\nelse\n  array.from(rows: [{_value: \"loxone\"}])",
+            "hide": 2,
+            "name": "bucket",
+            "options": [],
+            "query": {
+              "query": "import \"array\"\nif \"${longterm}\" == \"true\" then\n  array.from(rows: [{_value: \"loxone_downsample\"}])\nelse\n  array.from(rows: [{_value: \"loxone\"}])"
+            },
+            "refresh": 1,
+            "regex": "",
+            "type": "query"
+          }
+        ]
+      },
+      "time": {
+        "from": "now-24h",
+        "to": "now"
+      },
+      "timepicker": {},
+      "timezone": "browser",
+      "title": "Loxone",
+      "uid": "adkltw2",
+      "version": 7
+    }
