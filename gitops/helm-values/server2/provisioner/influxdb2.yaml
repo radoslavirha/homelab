@@ -27,7 +27,7 @@ influxdb2:
                 |> aggregateWindow(every: task.every, fn: mean)
                 |> to(bucket: "loxone_downsample")
       tokens:
-        - description: grafana-read
+        - description: server1-grafana-read
           readBuckets:
             - loxone
             - loxone_downsample
