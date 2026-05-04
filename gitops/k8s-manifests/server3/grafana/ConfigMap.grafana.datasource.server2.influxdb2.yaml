@@ -2,7 +2,7 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: grafana-datasource-influxdb2
+  name: grafana-datasource-server2.influxdb2
   namespace: monitoring
   labels:
     grafana_datasource: "1"
@@ -12,9 +12,9 @@ data:
   datasource-influxdb2.yaml: |-
     apiVersion: 1
     datasources:
-      - name: InfluxDB2
+      - name: InfluxDB2 Server2
         type: influxdb
-        uid: influxdb2
+        uid: influxdb2-server2
         access: proxy
         url: http://influx.server2.home
         editable: false
@@ -24,4 +24,4 @@ data:
           defaultBucket: loxone
           tlsSkipVerify: true
         secureJsonData:
-          token: $__file{/etc/secrets/influxdb2-grafana/token}
+          token: $__file{/etc/secrets/server2-influxdb2-grafana/token}
