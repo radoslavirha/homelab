@@ -1,0 +1,52 @@
+apps:
+  homelab-dashboard-ui:
+    image:
+      repository: ghcr.io/radoslavirha/homelab-dashboard-ui
+      tag: "0.0.1"
+      pullPolicy: Always
+    replicas: 1
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
+    labels:
+      component: apps
+      partOf: dashboards
+    services:
+      http:
+        enabled: true
+        protocol: TCP
+        port: 80
+        targetPort: 80
+    ingress:
+      enabled: true
+      serviceRef: http
+      hostname: dashboard.home
+      pathName: ""
+    secretRefs:
+      - name: homelab-dashboard-ui-unifi-credentials
+        keys:
+          - SECRET_UNIFI_API_KEY
+    templates:
+      config:
+        file: config.json
+        path: /usr/share/nginx/html/config.json
+        subPath: config.json
+        content: |
+          {
+            "title": "homelab",
+            "unifi": {
+              "host": "https://192.168.1.1",
+              "apiKey": "{{ SECRET_UNIFI_API_KEY }}",
+              "site": "default"
+            },
+            "serverPattern": "^server(\\d+)\\.home$",
+            "scheme": "http",
+            "exclude": ["dashboard.home", "qr.home", "api.server1.home", "apps.server1.home", "api.server2.home", "apps.server2.home", "otel.server3.home"],
+            "paths": {
+              "traefik": "/dashboard/"
+            }
+          }

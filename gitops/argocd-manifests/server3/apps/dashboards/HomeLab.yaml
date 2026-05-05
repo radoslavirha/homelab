@@ -1,0 +1,32 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: homelab-dashboard-server3
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    - repoURL: https://github.com/radoslavirha/homelab
+      targetRevision: HEAD
+      path: gitops/helm-charts/iot-applications
+      helm:
+        releaseName: homelab-dashboard-ui
+        valueFiles:
+          - $values/gitops/helm-values/server3/homelab-dashboard-ui.yaml
+    - repoURL: https://github.com/radoslavirha/homelab
+      targetRevision: HEAD
+      ref: values
+    - repoURL: https://github.com/radoslavirha/homelab
+      targetRevision: HEAD
+      path: gitops/k8s-manifests/server3/homelab-dashboard-ui
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: homelab
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
+    automated:
+      selfHeal: true
+      prune: true

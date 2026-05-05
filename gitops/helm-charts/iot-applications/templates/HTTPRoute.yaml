@@ -5,6 +5,8 @@
 {{- $refSvcName := $application.ingress.serviceRef | default "" -}}
 {{- $refSvc := get ($application.services | default dict) $refSvcName | default dict -}}
 {{- $pathName := $application.ingress.pathName | default $applicationName -}}
+{{- $computedHostname := printf "%s%s.%s" (include "iot-applications.subdomain" $.Values.VAR_SUBDOMAIN) $application.labels.component $.Values.VAR_PUBLIC_DOMAIN -}}
+{{- $hostname := $application.ingress.hostname | default $computedHostname -}}
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
@@ -16,7 +18,7 @@ spec:
     - name: traefik-gateway
       namespace: traefik
   hostnames:
-    - {{ include "iot-applications.subdomain" $.Values.VAR_SUBDOMAIN }}{{ $application.labels.component }}.{{ $.Values.VAR_PUBLIC_DOMAIN }}
+    - {{ $hostname }}
   rules:
     - matches:
         - path:
