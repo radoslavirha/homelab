@@ -4,7 +4,7 @@
 {{- $ctx := dict "application" $application "name" $applicationName "release" $.Release "chart" $.Chart -}}
 {{- $refSvcName := $application.ingress.serviceRef | default "" -}}
 {{- $refSvc := get ($application.services | default dict) $refSvcName | default dict -}}
-{{- $pathName := $application.ingress.pathName | default $applicationName -}}
+{{- $pathName := ternary (toString $application.ingress.pathName) $applicationName (hasKey $application.ingress "pathName") -}}
 {{- $computedHostname := printf "%s%s.%s" (include "iot-applications.subdomain" $.Values.VAR_SUBDOMAIN) $application.labels.component $.Values.VAR_PUBLIC_DOMAIN -}}
 {{- $hostname := $application.ingress.hostname | default $computedHostname -}}
 ---

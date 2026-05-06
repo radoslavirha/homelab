@@ -1,9 +1,10 @@
 # ExternalDNS — server3 cluster overrides
 # Shared base values: gitops/helm-values/external-dns.yaml
 
-# Only manage records under server3.home
+# Manage records under server3.home and top-level .home entries (e.g. dashboard.home)
 domainFilters:
   - server3.home
+  - home
 
 # TXT registry owner ID — must be unique per cluster to avoid record conflicts
 txtOwnerId: homelab-server3

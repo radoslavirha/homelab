@@ -126,3 +126,37 @@ tests:
       - equal:
           path: spec.hostnames[0]
           value: dashboard.home
+
+  - it: should use application name as path prefix by default
+    set:
+      VAR_PUBLIC_DOMAIN: example.com
+      apps.my-app.image.repository: ghcr.io/example/my-app
+      apps.my-app.labels.component: api
+      apps.my-app.labels.partOf: iot
+      apps.my-app.ingress.enabled: true
+      apps.my-app.ingress.serviceRef: http
+      apps.my-app.services.http.enabled: true
+      apps.my-app.services.http.port: 80
+      apps.my-app.services.http.targetPort: 4000
+    asserts:
+      - equal:
+          path: spec.rules[0].matches[0].path.value
+          value: /my-app
+
+  - it: should use root path when pathName is empty string
+    set:
+      VAR_PUBLIC_DOMAIN: example.com
+      apps.my-app.image.repository: ghcr.io/example/my-app
+      apps.my-app.labels.component: api
+      apps.my-app.labels.partOf: iot
+      apps.my-app.ingress.enabled: true
+      apps.my-app.ingress.serviceRef: http
+      apps.my-app.ingress.pathName: ""
+      apps.my-app.ingress.stripPrefix: false
+      apps.my-app.services.http.enabled: true
+      apps.my-app.services.http.port: 80
+      apps.my-app.services.http.targetPort: 4000
+    asserts:
+      - equal:
+          path: spec.rules[0].matches[0].path.value
+          value: /

@@ -26,6 +26,7 @@ apps:
       serviceRef: http
       hostname: dashboard.home
       pathName: ""
+      stripPrefix: false
     secretRefs:
       - name: homelab-dashboard-ui-unifi-credentials
         keys:
