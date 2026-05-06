@@ -7,7 +7,7 @@ metadata:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
-  source:
+  sources:
     - repoURL: https://github.com/radoslavirha/homelab
       targetRevision: HEAD
       path: gitops/helm-charts/iot-applications
