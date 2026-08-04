@@ -4,7 +4,7 @@
 apps:
   interactive-map-feeder-api:
     image:
-      tag: "0.7.2"
+      tag: "0.10.2"
     templates:
       config:
         content: |
@@ -14,6 +14,44 @@ apps:
                   "httpPort": {{ CONTAINER_PORT }}
               },
               "publicURL": "{{ VAR_PROTOCOL }}://{{ VAR_SUBDOMAIN }}.{{ COMPONENT }}.{{ VAR_PUBLIC_DOMAIN }}/{{ PATH_NAME }}",
+              "externalApis": {
+                  "CHMI_PORTAL": {
+                      "baseURL": "https://intranet.chmi.cz",
+                      "resilience": {
+                          "timeout": {
+                              "ms": 10000
+                          },
+                          "retry": {
+                              "count": 2,
+                              "backoffMs": 500
+                          },
+                          "circuitBreaker": {}
+                      },
+                      "logging": {
+                          "enabled": true,
+                          "stack": false
+                      },
+                      "retriableStatusCodes": [500, 502, 503, 504, 429, 408]
+                  },
+                  "CHMI_OPENDATA": {
+                      "baseURL": "https://opendata.chmi.cz",
+                      "resilience": {
+                          "timeout": {
+                              "ms": 10000
+                          },
+                          "retry": {
+                              "count": 2,
+                              "backoffMs": 500
+                          },
+                          "circuitBreaker": {}
+                      },
+                      "logging": {
+                          "enabled": true,
+                          "stack": false
+                      },
+                      "retriableStatusCodes": [500, 502, 503, 504, 429, 408]
+                  }
+              },
               "logger": {
                   "enabled": true,
                   "level": "info"
