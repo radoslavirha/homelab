@@ -97,9 +97,12 @@ path "secret/data/server2/*" { capabilities = ["create", "update"] }
 path "secret/data/server3/influxdb2-grafana" { capabilities = ["create", "update"] }
 EOF
 
+# -orphan is mandatory: a child token is revoked together with the login/root token that
+# created it, which takes down every provisioner Job at once. See Troubleshooting below.
 TOKEN=$(bao token create \
   -policy=server2-provisioner \
   -period=8760h \
+  -orphan \
   -display-name="server2-provisioner" \
   -field=token)
 
@@ -331,3 +334,36 @@ Declared in [`gitops/helm-values/server2/provisioner/mongodb.yaml`](../gitops/he
 3. **ExternalSecret in consumer namespace** — referencing the path the provisioner writes to.
 4. **Provisioner token** — ensure `openbao-provision-token` Secret exists in the provisioner’s namespace (deployed by `IotInfra`-equivalent ApplicationSet). The MongoDB provisioner runs in `mongodb` namespace and needs its own copy via `ExternalSecret.provisioner-token.yaml`.
 5. **Idempotency** — the chart handles this; choose `idempotencyStrategy: bao-check` (skip if path already in OpenBao) or `api-check` (skip if resource already exists in the service API).
+
+---
+
+## Troubleshooting
+
+### Provisioner Jobs fail with `403 permission denied`
+
+Symptom, from a Job's logs:
+
+```text
+URL: GET http://vault.server3.home/v1/sys/internal/ui/mounts/secret/<cluster>/<env>/<app>
+Code: 403. Errors:
+* permission denied
+```
+
+That URL is the `bao kv` preflight mount lookup — it 403s on an **invalid token**, before any path ACL is consulted. So this is almost never a policy or path problem. Confirm:
+
+```bash
+TOKEN=$(kubectl --context admin@<cluster> get secret openbao-provision-token -n mongodb \
+  -o jsonpath='{.data.token}' | base64 -d)
+curl -s -H "X-Vault-Token: $TOKEN" http://vault.server3.home/v1/auth/token/lookup-self
+```
+
+`{"errors":["permission denied"]}` means the token stored at `secret/<cluster>/provisioner-token` is dead. The usual cause is a token created **without `-orphan`** — it is revoked along with the login/root token that minted it.
+
+**Recovery:**
+
+1. Stop the retries first — a Job that reaches the datastore before failing rotates a password it cannot persist. Delete the failed Jobs (ArgoCD recreates them on the next sync).
+2. Mint a replacement with `-orphan` (see the setup block above) and `bao kv put secret/<cluster>/provisioner-token token="${TOKEN}"`.
+3. Delete any **stale** app secrets in OpenBao — paths whose stored password no longer matches the datastore because a previous run rotated it. `bao-check` treats an existing path as "already provisioned" and skips, so a stale path never self-heals.
+4. Force an ESO refresh of `openbao-provision-token` in every provisioner namespace (`iot`, `mongodb`), then re-sync the ArgoCD Applications.
+
+Since [`_helpers.tpl`](../gitops/helm-charts/provisioner/templates/_helpers.tpl) gained `provisioner.baoPrelude`, Jobs verify the token with `bao token lookup` **before** touching any datastore, so a dead token now fails cleanly instead of stranding credentials.

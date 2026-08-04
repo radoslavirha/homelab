@@ -223,9 +223,12 @@ path "secret/data/<cluster>/*"     { capabilities = ["create", "read", "update",
 path "secret/metadata/<cluster>/*" { capabilities = ["read", "list"] }
 EOF
 
+# -orphan is mandatory: without it the token is a child of your current login/root token
+# and is revoked the moment that parent is revoked, silently breaking every provisioner Job.
 PROVISIONER_TOKEN=$(bao token create \
   -policy=<cluster>-provisioner \
   -period=8760h \
+  -orphan \
   -display-name="<cluster>-provisioner" \
   -format=json | jq -r .auth.client_token)
 

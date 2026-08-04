@@ -43,6 +43,8 @@ spec:
               BAO_HOST={{ $.Values.global.baoHost | quote }}
               CLUSTER={{ $.Values.global.cluster | quote }}
 
+              {{- include "provisioner.baoPrelude" $ | nindent 14 }}
+
               echo "Obtaining EMQX Bearer token..."
               EMQX_BEARER=$(curl -sf -X POST \
                 -H "Content-Type: application/json" \
@@ -82,10 +84,9 @@ spec:
 
               # User: {{ .mqttUsername }}
               {{- if eq (.idempotencyStrategy | default "api-check") "bao-check" }}
-              BAO_EXISTING=$(bao kv get \
-                -address="${BAO_HOST}" \
-                -field={{ .baoUsernameKey | default "username" | quote }} \
-                "secret/${CLUSTER}/{{ .baoPath }}" 2>/dev/null || true)
+              BAO_EXISTING=$(bao_read_field \
+                "secret/${CLUSTER}/{{ .baoPath }}" \
+                {{ .baoUsernameKey | default "username" | quote }})
               if [ -n "${BAO_EXISTING}" ]; then
                 echo "MQTT credentials for '{{ .mqttUsername }}' already in OpenBao. Skipping."
               else
@@ -117,8 +118,7 @@ spec:
                     -d "{\"user_id\": \"{{ .mqttUsername }}\", \"password\": \"${MQTT_PASS}\", \"is_superuser\": false}" > /dev/null
                 fi
 
-                bao kv put \
-                  -address="${BAO_HOST}" \
+                bao_write \
                   "secret/${CLUSTER}/{{ .baoPath }}" \
                   {{ .baoUsernameKey | default "username" }}={{ .mqttUsername | quote }} \
                   {{ .baoPasswordKey | default "password" }}="${MQTT_PASS}"

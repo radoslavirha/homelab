@@ -214,9 +214,11 @@ path "secret/data/<cluster>/*"     { capabilities = ["create", "read", "update",
 path "secret/metadata/<cluster>/*" { capabilities = ["read", "list"] }
 EOF
 
+# -orphan is mandatory — a child token dies with its parent (your login/root token).
 PROVISIONER_TOKEN=$(bao token create \
   -policy=<cluster>-provisioner \
   -period=8760h \
+  -orphan \
   -display-name="<cluster>-provisioner" \
   -format=json | jq -r .auth.client_token)
 bao kv put secret/<cluster>/provisioner-token token="$PROVISIONER_TOKEN"
@@ -273,7 +275,7 @@ Files to update:
 gitops/argocd-manifests/apps/infra/ESO.yaml
 gitops/argocd-manifests/apps/gateway/Traefik.yaml
 gitops/argocd-manifests/apps/gateway/ExternalDNS.yaml
-gitops/argocd-manifests/apps/observability/OTelGateway.yaml
+gitops/argocd-manifests/apps/observability/K8sMonitoring.yaml
 gitops/argocd-manifests/apps/iot/InfluxDB2.yaml
 gitops/argocd-manifests/apps/iot/EMQX.yaml
 gitops/argocd-manifests/apps/databases/MongoDB.yaml

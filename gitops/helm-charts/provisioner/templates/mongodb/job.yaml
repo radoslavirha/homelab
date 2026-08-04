@@ -39,13 +39,14 @@ spec:
               BAO_HOST={{ $.Values.global.baoHost | quote }}
               CLUSTER={{ $.Values.global.cluster | quote }}
 
+              {{- include "provisioner.baoPrelude" $ | nindent 14 }}
+
               {{- range $job.databases }}
 
               # Database: {{ .name }}
-              BAO_EXISTING=$(bao kv get \
-                -address="${BAO_HOST}" \
-                -field={{ .baoPasswordKey | default "mongodb-password" | quote }} \
-                "secret/${CLUSTER}/{{ .baoPath }}" 2>/dev/null || true)
+              BAO_EXISTING=$(bao_read_field \
+                "secret/${CLUSTER}/{{ .baoPath }}" \
+                {{ .baoPasswordKey | default "mongodb-password" | quote }})
 
               if [ -n "${BAO_EXISTING}" ]; then
                 echo "MongoDB credentials for '{{ .name }}' already in OpenBao. Skipping."
@@ -77,8 +78,7 @@ spec:
                   echo "MongoDB user '{{ .dbUser }}' created in database '{{ .name }}'."
                 fi
 
-                bao kv put \
-                  -address="${BAO_HOST}" \
+                bao_write \
                   "secret/${CLUSTER}/{{ .baoPath }}" \
                   {{ .baoDatabaseKey | default "mongodb-database" }}={{ .name | quote }} \
                   {{ .baoUsernameKey | default "mongodb-username" }}={{ .dbUser | quote }} \

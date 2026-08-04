@@ -39,6 +39,8 @@ spec:
               BAO_HOST={{ $.Values.global.baoHost | quote }}
               CLUSTER={{ $.Values.global.cluster | quote }}
 
+              {{- include "provisioner.baoPrelude" $ | nindent 14 }}
+
               influx config create \
                 --config-name default \
                 --host-url "${INFLUX_HOST}" \
@@ -85,10 +87,9 @@ spec:
               # Token: {{ .description }}
               {{- $baoCluster := .baoCluster | default "" }}
               BAO_CLUSTER={{ if $baoCluster }}{{ $baoCluster | quote }}{{ else }}"${CLUSTER}"{{ end }}
-              BAO_EXISTING=$(bao kv get \
-                -address="${BAO_HOST}" \
-                -field={{ .baoKey | default "token" | quote }} \
-                "secret/${BAO_CLUSTER}/{{ .baoPath }}" 2>/dev/null || true)
+              BAO_EXISTING=$(bao_read_field \
+                "secret/${BAO_CLUSTER}/{{ .baoPath }}" \
+                {{ .baoKey | default "token" | quote }})
               if [ -n "${BAO_EXISTING}" ]; then
                 echo "Token '{{ .description }}' already in OpenBao. Skipping."
               else
@@ -108,8 +109,7 @@ spec:
                   ${AUTH_FLAGS} \
                   --json \
                   | jq -r '.token')
-                bao kv put \
-                  -address="${BAO_HOST}" \
+                bao_write \
                   "secret/${BAO_CLUSTER}/{{ .baoPath }}" \
                   {{ .baoKey | default "token" }}="${NEW_TOKEN}"
                 echo "Token '{{ .description }}' created and written to OpenBao."
