@@ -56,6 +56,26 @@ apps:
                       "pass": "{{ SECRET_MONGODB_PASSWORD }}"
                   }
               },
+              "externalApis": {
+                  "MIOT_SPEC": {
+                      "baseURL": "https://miot-spec.org/miot-spec-v2",
+                      "resilience": {
+                          "timeout": {
+                              "ms": 10000
+                          },
+                          "retry": {
+                              "count": 2,
+                              "backoffMs": 500
+                          },
+                          "circuitBreaker": {}
+                      },
+                      "logging": {
+                          "enabled": true,
+                          "stack": false
+                      },
+                      "retriableStatusCodes": [500, 502, 503, 504, 429, 408]
+                  }
+              },
               "logger": {
                   "enabled": true,
                   "level": "info"
