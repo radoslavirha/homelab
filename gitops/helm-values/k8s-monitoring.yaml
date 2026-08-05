@@ -52,6 +52,11 @@ clusterMetrics:
 hostMetrics:
   enabled: true
   collector: alloy-receiver
+  # `enabled: true` alone only deploys node-exporter — it does NOT scrape it.
+  # linuxHosts defaults to false, which renders host_metrics as an empty stub
+  # and silently collects nothing. windowsHosts stays off (all nodes are Talos).
+  linuxHosts:
+    enabled: true
 clusterEvents:
   enabled: true
   collector: alloy-receiver
