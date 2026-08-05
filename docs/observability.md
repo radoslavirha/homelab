@@ -121,11 +121,11 @@ Chart v4 moved kube-state-metrics and node-exporter into the `telemetryServices`
 
 ### server1/server2 forwarding (OTLP to server3)
 
-All signals are forwarded via a single OTLP destination to `otel.server3.home:4317` with a bearer token header. On server1/server2 the `otel-auth-token` ExternalSecret syncs the token from OpenBao, and `collectorCommon.alloy.envFrom` injects it into all four collectors as `OTEL_AUTH_TOKEN`. The destination reads it with `auth.bearerTokenFrom: env("OTEL_AUTH_TOKEN")`.
+All signals are forwarded via a single OTLP destination to `otel.server3.home:4317`. The connection is **unauthenticated plaintext gRPC**.
 
-> Do **not** set `secret.create` / `secret.name` on the destination instead. That switches it to the chart's "external secret" mode, which emits `remote.kubernetes.secret` lookups for every key the destination type supports (`tenantId`, `ca`, `cert`, `key`) — none of which exist in `otel-auth-token`, so Alloy fails to load its config.
-
-> **Auth caveat:** the previous otel-gateway validated this token server-side via the OTel `bearertokenauth` extension. `k8s-monitoring` exposes no server-side OTLP auth, so server3's `alloy-receiver` accepts the token without checking it. The endpoint is protected by private-network isolation only. Adding Traefik ForwardAuth in front of `alloy-receiver` is the follow-up if real validation is needed.
+> **Why there is no bearer token.** An earlier design sent one. It cannot work over this transport: gRPC refuses to attach per-RPC credentials to an insecure channel — `the credentials require transport level security` — so combining `tls.insecure: true` with `auth.type: bearerToken` stops the exporter from starting at all, and no telemetry leaves the cluster. Nothing is lost by dropping it, because server3's `alloy-receiver` never validated the token either: `k8s-monitoring` exposes no server-side OTLP auth. The endpoint has always relied on private-network isolation.
+>
+> To get real authentication, terminate TLS on `otel.server3.home` and then reinstate `tls.insecure: false` plus the `auth` block and `collectorCommon.alloy.envFrom`. The `otel-auth-token` ExternalSecret is left in place on server1/server2 for exactly that. Traefik ForwardAuth in front of `alloy-receiver` remains the alternative.
 
 ## Prometheus — TSDB only
 

@@ -16,17 +16,16 @@ destinations:
       enabled: true
     traces:
       enabled: true
-    auth:
-      type: bearerToken
-      # Read from the pod env, injected by collectorCommon.envFrom below.
-      # Do NOT use secret.create/name here — that switches the destination to "external secret"
-      # mode, which makes the chart emit remote.kubernetes.secret lookups for every supported
-      # key (tenantId, ca, cert, key), none of which exist in otel-auth-token.
-      bearerTokenFrom: env("OTEL_AUTH_TOKEN")
-
-# Every collector writes to the server3 destination, so all of them need the token.
-collectorCommon:
-  alloy:
-    envFrom:
-      - secretRef:
-          name: otel-auth-token
+    # NO auth block. gRPC refuses to attach per-RPC credentials to a plaintext
+    # channel — "the credentials require transport level security" — so
+    # tls.insecure: true and auth.type: bearerToken cannot be combined. The
+    # exporter fails to start entirely and no telemetry leaves the cluster.
+    #
+    # Nothing is lost by dropping it: server3's alloy-receiver never validated
+    # the token (k8s-monitoring has no server-side OTLP auth), so the endpoint
+    # was always protected by private-network isolation alone.
+    #
+    # To have real auth, terminate TLS on otel.server3.home and reinstate:
+    #   tls: { insecure: false, ca: ... }
+    #   auth: { type: bearerToken, bearerTokenFrom: env("OTEL_AUTH_TOKEN") }
+    # plus collectorCommon.alloy.envFrom to inject the otel-auth-token secret.
