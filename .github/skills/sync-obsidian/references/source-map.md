@@ -18,7 +18,7 @@
 
 ## Custom APIs
 
-For each app in `gitops/argocd-manifests/apps/apps/` (skip `AppsOTelCollector`):
+For each app in `gitops/argocd-manifests/apps/apps/`:
 
 - Image repo + tag: `gitops/helm-values/apps/<app>/base.yaml` → `apps.<key>.image.repository` + `.tag`
 - Component (subdomain): `gitops/helm-values/apps/<app>/base.yaml` → `apps.<key>.labels.component`

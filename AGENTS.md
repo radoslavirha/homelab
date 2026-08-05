@@ -51,10 +51,9 @@ gitops/
     grafana.yaml            shared: existingSecret grafana-admin, sidecar datasources+dashboards, Longhorn 5Gi
     loki.yaml               shared: Monolithic, filesystem storage, Longhorn 20Gi
     tempo.yaml              shared: local backend, OTLP receivers, metrics generator, Longhorn 20Gi
-    otel-gateway.yaml       shared: Deployment mode, otel-contrib, receivers, processors, pipeline topology
+    k8s-monitoring.yaml     shared: Alloy collector map, feature toggles, telemetryServices, OTLP receiver (no destinations)
     apps/
       common/               values.yaml (cluster-agnostic VAR_PROTOCOL, VAR_MQTT_URL, VAR_MONGODB_URL), production.yaml, sandbox.yaml
-      otel-collector/       base.yaml, production.yaml, sandbox.yaml
       miot-bridge-api/  base.yaml, production.yaml, sandbox.yaml
       interactive-map-feeder-api/ base.yaml, production.yaml, sandbox.yaml
       qr-manager-api/   base.yaml, production.yaml, sandbox.yaml
@@ -69,7 +68,7 @@ gitops/
       headlamp.yaml         hostname: headlamp.server2.home
       influxdb2.yaml        server2 Longhorn storageClass overrides
       mongodb.yaml          server2 overrides
-      otel-gateway.yaml     forwarder: single otlp/server3 exporter → otel.server3.home:4317, k8s.cluster.name=server2
+      k8s-monitoring.yaml   server2 cluster name + OTLP destination to server3
       telegraf.yaml         server2 overrides (currently empty)
       traefik.yaml          dashboard hostname/IP, externalIPs, statusAddress.ip
     server3/
@@ -80,7 +79,7 @@ gitops/
       traefik.yaml          dashboard hostname/IP, externalIPs, statusAddress.ip, OTLP tracing endpoint
       prometheus.yaml       server3 overrides (currently empty)
       grafana.yaml          server3 overrides: extraSecretMounts for influxdb2-grafana secret
-      otel-gateway.yaml     exporters (Loki/Tempo/Prometheus endpoint URLs), k8s.cluster.name=server3
+      k8s-monitoring.yaml   server3 self-contained: cluster name + local LGTM destinations
   argocd-manifests/
     ArgoCD.yaml             ArgoCD self-management (manual apply #1)
     Bootstrap.yaml          Meta App-of-Apps (manual apply #2) — discovers roots/, orders via sync waves
@@ -98,11 +97,11 @@ gitops/
     apps/
       infra/       ESO (AppSet, list generator)
       gateway/     Traefik (AppSet), ExternalDNS (AppSet)
-      observability/ OTelGateway (AppSet)
+      observability/ K8sMonitoring (AppSet)
       iot/         InfluxDB2 (AppSet), EMQX (AppSet), Telegraf (AppSet), IotInfra (AppSet, sync-wave: -1)
       databases/   MongoDB (AppSet)
       dashboards/  Headlamp (AppSet), Hubble (AppSet), Longhorn (AppSet)
-      apps/        AppsOTelCollector (AppSet), MiotBridgeApi (AppSet), InteractiveMapFeederApi (AppSet), QrManagerApi (AppSet), QrManagerUi (AppSet)
+      apps/        MiotBridgeApi (AppSet), InteractiveMapFeederApi (AppSet), QrManagerApi (AppSet), QrManagerUi (AppSet)
     server3/
       apps/
         dashboards/ OpenBao.yaml   App: vault.server3.home HTTPRoute
@@ -120,7 +119,7 @@ gitops/
       mongodb/     ExternalSecret, IngressRouteTCP, ExternalSecret.provisioner-token.yaml
       miot-bridge-api/ production/ and sandbox/ — ExternalSecret.mqtt.yaml, ExternalSecret.mongodb.yaml
       qr-manager-api/ production/ and sandbox/ — ExternalSecret.mongodb.yaml
-      otel-gateway/ ExternalSecret.otel-auth-token.yaml (shared OTLP bearer token pulled from secret/otel-gateway/auth-token)
+      k8s-monitoring/ ExternalSecret.otel-auth-token.yaml (shared OTLP bearer token pulled from secret/otel-gateway/auth-token)
     server3/
       cilium/              HTTPRoute: hubble.server3.home → hubble-dashboard:80
       external-dns/        ExternalSecret (unifi-credentials), DNSEndpoint (server3.home A record)
@@ -128,7 +127,7 @@ gitops/
       longhorn/            HTTPRoute: longhorn.server3.home → longhorn-frontend:80
       openbao/             HTTPRoute: vault.server3.home → openbao:8200
       grafana/             ExternalSecret (grafana-admin), ExternalSecret (influxdb2-grafana), datasource ConfigMaps (prometheus/loki/tempo/influxdb2), dashboard ConfigMap (traefik-opentelemetry), HTTPRoute: grafana.server3.home
-      otel-gateway/        ExternalSecret.otel-auth-token.yaml (shared OTLP bearer token), HTTPRoute: otel.server3.home, IngressRouteTCP (otel gRPC :4317)
+      k8s-monitoring/      HTTPRoute: otel.server3.home → alloy-receiver:4318, IngressRouteTCP (otel gRPC :4317)
 docs/             Architecture decisions, IaC guide, secrets guide, observability guide
 ```
 
@@ -164,7 +163,7 @@ To apply a version change: `cd iac/clusters/<cluster>/<stage> && terraform apply
 All other apps use the **app-of-apps + ApplicationSet** pattern with seven stages (six multi-cluster + server3-only LGTM):
 - **infra** stage: ESO + supporting K8s resources (ClusterSecretStore)
 - **gateway** stage: Traefik + ExternalDNS + ExternalSecret for Unifi credentials
-- **observability** stage: OTel Gateway (all clusters); server3-only LGTM stack (Prometheus, Grafana, Loki, Tempo) under `server3/apps/observability/`
+- **observability** stage: k8s-monitoring / Grafana Alloy (all clusters); server3-only LGTM stack (Prometheus, Grafana, Loki, Tempo) under `server3/apps/observability/`
 - **iot** stage: InfluxDB2 (server2), EMQX (server2), Telegraf (server2), IotInfra (server2)
 - **databases** stage: MongoDB (server2)
 - **dashboards** stage: Headlamp, Hubble UI, Longhorn UI (server3 · server2); server3-only OpenBao HTTPRoute under `server3/apps/dashboards/`
@@ -182,7 +181,7 @@ kubectl apply -f gitops/argocd-manifests/Bootstrap.yaml   # meta App-of-Apps
 - **wave 1** — `RootInfra` (ESO + CRDs; must precede any other app's ExternalSecret)
 - **wave 2** — `RootGateway` (Traefik + ExternalDNS) · `server3/RootDashboards` (OpenBao HTTPRoute — unblocks server2 ESO reaching `vault.server3.home`)
 - **wave 3** — `RootObservability` · `server3/RootObservability` · `RootIoT` · `RootDatabases` · `RootDashboards`
-- **wave 4** — `RootApps` (custom apps depending on MongoDB + EMQX + OTel Gateway)
+- **wave 4** — `RootApps` (custom apps depending on MongoDB + EMQX)
 
 For sync waves to wait on child-Application Health (not just creation), ArgoCD's Application CRD health check is restored via a Lua `resource.customizations` entry in `gitops/helm-values/server3/argocd.yaml`. Source: [ArgoCD 1.7→1.8 upgrade notes](https://argo-cd.readthedocs.io/en/stable/operator-manual/upgrading/1.7-1.8).
 

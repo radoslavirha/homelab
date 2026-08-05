@@ -17,7 +17,7 @@ prometheus-pushgateway:
 
 server:
   # Override the generated name so the Service is named "prometheus" instead of "prometheus-server".
-  # All internal references (OTel Gateway, Tempo metricsGenerator, Grafana datasource) use
+  # All internal references (Alloy, Tempo metricsGenerator, Grafana datasource) use
   # prometheus.monitoring.svc.cluster.local:9090
   fullnameOverride: prometheus
 

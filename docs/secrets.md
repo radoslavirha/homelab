@@ -17,7 +17,7 @@ Every stage in `docs/iac.md` and `gitops/README.md` that requires secrets links 
 | `secret/<cluster>/influxdb2` | `admin-password`, `admin-token` | iot stage | any |
 | `secret/<cluster>/emqx` | `dashboard-username`, `dashboard-password` | iot stage | any |
 | `secret/<cluster>/mongodb` | `root-password` | databases stage | any |
-| `secret/otel-gateway/auth-token` | `token` | observability stage | server3, server2 |
+| `secret/otel-gateway/auth-token` | `token` | observability stage | server1, server2 |
 | `secret/server3/influxdb2-grafana` | `token` | *provisioned at runtime* | server3 |
 
 `<cluster>` is the short cluster name: `server2`, `server3`, etc.
@@ -158,9 +158,11 @@ See [provisioning.md](provisioning.md) for per-app scoped user provisioning via 
 
 ## otel-gateway/auth-token
 
-**Required before:** observability stage on **any** cluster (OTel Gateway pod on server3 and server2 both read it via ESO).
+**Required before:** observability stage on **any** cluster (k8s-monitoring on server1/server2 reads it via ESO).
 
-Shared OTLP bearer token. server3 OTel Gateway validates inbound OTLP; server2 OTel Gateway sends it as `Authorization: Bearer` to server3. Single value — must be identical across clusters, so the path is intentionally outside the `secret/<cluster>/…` tree.
+Shared OTLP bearer token. server1/server2 k8s-monitoring sends it as `Authorization: Bearer` on outbound OTLP to `otel.server3.home:4317`. Single value — must be identical across clusters, so the path is intentionally outside the `secret/<cluster>/…` tree.
+
+> **Note:** server3's `alloy-receiver` does **not** validate this token — the k8s-monitoring chart has no server-side OTLP auth. The endpoint is protected by private-network isolation only. See [observability.md](observability.md).
 
 ```bash
 bao kv put secret/otel-gateway/auth-token token=$(openssl rand -base64 32 | tr -d '=+/')

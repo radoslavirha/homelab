@@ -1,5 +1,5 @@
 # Prometheus — server3 singleton Application
-# Receives remote-write from OTel Gateway; no scraping required.
+# Receives remote-write from Alloy; no scraping required.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:

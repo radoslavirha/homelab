@@ -1,0 +1,84 @@
+# k8s-monitoring — shared base (collector + feature toggles, no destinations).
+# Applied to every cluster; destinations live in gitops/helm-values/<cluster>/k8s-monitoring.yaml.
+# server1/server2 forward all signals to server3 via a single OTLP destination;
+# server3 fans out locally to Prometheus/Loki/Tempo.
+# Upstream values.yaml: https://github.com/grafana/k8s-monitoring-helm/blob/main/charts/k8s-monitoring/values.yaml
+
+# ---------------------------------------------------------------------------
+# Single collapsed collector — valid because every cluster is single-node.
+#
+# Chart v4 removed the built-in named Alloy instances; collectors are declared here
+# and each feature names the one it runs on. The chart's default layout is four
+# separate collectors, one per role. All four are collapsed into one process because
+# the reasons for splitting them only apply to multi-node clusters:
+#
+#   role       | why the chart splits it        | why it doesn't matter on one node
+#   -----------|--------------------------------|----------------------------------
+#   logs       | DaemonSet, reads local /var/log | DaemonSet == 1 pod
+#   metrics    | clustering shards scrape targets across replicas | nothing to shard
+#   singleton  | >1 replica duplicates k8s events | only ever 1 replica
+#   receiver   | scales independently with ingest | ingest is small
+#
+# Named `alloy-receiver` so the Service stays k8s-monitoring-alloy-receiver — that name
+# is referenced by every app's OTLP URL, traefik.yaml, the HTTPRoute and the
+# IngressRouteTCP, and it stays correct if this is ever split back into four.
+#
+# >>> IF YOU EVER GO MULTI-NODE, THIS MUST BE SPLIT BACK. <<<
+# Collapsed on multi-node causes: k8s events emitted once per node (N duplicates),
+# duplicated scrape targets, and one OOM taking out all telemetry at once.
+# To split, replace the collectors block below with:
+#
+#   collectors:
+#     alloy-metrics:   { presets: [clustered, service-discovery] }
+#     alloy-logs:      { presets: [daemonset, filesystem-log-reader] }
+#     alloy-singleton: { presets: [singleton] }
+#     alloy-receiver:  { presets: [deployment, otel-receiver] }
+#
+# and repoint each feature: clusterMetrics/hostMetrics -> alloy-metrics,
+# podLogsViaLoki -> alloy-logs, clusterEvents -> alloy-singleton,
+# applicationObservability -> alloy-receiver.
+# ---------------------------------------------------------------------------
+collectors:
+  alloy-receiver:
+    presets:
+      - daemonset               # pod logs must be read from the local node
+      - filesystem-log-reader   # mounts /var/log for pod logs
+      - otel-receiver           # opens OTLP :4317 gRPC and :4318 HTTP
+      - clustered               # required by clusterMetrics; a no-op at 1 replica
+
+clusterMetrics:
+  enabled: true
+  collector: alloy-receiver
+hostMetrics:
+  enabled: true
+  collector: alloy-receiver
+clusterEvents:
+  enabled: true
+  collector: alloy-receiver
+
+# Pod logs via the Loki pipeline (generally-available). The OpenTelemetry variant
+# (podLogsViaOpenTelemetry) needs otelcol.receiver.filelog, still public-preview in Alloy.
+# On server1/server2 these logs are bridged into the OTLP destination automatically.
+podLogsViaLoki:
+  enabled: true
+  collector: alloy-receiver
+
+# OTLP receiver for app telemetry — apps push to k8s-monitoring-alloy-receiver:4317/4318.
+applicationObservability:
+  enabled: true
+  collector: alloy-receiver
+  receivers:
+    otlp:
+      grpc:
+        enabled: true
+      http:
+        enabled: true
+
+# Chart v4 extracted these into the telemetryServices subchart; all default to deploy: false.
+# These two are the node/cluster telemetry: clusterMetrics needs kube-state-metrics,
+# hostMetrics needs node-exporter. windows-exporter stays off (all nodes are Talos Linux).
+telemetryServices:
+  kube-state-metrics:
+    deploy: true
+  node-exporter:
+    deploy: true

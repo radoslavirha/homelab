@@ -1,0 +1,32 @@
+# k8s-monitoring — server1 cluster overrides
+# Upstream values.yaml: https://github.com/grafana/k8s-monitoring-helm/blob/main/charts/k8s-monitoring/values.yaml
+cluster:
+  name: server1
+
+destinations:
+  server3:
+    type: otlp
+    url: http://otel.server3.home:4317
+    protocol: grpc
+    tls:
+      insecure: true
+    metrics:
+      enabled: true
+    logs:
+      enabled: true
+    traces:
+      enabled: true
+    auth:
+      type: bearerToken
+      # Read from the pod env, injected by collectorCommon.envFrom below.
+      # Do NOT use secret.create/name here — that switches the destination to "external secret"
+      # mode, which makes the chart emit remote.kubernetes.secret lookups for every supported
+      # key (tenantId, ca, cert, key), none of which exist in otel-auth-token.
+      bearerTokenFrom: env("OTEL_AUTH_TOKEN")
+
+# Every collector writes to the server3 destination, so all of them need the token.
+collectorCommon:
+  alloy:
+    envFrom:
+      - secretRef:
+          name: otel-auth-token

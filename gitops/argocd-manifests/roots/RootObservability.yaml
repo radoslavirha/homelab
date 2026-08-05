@@ -1,4 +1,4 @@
-# Root Observability App-of-Apps — multi-cluster OTel Gateway.
+# Root Observability App-of-Apps — multi-cluster k8s-monitoring (Grafana Alloy).
 # Sync wave 3 — needs Traefik (wave 2) for OTLP HTTPRoute/IngressRouteTCP
 # and ESO (wave 1) for the otel-auth-token ExternalSecret.
 apiVersion: argoproj.io/v1alpha1

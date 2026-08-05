@@ -86,7 +86,7 @@ bao kv put secret/server3/grafana \
 # ExternalDNS — UniFi API key:
 bao kv put secret/server3/external-dns api-key=<unifi-api-key>
 
-# Shared OTLP bearer token — used by every cluster's OTel Gateway.
+# Shared OTLP bearer token — used by every cluster's k8s-monitoring OTLP destination.
 # Lives at a non-cluster path; server2 ESO policy has an explicit read grant for it.
 bao kv put secret/otel-gateway/auth-token token=$(openssl rand -base64 32 | tr -d '=+/')
 
@@ -128,8 +128,8 @@ Wave layout:
 |----|-----------|-------|
 |1|`RootInfra`|ESO + CRDs|
 |2|`RootGateway`, `server3/RootDashboards`|Traefik + ExternalDNS · OpenBao HTTPRoute|
-|3|`RootObservability`, `server3/RootObservability`, `RootIoT`, `RootDatabases`, `RootDashboards`|OTel Gateway · LGTM · IoT · MongoDB · UI dashboards|
-|4|`RootApps`|Custom apps (miot-bridge, interactive-map-feeder, apps-otel-collector)|
+|3|`RootObservability`, `server3/RootObservability`, `RootIoT`, `RootDatabases`, `RootDashboards`|k8s-monitoring · LGTM · IoT · MongoDB · UI dashboards|
+|4|`RootApps`|Custom apps (miot-bridge, interactive-map-feeder, qr-manager)|
 
 ---
 

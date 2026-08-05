@@ -1,14 +1,18 @@
-# OTel Gateway Collector — ApplicationSet (all clusters)
-# Upstream values.yaml: https://github.com/open-telemetry/opentelemetry-helm-charts/blob/main/charts/opentelemetry-collector/values.yaml
+# k8s-monitoring — ApplicationSet (all clusters)
+# Replaces: OTelGateway ApplicationSet + AppsOTelCollector ApplicationSet
+# Upstream values.yaml: https://github.com/grafana/k8s-monitoring-helm/blob/main/charts/k8s-monitoring/values.yaml
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
-  name: otel-gateway
+  name: k8s-monitoring
   namespace: argocd
 spec:
   generators:
     - list:
         elements:
+          # Every cluster gets the shared base (collectors + feature toggles);
+          # the cluster file adds only `cluster.name` and `destinations`.
+          # server1/server2 forward to server3 over OTLP; server3 fans out locally.
           - cluster: server1
             clusterServer: https://192.168.1.200:6443
           - cluster: server2
@@ -17,24 +21,24 @@ spec:
             clusterServer: https://kubernetes.default.svc
   template:
     metadata:
-      name: otel-gateway-{{cluster}}
+      name: k8s-monitoring-{{cluster}}
     spec:
       project: default
       sources:
-        - repoURL: https://open-telemetry.github.io/opentelemetry-helm-charts
-          chart: opentelemetry-collector
-          targetRevision: 0.149.0
+        - repoURL: https://grafana.github.io/helm-charts
+          chart: k8s-monitoring
+          targetRevision: 4.3.2
           helm:
-            releaseName: otel-gateway
+            releaseName: k8s-monitoring
             valueFiles:
-              - $values/gitops/helm-values/otel-gateway.yaml
-              - $values/gitops/helm-values/{{cluster}}/otel-gateway.yaml
+              - $values/gitops/helm-values/k8s-monitoring.yaml
+              - $values/gitops/helm-values/{{cluster}}/k8s-monitoring.yaml
         - repoURL: https://github.com/radoslavirha/homelab
           targetRevision: HEAD
           ref: values
         - repoURL: https://github.com/radoslavirha/homelab
           targetRevision: HEAD
-          path: gitops/k8s-manifests/{{cluster}}/otel-gateway
+          path: gitops/k8s-manifests/{{cluster}}/k8s-monitoring
       destination:
         server: '{{clusterServer}}'
         namespace: monitoring

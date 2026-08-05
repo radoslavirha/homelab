@@ -1,5 +1,5 @@
 # Server3-only Observability App-of-Apps: Prometheus, Grafana, Loki, Tempo.
-# OTel Gateway is managed by top-level RootObservability.yaml (ApplicationSet).
+# k8s-monitoring is managed by top-level RootObservability.yaml (ApplicationSet).
 # Sync wave 3 — Grafana needs ESO (wave 1) for admin secret and Traefik
 # (wave 2) for HTTPRoute. LGTM backends share the wave with no hard deps
 # on sibling Roots.

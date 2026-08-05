@@ -25,11 +25,11 @@ gitops/
     apps/
       infra/       ESO.yaml
       gateway/     Traefik.yaml, ExternalDNS.yaml
-      observability/ OTelGateway.yaml
+      observability/ K8sMonitoring.yaml
       iot/         IotInfra.yaml, InfluxDB2.yaml, EMQX.yaml, Telegraf.yaml
       databases/   MongoDB.yaml
       dashboards/  Headlamp.yaml, Hubble.yaml, Longhorn.yaml
-      apps/        AppsOTelCollector.yaml, MiotBridgeApiIot.yaml, InteractiveMapFeederApiIot.yaml
+      apps/        MiotBridgeApiIot.yaml, InteractiveMapFeederApiIot.yaml
     server3/
       apps/
         dashboards/   OpenBao.yaml
@@ -72,7 +72,7 @@ gitops/
       grafana/             ExternalSecret (grafana-admin), datasource ConfigMaps (prometheus/loki/tempo), HTTPRoute: grafana.server3.home
       longhorn/            HTTPRoute: longhorn.server3.home → longhorn-frontend:80
       openbao/             HTTPRoute: vault.server3.home → openbao:8200
-      otel-gateway/        HTTPRoute: otel.server3.home, IngressRouteTCP (otel gRPC :4317)
+      k8s-monitoring/      HTTPRoute: otel.server3.home, IngressRouteTCP (otel gRPC :4317)
 ```
 
 ## App-of-apps pattern
@@ -86,12 +86,12 @@ Application-CRD health assessment is enabled by a Lua `resource.customizations` 
 |1|`roots/RootInfra.yaml`|infra|ESO + CRDs — any other app's `ExternalSecret` fails to apply until these CRDs exist|
 |2|`roots/RootGateway.yaml`|gateway|Traefik installs the Gateway every HTTPRoute/TCPRoute in later waves references. ExternalDNS needs ESO (wave 1) for its Unifi secret|
 |2|`roots/server3/RootDashboards.yaml`|server3 singleton|OpenBao HTTPRoute at `vault.server3.home` — parallel with RootGateway; unblocks server2 ClusterSecretStore|
-|3|`roots/RootObservability.yaml`|observability|OTel Gateway — needs Traefik (wave 2) + ESO `otel-auth-token`|
+|3|`roots/RootObservability.yaml`|observability|k8s-monitoring — needs Traefik (wave 2) + ESO `otel-auth-token`|
 |3|`roots/server3/RootObservability.yaml`|server3 observability|Prometheus, Grafana (needs ESO admin secret), Loki, Tempo|
 |3|`roots/RootIoT.yaml`|iot|IotInfra, InfluxDB2, EMQX, Telegraf — Telegraf self-orders with resource-level sync-wave `"1"` to wait for InfluxDB2/EMQX post-sync provisioner Jobs|
 |3|`roots/RootDatabases.yaml`|databases|MongoDB — needs ESO + Traefik TCPRoute|
 |3|`roots/RootDashboards.yaml`|dashboards|Headlamp, Hubble, Longhorn UI — need Traefik HTTPRoutes|
-|4|`roots/RootApps.yaml`|apps|Custom apps: miot-bridge-api needs MongoDB + EMQX, apps-otel-collector needs OTel Gateway|
+|4|`roots/RootApps.yaml`|apps|Custom apps: miot-bridge-api needs MongoDB + EMQX|
 
 Each ApplicationSet uses a list generator — one element per cluster. Adding a cluster means adding `{cluster, clusterServer}` to each ApplicationSet and committing.
 
@@ -137,7 +137,7 @@ After Terraform + OpenBao setup + `argocd cluster add` (see `docs/iac.md`):
    gitops/argocd-manifests/apps/infra/ESO.yaml
    gitops/argocd-manifests/apps/gateway/Traefik.yaml
    gitops/argocd-manifests/apps/gateway/ExternalDNS.yaml
-   gitops/argocd-manifests/apps/observability/OTelGateway.yaml
+   gitops/argocd-manifests/apps/observability/K8sMonitoring.yaml
    gitops/argocd-manifests/apps/iot/IotInfra.yaml
    gitops/argocd-manifests/apps/iot/InfluxDB2.yaml
    gitops/argocd-manifests/apps/iot/EMQX.yaml

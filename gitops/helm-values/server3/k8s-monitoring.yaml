@@ -1,0 +1,25 @@
+# k8s-monitoring — server3 (LGTM cluster) — local fan-out destinations
+# Upstream values.yaml: https://github.com/grafana/k8s-monitoring-helm/blob/main/charts/k8s-monitoring/values.yaml
+cluster:
+  name: server3
+
+destinations:
+  prometheus:
+    type: prometheus
+    url: http://prometheus.monitoring.svc.cluster.local:80/api/v1/write
+  loki:
+    type: loki
+    url: http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push
+  tempo:
+    type: otlp
+    url: http://tempo.monitoring.svc.cluster.local:4317
+    protocol: grpc
+    tls:
+      insecure: true
+    # Traces only — metrics go to Prometheus, logs to Loki.
+    metrics:
+      enabled: false
+    logs:
+      enabled: false
+    traces:
+      enabled: true

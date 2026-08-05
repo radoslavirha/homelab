@@ -84,19 +84,19 @@ apps:
                   "metrics": {
                       "enabled": true,
                       "exporter": {
-                          "url": "http://otel-collector-opentelemetry-collector:4318/v1/metrics"
+                          "url": "http://k8s-monitoring-alloy-receiver.monitoring.svc.cluster.local:4318/v1/metrics"
                       }
                   },
                   "traces": {
                       "enabled": true,
                       "exporter": {
-                          "url": "http://otel-collector-opentelemetry-collector:4318/v1/traces"
+                          "url": "http://k8s-monitoring-alloy-receiver.monitoring.svc.cluster.local:4318/v1/traces"
                       }
                   },
                   "logs": {
-                      "enabled": true,
+                      "enabled": false,
                       "exporter": {
-                          "url": "http://otel-collector-opentelemetry-collector:4318/v1/logs"
+                          "url": "http://k8s-monitoring-alloy-receiver.monitoring.svc.cluster.local:4318/v1/logs"
                       }
                   }
               }
