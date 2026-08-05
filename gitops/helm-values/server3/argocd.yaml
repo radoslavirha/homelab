@@ -8,6 +8,11 @@ configs:
   cm:
     admin.enabled: "true"
     url: http://argocd.server3.home
+    # Machine account for the Argo CD MCP server (read-only, see rbac below).
+    # `apiKey` grants token generation only — no `login`, so this account cannot
+    # sign in to the UI and needs no password in argocd-secret.
+    # Mint a token with:  argocd account generate-token --account claude
+    accounts.claude: apiKey
     # Restore health assessment for Application CRD so App-of-Apps sync waves
     # wait for each child Application to reach Healthy before the next wave.
     # Removed from ArgoCD core in v1.8 — re-enabled via Lua customization.
@@ -25,6 +30,35 @@ configs:
         end
       end
       return hs
+  rbac:
+    # Full operational control for the MCP account: every ArgoCD resource is
+    # granted except `accounts` and `exec` (see below).
+    #
+    # Resources are listed explicitly rather than using `*, *, */*`. Upstream
+    # recommends this — a wildcard silently grants any resource type added by a
+    # future ArgoCD release, which is how `applicationsets` caught people out in 2.5.
+    #
+    # Object format differs per resource: applications, applicationsets and logs
+    # are project-scoped (<project>/<object>); everything else takes a plain object.
+    #
+    # Deliberately NOT granted:
+    #   accounts — would allow rotating the admin password or minting tokens for
+    #              other accounts, i.e. privilege escalation if this token leaks.
+    #   exec     — shell into any pod on any connected cluster. Also disabled
+    #              server-side by default (exec.enabled is unset), so this is belt
+    #              and braces. Add `p, role:claude, exec, *, */*, allow` plus
+    #              `exec.enabled: "true"` in configs.cm if you ever want it.
+    #
+    # To grant literally everything instead, replace the whole block with:
+    #   g, claude, role:admin
+    policy.csv: |
+      p, role:claude, applications, *, */*, allow
+      p, role:claude, applicationsets, *, */*, allow
+      p, role:claude, logs, *, */*, allow
+      p, role:claude, clusters, *, *, allow
+      p, role:claude, projects, *, *, allow
+      p, role:claude, repositories, *, *, allow
+      g, claude, role:claude
   params:
     server.insecure: "true"
   secret:
