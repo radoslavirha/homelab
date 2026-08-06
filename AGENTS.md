@@ -243,6 +243,33 @@ export TALOSCONFIG=iac/clusters/<cluster>/credentials/talosconfig
 
 ## Operational commands
 
+> **Change the clusters through git, not through commands.** ArgoCD syncs every app with
+> `selfHeal` and `prune` enabled, so an imperative change is transient — the next
+> reconcile reverts it, usually within minutes. Edit the manifest, commit, sync. An agent
+> that fixes something with `kubectl` has not fixed it.
+>
+> Reading is unrestricted: `kubectl get/describe/logs`, `argocd app get`, and Prometheus
+> or Loki queries via the Grafana MCP. Restarting a workload (`kubectl rollout restart`,
+> `delete pod`) and reconciling an app (`argocd app sync`) are routine — a controller
+> recreates the pod and ArgoCD converges on committed state.
+>
+> **The exception is anything holding data.** PersistentVolumeClaims, PersistentVolumes,
+> Longhorn volumes, namespaces, StatefulSets and CRDs are *not* covered by "git will put
+> it back" — Prometheus, Loki, Tempo, MongoDB and InfluxDB2 data lives in Longhorn and
+> exists nowhere else. Deleting one is unrecoverable. Ask first, every time.
+>
+> Permission enforcement lives in the Claude Code harness, not in this repository; the
+> operator configures it locally. Treat a denial as a decision, not an obstacle to route
+> around — and never edit the permission configuration on the operator's behalf.
+>
+> **Green does not mean working.** ArgoCD reporting `Synced`/`Healthy` with Running pods
+> proves the manifests applied, not that telemetry, traffic or data is flowing. Two
+> separate bugs during the k8s-monitoring migration (a scrape gated behind
+> `hostMetrics.linuxHosts.enabled`, and an OTLP exporter that could not start) sat green
+> for hours while collecting nothing. Verify observability changes by querying the data —
+> `count by (cluster) (kube_pod_status_phase)` and the Loki `cluster` label — not by
+> reading sync status.
+
 ### Run freely (read-only / safe)
 
 ```bash
