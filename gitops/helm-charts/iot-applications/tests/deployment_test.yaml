@@ -521,6 +521,12 @@ tests:
       - equal:
           path: spec.template.spec.initContainers[1].securityContext.runAsNonRoot
           value: true
+      # runAsUser is required, not optional: the validator images declare `USER node`,
+      # a name the kubelet cannot resolve, so runAsNonRoot alone gives
+      # CreateContainerConfigError. Observed in sandbox before this was added.
+      - equal:
+          path: spec.template.spec.initContainers[1].securityContext.runAsUser
+          value: 1000
       - equal:
           path: spec.template.spec.initContainers[1].securityContext.readOnlyRootFilesystem
           value: true
@@ -555,3 +561,18 @@ tests:
       - equal:
           path: spec.template.spec.initContainers[2].name
           value: api-iot-my-app-other-jinja2
+
+  - it: should allow the validate map form to override runAsUser
+    set:
+      apps.my-app.image.repository: ghcr.io/example/my-app
+      apps.my-app.labels.component: api
+      apps.my-app.labels.partOf: iot
+      apps.my-app.ingress.enabled: false
+      apps.my-app.templates.config.file: config.json
+      apps.my-app.templates.config.path: /app/config
+      apps.my-app.templates.config.content: '{"key":"value"}'
+      apps.my-app.templates.config.validate.runAsUser: 65532
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[1].securityContext.runAsUser
+          value: 65532

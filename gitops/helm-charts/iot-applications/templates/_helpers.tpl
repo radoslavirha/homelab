@@ -112,7 +112,7 @@
 {{- fail (printf "Template '%s' has an invalid validate key. Allowed values are a boolean or a map. [apps.%s.templates]." .name .applicationName) -}}
 {{- end -}}
 {{- if kindIs "map" $validate -}}
-{{- $allowed := list "repository" "tag" "args" -}}
+{{- $allowed := list "repository" "tag" "args" "runAsUser" -}}
 {{- range $key, $_ := $validate -}}
 {{- if not (has $key $allowed) -}}
 {{- fail (printf "Template '%s' has an unknown validate key '%s'. Allowed keys are: %s. [apps.%s.templates]." $.name $key (join ", " $allowed) $.applicationName) -}}

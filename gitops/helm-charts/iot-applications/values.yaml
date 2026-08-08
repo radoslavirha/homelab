@@ -131,6 +131,12 @@
 #         #   repository: ghcr.io/radoslavirha/some-other-validator
 #         #   tag: "1.2.3"
 #         #   args: ["--strict"]
+#         #   # UID the validator runs as. Defaults to 1000 (the `node` user in the
+#         #   # node:*-alpine base). The chart always sets runAsUser because an image
+#         #   # whose USER is a NAME cannot satisfy runAsNonRoot — the kubelet cannot
+#         #   # resolve it and fails with CreateContainerConfigError. Override only for
+#         #   # a validator image built on a different base.
+#         #   runAsUser: 65532
 
 #     # env is a list of static environment variables injected into the main container.
 #     # Supports any valid Kubernetes env entry (value, valueFrom, secretKeyRef, etc.).

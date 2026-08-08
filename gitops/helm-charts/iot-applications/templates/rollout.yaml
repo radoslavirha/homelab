@@ -118,6 +118,12 @@ spec:
             {{- end }}
           securityContext:
             runAsNonRoot: true
+            {{- /* runAsUser is REQUIRED, not belt-and-braces: the validator images declare
+                   `USER node`, a name. The kubelet cannot resolve a name to a UID, so with
+                   runAsNonRoot alone it refuses to start the container with
+                   CreateContainerConfigError "image has non-numeric user (node)".
+                   1000 is the `node` user in the node:*-alpine base both validators use. */}}
+            runAsUser: {{ (ternary dict $template.validate (kindIs "bool" $template.validate)).runAsUser | default 1000 }}
             readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false
             capabilities:

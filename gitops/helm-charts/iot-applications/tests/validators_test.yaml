@@ -101,4 +101,4 @@ tests:
       apps.my-app.templates.config.validate.image: ghcr.io/example/typo
     asserts:
       - failedTemplate:
-          errorMessage: "Template 'config' has an unknown validate key 'image'. Allowed keys are: repository, tag, args. [apps.my-app.templates]."
+          errorMessage: "Template 'config' has an unknown validate key 'image'. Allowed keys are: repository, tag, args, runAsUser. [apps.my-app.templates]."
