@@ -100,7 +100,7 @@ The Argo Rollouts controller is not installed in any cluster (the only trace in 
 
 ### 1. Shared Helm values
 
-- [ ] Create `gitops/helm-values/reloader.yaml`:
+- [x] Create `gitops/helm-values/reloader.yaml`:
 
 ```yaml
 # Stakater Reloader — shared Helm values
@@ -141,7 +141,7 @@ reloader:
         memory: 512Mi
 ```
 
-- [ ] Create `gitops/helm-values/server1/reloader.yaml`, `gitops/helm-values/server2/reloader.yaml`, `gitops/helm-values/server3/reloader.yaml` — comment-only placeholders following the `external-secrets.yaml` precedent:
+- [x] Create `gitops/helm-values/server1/reloader.yaml`, `gitops/helm-values/server2/reloader.yaml`, `gitops/helm-values/server3/reloader.yaml` — comment-only placeholders following the `external-secrets.yaml` precedent:
 
 ```yaml
 # Stakater Reloader — <cluster> cluster overrides
@@ -153,7 +153,7 @@ reloader:
 
 ### 2. ApplicationSet — infra stage
 
-- [ ] Create `gitops/argocd-manifests/apps/infra/Reloader.yaml`, copying the shape of `apps/infra/ESO.yaml`:
+- [x] Create `gitops/argocd-manifests/apps/infra/Reloader.yaml`, copying the shape of `apps/infra/ESO.yaml`:
 
 ```yaml
 apiVersion: argoproj.io/v1alpha1
@@ -199,12 +199,12 @@ spec:
           prune: true
 ```
 
-- [ ] No Root Application change needed — `roots/RootInfra.yaml` discovers `apps/infra/` with `directory.recurse: true`.
-- [ ] Infra is sync-wave 1 (with ESO). Reloader has no CRDs and no dependency on ESO, so wave 1 is correct and it is up before any secret can rotate.
+- [x] No Root Application change needed — `roots/RootInfra.yaml` discovers `apps/infra/` with `directory.recurse: true`.
+- [x] Infra is sync-wave 1 (with ESO). Reloader has no CRDs and no dependency on ESO, so wave 1 is correct and it is up before any secret can rotate.
 
 ### 3. Suppress Reloader's patch in ArgoCD diffing
 
-- [ ] Add to `configs.cm` in `gitops/helm-values/server3/argocd.yaml`, next to the existing `resource.customizations.health.argoproj.io_Application` entry:
+- [x] Add to `configs.cm` in `gitops/helm-values/server3/argocd.yaml`, next to the existing `resource.customizations.health.argoproj.io_Application` entry:
 
 ```yaml
     # Stakater Reloader patches the pod template annotation below to trigger a
@@ -229,7 +229,7 @@ spec:
 
 #### 4a. `iot-applications` chart — add workload annotations support
 
-- [ ] `gitops/helm-charts/iot-applications/templates/deployment.yaml` — add annotations to the **Deployment** metadata (currently `labels` only):
+- [x] `gitops/helm-charts/iot-applications/templates/Deployment.yaml` — add annotations to the **Deployment** metadata (currently `labels` only):
 
 ```yaml
 metadata:
@@ -241,20 +241,20 @@ metadata:
   {{- end }}
 ```
 
-- [ ] Apply the identical block to `templates/rollout.yaml` (Rollout metadata) so the two stay in step even though Rollouts is unused.
-- [ ] Document the new `annotations` key in `gitops/helm-charts/iot-applications/values.yaml`, in the commented `apps:` block near `podAnnotations` (line ~121). State the difference: `annotations` = workload metadata (what Reloader reads), `podAnnotations` = pod template.
-- [ ] Extend `gitops/helm-charts/iot-applications/tests/deployment_test.yaml`: annotations rendered when set, absent when unset. Update `tests/__snapshot__` if a snapshot assertion covers Deployment metadata.
-- [ ] Run `helm unittest gitops/helm-charts/iot-applications` locally — CI runs the same via `.github/workflows/helm-chart-ci.yaml` (helm-unittest v0.4.4).
+- [x] Apply the identical block to `templates/Rollout.yaml` (Rollout metadata) so the two stay in step even though Rollouts is unused.
+- [x] Document the new `annotations` key in `gitops/helm-charts/iot-applications/values.yaml`, in the commented `apps:` block near `podAnnotations` (line ~121). State the difference: `annotations` = workload metadata (what Reloader reads), `podAnnotations` = pod template.
+- [x] Extend `gitops/helm-charts/iot-applications/tests/deployment_test.yaml`: annotations rendered when set, absent when unset. Update `tests/__snapshot__` if a snapshot assertion covers Deployment metadata.
+- [x] Run `helm unittest gitops/helm-charts/iot-applications` locally — CI runs the same via `.github/workflows/helm-chart-ci.yaml` (helm-unittest v0.4.4).
 
 #### 4b. `iot-applications` chart — remove `checksum/config`
 
 Reloader and the checksum annotation both restart on the *same* ConfigMap. Keeping both means **two rollouts per config change**: ArgoCD applies the new ConfigMap plus the new checksum (rollout 1), then Reloader observes the ConfigMap update and patches `last-reloaded-from` (rollout 2). Pick one — Reloader, since it also covers the out-of-band ESO case the checksum can never see.
 
-- [ ] Remove the `checksum/config` line from `templates/deployment.yaml` (line ~40) and `templates/rollout.yaml` (line ~37).
-- [ ] Simplify the surrounding conditional — the annotations block now renders on `$application.annotations`/`podAnnotations` alone, not on `$application.templates | len`.
-- [ ] Update `values.yaml` comments at lines ~94 (“Pods automatically restart when content changes (checksum annotation)”) and ~122 (“checksum/config is added automatically when templates are defined”) — replace with the Reloader annotation requirement.
-- [ ] Update `Readme.md` line ~50 (same claim).
-- [ ] Update `tests/deployment_test.yaml`: drop the two `checksum/config` assertions (lines ~121 and ~148) and rename the “should NOT render annotations block when no templates and no podAnnotations” case, whose premise changes.
+- [x] Remove the `checksum/config` line from `templates/Deployment.yaml` (line ~40) and `templates/Rollout.yaml` (line ~37).
+- [x] Simplify the surrounding conditional — the annotations block now renders on `$application.annotations`/`podAnnotations` alone, not on `$application.templates | len`.
+- [x] Update `values.yaml` comments at lines ~94 (“Pods automatically restart when content changes (checksum annotation)”) and ~122 (“checksum/config is added automatically when templates are defined”) — replace with the Reloader annotation requirement.
+- [x] Update `Readme.md` line ~50 (same claim).
+- [x] Update `tests/deployment_test.yaml`: drop the two `checksum/config` assertions (lines ~121 and ~148) and rename the “should NOT render annotations block when no templates and no podAnnotations” case, whose premise changes.
 
 > **Consequence to accept:** config changes previously restarted pods with no moving parts. Afterwards they depend on Reloader running — if it is down, ArgoCD updates the ConfigMap but pods keep serving the file rendered at their last start (the Jinja2 init container runs only at pod start). Reloader sits in wave 1; consider a pod-availability alert.
 
@@ -262,21 +262,21 @@ Reloader and the checksum annotation both restart on the *same* ConfigMap. Keepi
 
 Every app that mounts a Jinja2 ConfigMap now needs the annotation, not only the ones with secrets — with `checksum/config` gone, Reloader is the sole restart path for config changes.
 
-- [ ] `gitops/helm-values/apps/miot-bridge-api/base.yaml` — add under the app key (secrets **and** config):
+- [x] `gitops/helm-values/apps/miot-bridge-api/base.yaml` — add under the app key (secrets **and** config):
 
 ```yaml
     annotations:
       reloader.stakater.com/auto: "true"
 ```
 
-- [ ] Same in `gitops/helm-values/apps/qr-manager-api/base.yaml` (secrets + config)
-- [ ] Same in `gitops/helm-values/server3/homelab-dashboard-ui.yaml` (secret baked into the served `config.json`)
-- [ ] Same in `gitops/helm-values/apps/qr-manager-ui/base.yaml` (config only — no secrets)
-- [ ] Same in `gitops/helm-values/apps/interactive-map-feeder-api/base.yaml` (config only — no secrets)
+- [x] Same in `gitops/helm-values/apps/qr-manager-api/base.yaml` (secrets + config)
+- [x] Same in `gitops/helm-values/server3/homelab-dashboard-ui.yaml` (secret baked into the served `config.json`)
+- [x] Same in `gitops/helm-values/apps/qr-manager-ui/base.yaml` (config only — no secrets)
+- [x] Same in `gitops/helm-values/apps/interactive-map-feeder-api/base.yaml` (config only — no secrets)
 
 #### 4d. Grafana
 
-- [ ] `gitops/helm-values/grafana.yaml` — the chart's top-level `annotations` maps to Deployment metadata:
+- [x] `gitops/helm-values/grafana.yaml` — the chart's top-level `annotations` maps to Deployment metadata:
 
 ```yaml
 # Restart Grafana when grafana-admin or the influxdb2 token secrets rotate.
@@ -287,7 +287,7 @@ annotations:
 
 #### 4e. ExternalDNS
 
-- [ ] `gitops/helm-values/external-dns.yaml`:
+- [x] `gitops/helm-values/external-dns.yaml`:
 
 ```yaml
 # Restart when unifi-credentials rotates — the API key is read from env at boot.
@@ -297,16 +297,17 @@ deploymentAnnotations:
 
 #### 4f. Telegraf — document the gap
 
-- [ ] No values change possible (chart has no Deployment-level annotations key). Record the manual step in `docs/secrets.md`:
+- [x] No values change possible (chart has no Deployment-level annotations key). Record the manual step in `docs/secrets.md`:
   `kubectl rollout restart deploy/telegraf -n telegraf`
-- [ ] Add a `TODO` comment at the top of `gitops/helm-values/telegraf.yaml` pointing at this plan section so the gap is discoverable.
+- [x] Add a `TODO` comment at the top of `gitops/helm-values/telegraf.yaml` pointing at the spec so the gap is discoverable.
+- [x] Write the follow-up spec: `docs/superpowers/specs/2026-08-08-telegraf-reloader-support.md` (options A/B/C, decision, acceptance criteria).
 
 ### 5. Verify ESO actually delivers changes
 
 Reloader can only react to a Secret that already changed. ExternalSecrets here use `refreshInterval: 1h`.
 
-- [ ] Confirm the expected end-to-end latency after an OpenBao write is **up to 1h** (ESO poll) + seconds (Reloader). Document it; do not lower `refreshInterval` globally.
-- [ ] Note the manual fast path: `kubectl annotate externalsecret <name> -n <ns> force-sync=$(date +%s) --overwrite`
+- [x] Confirm the expected end-to-end latency after an OpenBao write is **up to 1h** (ESO poll) + seconds (Reloader). Document it; do not lower `refreshInterval` globally.
+- [x] Note the manual fast path: `kubectl annotate externalsecret <name> -n <ns> force-sync=$(date +%s) --overwrite`
 
 ### 6. Verification
 
@@ -325,9 +326,9 @@ Reloader can only react to a Secret that already changed. ExternalSecrets here u
 
 ### 7. Documentation
 
-- [ ] `docs/architecture.md` — add a Reloader row: Purpose (restart workloads on ConfigMap/Secret change), Clusters (server1 · server2 · server3), Managed by (ArgoCD — infra stage), Artifact Hub link, Local values (`shared · server1 · server2 · server3`), Upstream `values.yaml` link.
-- [ ] `AGENTS.md` — add `reloader.yaml` to the `gitops/helm-values/` listing and `Reloader (AppSet)` to the `infra/` stage line; mention the new `annotations` key in the `iot-applications` chart section if one exists.
-- [ ] `docs/secrets.md` — rotation section: which workloads now restart automatically, which are deliberately excluded (influxdb2 · emqx · mongodb) and why, the telegraf manual restart, and the force-sync command.
+- [x] `docs/architecture.md` — add a Reloader row: Purpose (restart workloads on ConfigMap/Secret change), Clusters (server1 · server2 · server3), Managed by (ArgoCD — infra stage), Artifact Hub link, Local values (`shared · server1 · server2 · server3`), Upstream `values.yaml` link.
+- [x] `AGENTS.md` — add `reloader.yaml` to the `gitops/helm-values/` listing and `Reloader (AppSet)` to the `infra/` stage line; mention the new `annotations` key in the `iot-applications` chart section if one exists.
+- [x] `docs/secrets.md` — rotation section: which workloads now restart automatically, which are deliberately excluded (influxdb2 · emqx · mongodb) and why, the telegraf manual restart, and the force-sync command.
 - [ ] Run the `sync-docs` skill last (it chains `sync-obsidian`).
 
 ---

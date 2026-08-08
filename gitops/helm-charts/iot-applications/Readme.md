@@ -47,7 +47,7 @@ Services are named: `{component}-{partOf}-{app}-{serviceName}` (e.g. `api-iot-my
 
 Containers can have files mounted at startup via a jinja2 init container. Config template content is defined as a multiline string in env-specific values files — **no files inside the chart**.
 
-A `checksum/config` annotation on the pod template ensures pods restart automatically whenever config content changes.
+The file is rendered once, at pod start. Set `annotations.reloader.stakater.com/auto: "true"` on the app so [Stakater Reloader](https://github.com/stakater/Reloader) restarts the pod whenever the generated ConfigMap — or any Secret in `secretRefs` — changes. Without it, a changed config or a rotated credential is picked up only on the next manual restart.
 
 ```yaml
 # helm-values/iot/production/my-app.yaml

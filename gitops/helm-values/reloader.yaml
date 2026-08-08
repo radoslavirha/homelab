@@ -1,0 +1,39 @@
+# Stakater Reloader — shared Helm values
+# Upstream values.yaml: https://github.com/stakater/Reloader/blob/master/deployments/kubernetes/chart/reloader/values.yaml
+# Restarts workloads whose pods cached a Secret/ConfigMap value that has since changed.
+#
+# Opt-in: annotate the WORKLOAD (not the pod template) with
+#   reloader.stakater.com/auto: "true"
+# See docs/superpowers/plans/2026-08-05-stakater-reloader.md for the per-workload analysis.
+
+reloader:
+  # Opt-in mode (chart default). Only a handful of workloads benefit, and
+  # influxdb2/emqx/mongodb must NOT restart on secret change — their credentials
+  # are consumed at init time only, so a restart applies nothing.
+  autoReloadAll: false
+
+  # Writes spec.template.metadata.annotations."reloader.stakater.com/last-reloaded-from"
+  # instead of injecting a dummy env var into every container. Paired with the
+  # ignoreDifferences entries in gitops/helm-values/server3/argocd.yaml so ArgoCD
+  # selfHeal does not revert the patch and cause a second, pointless rollout.
+  reloadStrategy: annotations
+
+  # Argo Rollouts controller is not installed in any cluster.
+  isArgoRollouts: false
+
+  # PostSync provisioner Jobs (gitops/helm-charts/provisioner) are one-shot.
+  ignoreJobs: true
+  ignoreCronJobs: true
+
+  watchGlobally: true
+  logFormat: json
+
+  deployment:
+    replicas: 1
+    resources:
+      requests:
+        cpu: 10m
+        memory: 128Mi
+      limits:
+        cpu: 100m
+        memory: 512Mi

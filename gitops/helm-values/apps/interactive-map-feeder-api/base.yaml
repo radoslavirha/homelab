@@ -4,6 +4,10 @@
 
 apps:
   interactive-map-feeder-api:
+    # No secrets, but the config ConfigMap is rendered into the container at pod
+    # start — Reloader is the only thing that restarts the pod when it changes.
+    annotations:
+      reloader.stakater.com/auto: "true"
     image:
       repository: ghcr.io/radoslavirha/interactive-map-feeder-api
       tag: "0.7.0"

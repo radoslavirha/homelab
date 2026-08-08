@@ -30,6 +30,18 @@ configs:
         end
       end
       return hs
+    # Stakater Reloader patches this pod template annotation to trigger a rolling
+    # update when a referenced ConfigMap/Secret changes. Without ignoring it,
+    # selfHeal reverts the patch and causes a second, pointless rollout.
+    resource.customizations.ignoreDifferences.apps_Deployment: |
+      jqPathExpressions:
+        - '.spec.template.metadata.annotations."reloader.stakater.com/last-reloaded-from"'
+    resource.customizations.ignoreDifferences.apps_StatefulSet: |
+      jqPathExpressions:
+        - '.spec.template.metadata.annotations."reloader.stakater.com/last-reloaded-from"'
+    resource.customizations.ignoreDifferences.apps_DaemonSet: |
+      jqPathExpressions:
+        - '.spec.template.metadata.annotations."reloader.stakater.com/last-reloaded-from"'
   rbac:
     # Full operational control for the MCP account: every ArgoCD resource is
     # granted except `accounts` and `exec` (see below).

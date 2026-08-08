@@ -3,6 +3,10 @@
 
 apps:
   miot-bridge-api:
+    # Restart on change of the MQTT/MongoDB ExternalSecrets (envFrom + Jinja2 init env)
+    # and of the generated config ConfigMap. Both are read once, at pod start.
+    annotations:
+      reloader.stakater.com/auto: "true"
     image:
       repository: ghcr.io/radoslavirha/miot-bridge-api
       tag: "0.17.0"

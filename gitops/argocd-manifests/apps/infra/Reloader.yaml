@@ -1,0 +1,41 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: reloader
+  namespace: argocd
+spec:
+  generators:
+    - list:
+        elements:
+          - cluster: server1
+            clusterServer: https://192.168.1.200:6443
+          - cluster: server2
+            clusterServer: https://192.168.1.201:6443
+          - cluster: server3
+            clusterServer: https://kubernetes.default.svc
+  template:
+    metadata:
+      name: reloader-{{cluster}}
+    spec:
+      project: default
+      sources:
+        - repoURL: https://stakater.github.io/stakater-charts
+          chart: reloader
+          targetRevision: 2.2.14
+          helm:
+            releaseName: reloader
+            valueFiles:
+              - $values/gitops/helm-values/reloader.yaml
+              - $values/gitops/helm-values/{{cluster}}/reloader.yaml
+        - repoURL: https://github.com/radoslavirha/homelab
+          targetRevision: HEAD
+          ref: values
+      destination:
+        server: '{{clusterServer}}'
+        namespace: reloader
+      syncPolicy:
+        syncOptions:
+          - CreateNamespace=true
+        automated:
+          selfHeal: true
+          prune: true

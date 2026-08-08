@@ -1,5 +1,9 @@
 apps:
   homelab-dashboard-ui:
+    # SECRET_UNIFI_API_KEY is rendered into the served config.json at pod start.
+    # Without a restart, a rotated Unifi key is never picked up.
+    annotations:
+      reloader.stakater.com/auto: "true"
     image:
       repository: ghcr.io/radoslavirha/homelab-dashboard-ui
       tag: "0.2.2"

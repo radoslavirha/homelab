@@ -107,7 +107,32 @@ tests:
           path: spec.template.spec.containers[0].ports[0].containerPort
           value: 4000
 
-  - it: should render checksum annotation when templates defined
+  - it: should render workload annotations on Deployment metadata for Reloader
+    set:
+      apps.my-app.image.repository: ghcr.io/example/my-app
+      apps.my-app.labels.component: api
+      apps.my-app.labels.partOf: iot
+      apps.my-app.ingress.enabled: false
+      apps.my-app.annotations.reloader\.stakater\.com/auto: "true"
+    asserts:
+      - equal:
+          path: metadata.annotations["reloader.stakater.com/auto"]
+          value: "true"
+      # Must NOT land on the pod template — Reloader only reads workload metadata
+      - isNull:
+          path: spec.template.metadata.annotations
+
+  - it: should NOT render workload annotations block when annotations unset
+    set:
+      apps.my-app.image.repository: ghcr.io/example/my-app
+      apps.my-app.labels.component: api
+      apps.my-app.labels.partOf: iot
+      apps.my-app.ingress.enabled: false
+    asserts:
+      - isNull:
+          path: metadata.annotations
+
+  - it: should NOT render pod annotations block when no podAnnotations
     set:
       apps.my-app.image.repository: ghcr.io/example/my-app
       apps.my-app.labels.component: api
@@ -117,20 +142,10 @@ tests:
       apps.my-app.templates.config.path: /app/config
       apps.my-app.templates.config.content: '{"key":"value"}'
     asserts:
-      - isNotEmpty:
-          path: spec.template.metadata.annotations["checksum/config"]
-
-  - it: should NOT render annotations block when no templates and no podAnnotations
-    set:
-      apps.my-app.image.repository: ghcr.io/example/my-app
-      apps.my-app.labels.component: api
-      apps.my-app.labels.partOf: iot
-      apps.my-app.ingress.enabled: false
-    asserts:
       - isNull:
           path: spec.template.metadata.annotations
 
-  - it: should merge podAnnotations with checksum
+  - it: should render podAnnotations on the pod template
     set:
       apps.my-app.image.repository: ghcr.io/example/my-app
       apps.my-app.labels.component: api
@@ -144,8 +159,6 @@ tests:
       - equal:
           path: spec.template.metadata.annotations["custom/annotation"]
           value: "hello"
-      - isNotEmpty:
-          path: spec.template.metadata.annotations["checksum/config"]
 
   - it: should apply container security context
     set:

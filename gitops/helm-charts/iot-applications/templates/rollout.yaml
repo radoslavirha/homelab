@@ -12,33 +12,30 @@
 {{/* Resolve UDP service for CONTAINER_UDP_PORT via udpIngress.serviceRef */}}
 {{- $udpServiceRef := (($application.udpIngress | default dict).serviceRef | default "") -}}
 {{- $udpService := get ($application.services | default dict) $udpServiceRef | default dict -}}
+{{- $rollout := $application.rollout | default dict -}}
 {{- $serviceAccount := $application.serviceAccount | default dict -}}
-{{- if not (($application.rollout | default dict).enabled) }}
+{{- if $rollout.enabled }}
 ---
-apiVersion: apps/v1
-kind: Deployment
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
 metadata:
   name: {{ include "iot-applications.identifier" $ctx }}
   labels: {{ include "iot-applications.meta.labels" $ctx | nindent 4 }}
-spec:
-  replicas: {{ $application.replicas | default 1 }}
-  {{- with $application.strategy }}
-  strategy:
+  {{- with $application.annotations }}
+  {{- /* Workload-level annotations. Stakater Reloader reads reloader.stakater.com/auto here — NOT on the pod template. */}}
+  annotations:
     {{- toYaml . | nindent 4 }}
   {{- end }}
+spec:
+  replicas: {{ $application.replicas | default 1 }}
   selector:
     matchLabels: {{ include "iot-applications.labels.selector" $ctx | nindent 6 }}
   template:
     metadata:
       labels: {{ include "iot-applications.labels.selector" $ctx | nindent 8 }}
-      {{- if or $application.podAnnotations ($application.templates | default dict | len) }}
+      {{- with $application.podAnnotations }}
       annotations:
-        {{- with $application.podAnnotations }}
         {{- toYaml . | nindent 8 }}
-        {{- end }}
-        {{- if $application.templates | default dict | len }}
-        checksum/config: {{ $application.templates | toJson | sha256sum }}
-        {{- end }}
       {{- end }}
     spec:
       {{- if or $serviceAccount.create $serviceAccount.name }}
@@ -54,7 +51,6 @@ spec:
       {{- end }}
       {{- if $application.templates | default dict | len }}
       initContainers:
-        {{- /* Loop all the Jinja2 templates, container can process only one template */}}
         {{- range $templateName, $template := $application.templates | default dict }}
         {{- include "iot-applications.validators.template" (dict "name" $templateName "template" $template "applicationName" $applicationName) }}
         - name: {{ include "iot-applications.identifier" $ctx }}-{{ $templateName }}-jinja2
@@ -66,14 +62,12 @@ spec:
               value: "/config_src/{{ $template.file }}"
             - name: JINJA_DEST_FILE
               value: "/config/{{ $template.file }}"
-            {{- /* Prepare VARS for substitution. */}}
             {{- range $key, $value := $.Values | default dict }}
             {{- if hasPrefix "VAR_" $key }}
             - name: JINJA_VAR_{{ $key }}
               value: {{ $value | quote }}
             {{- end }}
             {{- end }}
-            {{- /* Prepare selected VARS from configuration. */}}
             - name: JINJA_VAR_APPLICATION
               value: {{ $applicationName | quote }}
             - name: JINJA_VAR_PATH_NAME
@@ -90,7 +84,6 @@ spec:
             {{- end }}
             - name: JINJA_VAR_NAMESPACE
               value: {{ $.Release.Namespace | quote }}
-            {{- /* Inject values from secretRefs as JINJA_VAR_ prefixed env vars for Jinja2 substitution. */}}
             {{- range $secretRef := $application.secretRefs | default list }}
             {{- range $key := $secretRef.keys | default list }}
             - name: JINJA_VAR_{{ $key }}
@@ -101,10 +94,8 @@ spec:
             {{- end }}
             {{- end }}
           volumeMounts:
-            {{- /* Volume with config template. */}}
             - name: {{ include "iot-applications.identifier" $ctx }}-tpl-in-{{ $templateName }}
               mountPath: /config_src
-            {{- /* Volume with substituted config file. */}}
             - name: {{ include "iot-applications.identifier" $ctx }}-tpl-out-{{ $templateName }}
               mountPath: /config
         {{- end }}
@@ -136,7 +127,6 @@ spec:
               memory: {{ $limits.memory | default "500Mi" | quote }}
           {{- if $application.secretRefs | default list | len }}
           envFrom:
-            {{- /* Mount each secretRef into the main container for runtime access. */}}
             {{- range $secretRef := $application.secretRefs | default list }}
             - secretRef:
                 name: {{ $secretRef.name }}
@@ -160,7 +150,6 @@ spec:
           {{- end }}
           {{- if $application.templates | default dict | len }}
           volumeMounts:
-            {{- /* Add volumes with substituted config files from Jinja2 container. */}}
             {{- range $templateName, $template := $application.templates | default dict }}
             {{- include "iot-applications.validators.template" (dict "name" $templateName "template" $template "applicationName" $applicationName) }}
             - name: {{ include "iot-applications.identifier" $ctx }}-tpl-out-{{ $templateName }}
@@ -186,14 +175,51 @@ spec:
       volumes:
         {{- range $templateName, $template := $application.templates | default dict }}
         {{- include "iot-applications.validators.template" (dict "name" $templateName "template" $template "applicationName" $applicationName) }}
-        {{- /* ConfigMap with Jinja2 template source. */}}
         - name: {{ include "iot-applications.identifier" $ctx }}-tpl-in-{{ $templateName }}
           configMap:
             name: {{ include "iot-applications.identifier" $ctx }}-tpl-{{ $templateName }}
-        {{- /* EmptyDir for Jinja2 rendered output. */}}
         - name: {{ include "iot-applications.identifier" $ctx }}-tpl-out-{{ $templateName }}
           emptyDir: {}
         {{- end }}
       {{- end }}
+  strategy:
+    {{- if eq $rollout.strategy "canary" }}
+    {{- $canary := $rollout.canary | default dict }}
+    canary:
+      stableService: {{ include "iot-applications.identifier" $ctx }}-{{ $canary.stableServiceRef }}
+      canaryService: {{ include "iot-applications.identifier" $ctx }}-{{ $canary.canaryServiceRef }}
+      {{- with $canary.steps }}
+      steps:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if ($canary.trafficRouting | default dict).enabled }}
+      trafficRouting:
+        plugins:
+          argoproj-labs/gatewayAPI:
+            httpRoute: {{ include "iot-applications.identifier" $ctx }}
+            namespace: {{ $.Release.Namespace }}
+      {{- end }}
+      {{- with $canary.analysis }}
+      analysis:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    {{- else if eq $rollout.strategy "blueGreen" }}
+    {{- $blueGreen := $rollout.blueGreen | default dict }}
+    blueGreen:
+      activeService: {{ include "iot-applications.identifier" $ctx }}-{{ $blueGreen.activeServiceRef }}
+      previewService: {{ include "iot-applications.identifier" $ctx }}-{{ $blueGreen.previewServiceRef }}
+      autoPromotionEnabled: {{ $blueGreen.autoPromotionEnabled | default false }}
+      {{- with $blueGreen.scaleDownDelaySeconds }}
+      scaleDownDelaySeconds: {{ . }}
+      {{- end }}
+      {{- with $blueGreen.prePromotionAnalysis }}
+      prePromotionAnalysis:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $blueGreen.postPromotionAnalysis }}
+      postPromotionAnalysis:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    {{- end }}
 {{- end }}
 {{ end }}

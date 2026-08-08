@@ -3,6 +3,12 @@
 # Webhook provider docs: https://github.com/lexfrei/external-dns-unifios-webhook
 # Cluster-specific overrides (domainFilters, txtOwnerId): gitops/helm-values/<cluster>/external-dns.yaml
 
+# The webhook sidecar reads WEBHOOK_UNIFI_API_KEY from env at boot, so a rotated
+# unifi-credentials Secret only takes effect after a restart. Stakater Reloader
+# does it — this key maps to the Deployment metadata, not the pod template.
+deploymentAnnotations:
+  reloader.stakater.com/auto: "true"
+
 provider:
   name: webhook
   webhook:

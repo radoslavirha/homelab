@@ -1,6 +1,13 @@
 # Grafana — shared base values
 # Upstream: https://github.com/grafana-community/helm-charts/tree/main/charts/grafana
 
+# Restart when grafana-admin or the influxdb2 token secrets rotate. Datasource
+# tokens are read via $__file{} during provisioning, i.e. at startup only — the
+# sidecar reload fires on ConfigMap changes, not on a changed secret file.
+# Chart's top-level `annotations` maps to Deployment metadata, where Reloader looks.
+annotations:
+  reloader.stakater.com/auto: "true"
+
 # Admin credentials supplied via ExternalSecret → grafana-admin Secret
 admin:
   existingSecret: grafana-admin

@@ -3,6 +3,10 @@
 
 apps:
   qr-manager-api:
+    # Restart on change of the MongoDB ExternalSecret (envFrom) and of the
+    # generated config ConfigMap. Both are read once, at pod start.
+    annotations:
+      reloader.stakater.com/auto: "true"
     image:
       repository: ghcr.io/radoslavirha/qr-manager-api
       tag: "0.2.1"

@@ -91,7 +91,9 @@
 
 #     # templates is a map of Jinja2 templates to mount into the container via initContainer.
 #     # Config content lives in env-specific values files as multiline strings.
-#     # Pods automatically restart when content changes (checksum annotation).
+#     # The rendered file is produced ONCE at pod start, so pods must be restarted to pick
+#     # up a changed ConfigMap or Secret. Set annotations.reloader.stakater.com/auto (below)
+#     # to have Stakater Reloader do it automatically.
 #     templates:
 #       # Each key is the template name. Generates one ConfigMap + initContainer.
 #       config:
@@ -118,8 +120,14 @@
 #       - name: NGINX_BASE_PATH
 #         value: /my-app
 
+#     # annotations is a map of annotations added to the WORKLOAD metadata
+#     # (Deployment / Rollout) — not the pod template. This is where Stakater
+#     # Reloader looks. Set it on every app that mounts a templates ConfigMap or
+#     # consumes secretRefs, otherwise nothing restarts when either one changes.
+#     annotations:
+#       reloader.stakater.com/auto: "true"
+
 #     # podAnnotations is a map of extra annotations added to the pod template.
-#     # checksum/config is added automatically when templates are defined.
 #     podAnnotations: {}
 
 #     # podSecurityContext is the pod-level security context applied to all containers.

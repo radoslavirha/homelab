@@ -196,3 +196,32 @@ bao kv get secret/server3/influxdb2-grafana
 bao kv list secret/<cluster>
 bao kv list secret/otel-gateway   # once, not per cluster
 ```
+
+---
+
+## Picking up a rotated secret
+
+A running pod never sees a changed Secret: env vars are frozen at container start, and the Jinja2 init container renders its config file once. [Stakater Reloader](https://github.com/stakater/Reloader) closes that gap — it watches ConfigMaps/Secrets and rolls the workloads that reference them.
+
+**Opt-in.** Only workloads carrying `reloader.stakater.com/auto: "true"` on their *workload* metadata are restarted:
+
+| Workload | Where the annotation lives |
+| --- | --- |
+| miot-bridge-api · qr-manager-api · qr-manager-ui · interactive-map-feeder-api | `gitops/helm-values/apps/<app>/base.yaml` → `annotations` |
+| homelab-dashboard-ui | `gitops/helm-values/server3/homelab-dashboard-ui.yaml` → `annotations` |
+| grafana | `gitops/helm-values/grafana.yaml` → `annotations` |
+| external-dns | `gitops/helm-values/external-dns.yaml` → `deploymentAnnotations` |
+
+**Timing.** ExternalSecrets poll with `refreshInterval: 1h`, so a write to OpenBao takes up to an hour to reach the Secret; Reloader then reacts in seconds. To skip the wait:
+
+```bash
+kubectl annotate externalsecret <name> -n <ns> force-sync=$(date +%s) --overwrite
+```
+
+**Telegraf — manual.** The chart has no Deployment-level annotations key, so Reloader cannot be opted in from values. After rotating `telegraf-influxdb2-credentials` or `telegraf-mqtt-credentials`:
+
+```bash
+kubectl rollout restart deploy/telegraf -n telegraf
+```
+
+**Deliberately not automated.** InfluxDB2, EMQX and MongoDB consume their credentials at init time only — the live credential lives in the datastore, not in the Secret. Restarting them applies nothing and can interrupt writes, so rotation there stays the two-sided manual procedure described per path above.

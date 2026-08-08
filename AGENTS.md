@@ -41,6 +41,7 @@ gitops/
   helm-values/
     external-dns.yaml       shared: Unifi webhook provider, sources (gateway-httproute, traefik-proxy, crd), policy
     external-secrets.yaml   shared: installCRDs: true
+    reloader.yaml           shared: Stakater Reloader, opt-in mode, reloadStrategy=annotations
     headlamp.yaml           shared: httpRoute + clusterRoleBinding
     traefik.yaml            shared: hostNetwork, Gateway API provider, listeners, bare-metal service
     emqx.yaml               shared: replica count, persistence, dashboard envFromSecret
@@ -95,7 +96,7 @@ gitops/
         RootDashboards.yaml    sync-wave: "2" — App-of-Apps → server3/apps/dashboards/ (OpenBao HTTPRoute)
         RootObservability.yaml sync-wave: "3" — App-of-Apps → server3/apps/observability/ (LGTM stack)
     apps/
-      infra/       ESO (AppSet, list generator)
+      infra/       ESO (AppSet, list generator), Reloader (AppSet, list generator)
       gateway/     Traefik (AppSet), ExternalDNS (AppSet)
       observability/ K8sMonitoring (AppSet)
       iot/         InfluxDB2 (AppSet), EMQX (AppSet), Telegraf (AppSet), IotInfra (AppSet, sync-wave: -1)
