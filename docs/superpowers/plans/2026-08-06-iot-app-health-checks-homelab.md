@@ -10,6 +10,91 @@
 
 **Current state:** the chart renders all three probe keys already (`templates/deployment.yaml:149-160`, `templates/rollout.yaml:139-148`) and documents them in `values.yaml:139-157`. No app sets any of them. The chart has no `lifecycle` or `terminationGracePeriodSeconds` support at all.
 
+**Check concerns of agent in apps repository**
+[Spec](./2026-08-07-probe-state-not-observable.md)
+
+## Status — 2026-08-08
+
+| Part | State |
+| --- | --- |
+| Chart (steps 1-3) | **done.** `lifecycle` + `terminationGracePeriodSeconds` in both templates, documented, 72 helm-unittest assertions passing |
+| Frontends (step 5) | **done, deployed and verified in cluster.** `qr-manager-ui` staged in `sandbox.yaml`; `homelab-dashboard-ui` direct |
+| Backends (step 4) | **blocked.** The three APIs still run pre-health images (`miot-bridge-api@0.18.4`, `qr-manager-api@0.4.4`, `interactive-map-feeder-api@0.10.2`) — no `/health/*` endpoint exists yet. `iot-miniservers` backend spec is in progress |
+| Docs (step 8) | pending — do it once the backend half lands, so `docs/iot-overview.md` is written once |
+
+The `templates.<name>.validate` support the UIs need landed at the same time, from the sibling plan [`2026-08-07-iot-applications-template-validation.md`](2026-08-07-iot-applications-template-validation.md). The two changes touch the same two template files, so they were applied together.
+
+**Ordering gate — satisfied for both UIs**, verified 2026-08-08 before any values were written:
+
+| Check | Result |
+| --- | --- |
+| `qr-manager-ui@0.7.0` running in `sandbox` + `production` on server2 | yes, `READY 1/1` |
+| `homelab-dashboard-ui@0.4.0` running on server3, namespace **`homelab`** (not `dashboards` — the plan said otherwise below) | yes, `READY 1/1` |
+| `/healthz` answers `ok` in all three | yes |
+| `/healthzzz` returns 404 — the exact-match fix is live | yes |
+| nginx is PID 1 on the dashboard (guards the entrypoint rewrite) | yes |
+| `<app>-config-validator` present in GHCR at the pinned tags | yes — `qr-manager-ui-config-validator:0.7.0`, `homelab-dashboard-ui-config-validator:0.4.0` |
+| Both validators accept the **live rendered** config from every environment | yes — three configs, three `exit=0` |
+| Validator rejects an empty substitution | yes — `✖ Invalid URL → at apiBaseURL`, `exit=1`, no value echoed |
+| Cluster nodes are `amd64` (the validator images are amd64-only) | yes, server1 + server2 + server3 |
+
+> **Correction:** the first pass of this gate checked server2 and server3 only. **server1 is a live cluster** running `qr-manager-ui` in both `sandbox` and `production`, and `base.yaml`/`sandbox.yaml` apply to it too. Caught before the values were committed; server1 was on `0.7.0` and `/healthz` answered there as well. Any future values change to these files has four qr-manager-ui environments to think about, not two.
+>
+> Unrelated but noticed while checking: server1 holds several `Succeeded` pods from ReplicaSets retired on 2026-06-26 (`qr-manager-ui@0.4.2`, `interactive-map-feeder-api@0.10.0`). Exit code 0, terminated cleanly — leftovers from a node restart, not a live fault. Not cleaned up here.
+
+### Cluster verification — 2026-08-08
+
+Deployed to `sandbox` on server1 + server2 and to `homelab` on server3. `production` deliberately untouched (the block lives in `sandbox.yaml`), and its Applications stayed `Healthy` throughout — which is itself the evidence that the staging works.
+
+| Check | Result |
+| --- | --- |
+| initContainer order | `…-config-jinja2` → `…-config-validate`, both `Completed exit=0` |
+| Validator output on a good config | `[qr-manager-ui] /config/config.json is valid` |
+| Probes attached | `live=/healthz ready=/healthz startup=/healthz` on both UIs |
+| `preStop` + grace attached | `grace=30 preStop=5` |
+| Restarts after rollout | `0` |
+| **Gapless rollout** | `kubectl rollout restart` under a curl loop against `sandbox.apps.server2.home/qr-manager/`: **6507 requests, 6507× HTTP 200, zero failures** |
+| ArgoCD health carries signal | app went `Progressing` during the rollout, not a flat `Healthy` |
+
+### Deliberate failure test — 2026-08-08
+
+`apiBaseURL` was emptied in `sandbox.yaml` and committed (commit `7b89c14`, reverted by `0818719`) — the empty-Jinja2-substitution case, which is valid JSON and therefore invisible to every check except the schema.
+
+| Observation | Result |
+| --- | --- |
+| New pod | `Init:Error` → `Init:CrashLoopBackOff`, never reached the main container |
+| Validator log | `✖ Invalid URL → at apiBaseURL` |
+| Config values in the log | none — grepped for the hostname and both path fragments, zero hits |
+| **Old pod** | stayed `1/1 Running`, restarts `0` |
+| **Ingress during the failure** | HTTP 200 throughout |
+| ArgoCD | `Synced` + `Progressing` — visible without being an outage |
+| After revert | new pod Ready in under a minute, validator `is valid`, config correct, app `Healthy` |
+
+So a bad config edit is now contained at the moment it is made: it costs a stuck ReplicaSet and a log line, not a blank page served to users.
+
+### Found in production use, not in planning
+
+**`runAsNonRoot: true` is not enough on its own.** The validating initContainer failed to start on first sync with:
+
+```text
+CreateContainerConfigError: container has runAsNonRoot and image has non-numeric
+user (node), cannot verify user is non-root
+```
+
+Both validator images declare `USER node` — a *name*. The kubelet cannot resolve a name to a UID, so it refuses to start the container. The sibling plan's decision 4a explicitly claimed `USER node (uid 1000)` satisfies `runAsNonRoot` without a chart-supplied `runAsUser`; that was wrong. Fixed in `6aaaafb` by defaulting `runAsUser: 1000` (verified with `id` inside the image), overridable via the `validate` map form.
+
+Worth noting how it failed: the pod sat `Pending` on the init container and the old pod kept serving. Even the chart bug was contained by the same fail-closed design.
+
+**PodSecurity `restricted` is warn-only and nothing meets it.** `kubectl rollout restart` surfaced:
+
+```text
+Warning: would violate PodSecurity "restricted:latest": … containers
+"…-config-jinja2", "…" must set securityContext.allowPrivilegeEscalation=false,
+capabilities.drop=["ALL"], runAsNonRoot=true, seccompProfile …
+```
+
+Pre-existing and unrelated to health checks — the chart documents `podSecurityContext` / `containerSecurityContext` but no app sets either, and `objectiflibre/jinja-init` runs as root. The validator initContainer was flagged only for `seccompProfile`, now added, so it is the one container in these pods that satisfies `restricted`. Closing the gap for the rest is its own change; see Out of scope.
+
 ---
 
 ## Assumed contract
@@ -47,7 +132,7 @@ A 404 on either means the image is not ready — stop and finish the app-side pl
 
 Probes without these two keys still drop requests: pod deletion and Endpoints removal are concurrent, so a pod that exits on SIGTERM dies while Traefik still routes to it. All three clusters run Kubernetes **1.35.2** (`iac/clusters/*/bootstrap/main.tf`), so the native `lifecycle.preStop.sleep` action is available — no shell binary needed in the image.
 
-- [ ] `gitops/helm-charts/iot-applications/templates/deployment.yaml` — add to the **pod spec**, immediately after the `imagePullSecrets` block (~line 54, before `initContainers`):
+- [x] `gitops/helm-charts/iot-applications/templates/deployment.yaml` — add to the **pod spec**, immediately after the `imagePullSecrets` block (~line 54, before `initContainers`):
 
 ```yaml
       {{- with $application.terminationGracePeriodSeconds }}
@@ -55,7 +140,7 @@ Probes without these two keys still drop requests: pod deletion and Endpoints re
       {{- end }}
 ```
 
-- [ ] Same file — add to the **main container**, immediately after the `startupProbe` block (~line 160, before `volumeMounts`):
+- [x] Same file — add to the **main container**, immediately after the `startupProbe` block (~line 160, before `volumeMounts`):
 
 ```yaml
           {{- with $application.lifecycle }}
@@ -64,11 +149,11 @@ Probes without these two keys still drop requests: pod deletion and Endpoints re
           {{- end }}
 ```
 
-- [ ] `gitops/helm-charts/iot-applications/templates/rollout.yaml` — apply both blocks at the equivalent positions (pod spec after `imagePullSecrets` ~line 50; container after `startupProbe` ~line 151). The two templates must stay in step even though Argo Rollouts is not installed in any cluster.
+- [x] `gitops/helm-charts/iot-applications/templates/rollout.yaml` — apply both blocks at the equivalent positions (pod spec after `imagePullSecrets` ~line 50; container after `startupProbe` ~line 151). The two templates must stay in step even though Argo Rollouts is not installed in any cluster.
 
 ### 2. Chart — document the new keys
 
-- [ ] `gitops/helm-charts/iot-applications/values.yaml` — extend the commented block around the existing probe keys (lines ~139-157) with a copy-pasteable reference. Deliberately **not** chart defaults: the correct path and boot budget differ between the nginx UIs and the Ts.ED APIs, and a wrong default silently CrashLoops the next app onboarded.
+- [x] `gitops/helm-charts/iot-applications/values.yaml` — extend the commented block around the existing probe keys (lines ~139-157) with a copy-pasteable reference. Deliberately **not** chart defaults: the correct path and boot budget differ between the nginx UIs and the Ts.ED APIs, and a wrong default silently CrashLoops the next app onboarded.
 
 ```yaml
 #     # livenessProbe — MUST stay shallow: process-local only, no dependency I/O.
@@ -115,18 +200,33 @@ Probes without these two keys still drop requests: pod deletion and Endpoints re
 #           seconds: 10
 ```
 
-- [ ] Add a one-line pointer to this plan and its companion above that block.
+- [x] Add a one-line pointer to this plan and its companion above that block.
 
 ### 3. Chart — tests
 
-- [ ] Extend `gitops/helm-charts/iot-applications/tests/deployment_test.yaml`, following the existing `set:` + `asserts:` style:
+- [x] Extend `gitops/helm-charts/iot-applications/tests/deployment_test.yaml`, following the existing `set:` + `asserts:` style:
   - `lifecycle` rendered under the container when set; absent when unset
   - `terminationGracePeriodSeconds` rendered under the pod spec when set; absent when unset
   - all three probes still render when set, and are absent when unset — a regression guard, since the new container block is inserted right next to them
-- [ ] Check whether `tests/__snapshot__` holds a snapshot covering the container or pod spec; update it if so.
-- [ ] `helm unittest gitops/helm-charts/iot-applications` — CI runs the same via `.github/workflows/helm-chart-ci.yaml` (helm-unittest v0.4.4).
+- [x] Check whether `tests/__snapshot__` holds a snapshot covering the container or pod spec; update it if so.
+- [x] `helm unittest gitops/helm-charts/iot-applications` — CI runs the same via `.github/workflows/helm-chart-ci.yaml` (helm-unittest v0.4.4).
 
 ### 4. Values — the three Ts.ED APIs
+
+> **Blocked as of 2026-08-08.** All three APIs still run pre-health images and serve no `/health/*` path — committing these values would 404 the startup probe and CrashLoop three working apps. The `iot-miniservers` backend spec (`docs/superpowers/specs/2026-08-06-backend-health-checks.md`) is in progress; it introduces `@radoslavirha/health` + `@radoslavirha/tsed-health` and keeps the `/health`, `/health/live`, `/health/ready` paths this block assumes. Re-run the gate at the top of this plan against each API before ticking anything below.
+>
+> One contract change to fold in when unblocking: the backend spec adds a `critical` flag per check — a non-critical failure degrades `/health` to `warn` while `/health/ready` still returns 200. That does not change the probe values here, but it does mean "ready" and "healthy" are no longer the same question.
+
+#### Notes from the frontend rollout, for whoever does this half
+
+The chart side is done and exercised. What the UI rollout on 2026-08-08 established, and what it did not:
+
+- **`terminationGracePeriodSeconds` + `lifecycle.preStop.sleep` + `maxUnavailable: 0` genuinely deliver a gapless rollout.** Measured, not assumed: 6507 requests through a full `rollout restart`, all 200. The APIs can adopt the same block with confidence — but note the UI case is nginx with `STOPSIGNAL SIGQUIT` doing its own graceful shutdown. **The Ts.ED APIs get no equivalent for free.** `preStop` only buys the pod time; something must also flip `/health/ready` to 503 on SIGTERM and keep serving in-flight requests, or the sleep is just a delay before the same dropped connections. That is the `ShutdownState` / `createShutdownHandler` part of the backend spec, and it is load-bearing, not a nicety. Re-run the curl-loop test against an API before believing it.
+- **`preStop: 10s` for the APIs vs `5s` here is deliberate.** Keep the API value; they hold longer-lived requests than a static file server.
+- **Four environments, not two.** `base.yaml` reaches server1 *and* server2, each with `sandbox` + `production`. The APIs run on both clusters. Check the gate in all four before committing probe values.
+- **`validate` does not apply to the APIs** and should stay unset — they parse their own config at boot. The `runAsUser` bug found here was in the validator container only; nothing about it affects an API.
+- **PodSecurity `restricted` is warn-only in these namespaces and no app container meets it.** Independent of health checks, but the warning will appear on every API rollout too. Do not let it be mistaken for something the probe change caused.
+- **`kube_pod_status_ready` is still not collected** (`2026-08-07-probe-state-not-observable.md`). It did not matter for the UIs — a static file server with no dependency checks cannot go NotReady for an interesting reason. It matters a great deal for the APIs, where the entire point is that a MongoDB or MQTT outage takes pods out of Endpoints *without* restarting them, which no currently-collected metric can see. **Land that before the API probe values**, or the first dependency outage after this change is invisible.
 
 Add to each app key in `gitops/helm-values/apps/miot-bridge-api/base.yaml`, `gitops/helm-values/apps/qr-manager-api/base.yaml` and `gitops/helm-values/apps/interactive-map-feeder-api/base.yaml`. Identical block for all three — the difference in behaviour lives in the image, not here.
 
@@ -186,7 +286,7 @@ Add to each app key in `gitops/helm-values/apps/miot-bridge-api/base.yaml`, `git
 
 nginx starts in well under a second, so the boot budget is much shorter, and a static file server has nothing that distinguishes live from ready — one path serves both.
 
-- [ ] Add to `gitops/helm-values/apps/qr-manager-ui/base.yaml` and `gitops/helm-values/server3/homelab-dashboard-ui.yaml`:
+- [x] Added to `gitops/helm-values/apps/qr-manager-ui/**sandbox.yaml**` (staged — see step 6) and `gitops/helm-values/server3/homelab-dashboard-ui.yaml`, together with `templates.config.validate: true` from the sibling validation plan:
 
 ```yaml
     # nginx serves a static SPA — /healthz is an absolute path independent of
@@ -221,15 +321,16 @@ nginx starts in well under a second, so the boot budget is much shorter, and a s
         maxUnavailable: 0
 ```
 
-- [ ] `homelab-dashboard-ui` reverse-proxies to the Unifi controller (`location /proxy/network/`). Do **not** make readiness depend on it — a controller reboot must not delete the dashboard from Endpoints.
+- [x] `homelab-dashboard-ui` reverse-proxies to the Unifi controller (`location /proxy/network/`). Do **not** make readiness depend on it — a controller reboot must not delete the dashboard from Endpoints.
 
 ### 6. Roll out sandbox before production
 
 The values in steps 4-5 sit in `base.yaml`, which applies to both namespaces at once. If the `production` image tags are still behind the health-endpoint release while `sandbox` is ahead, the probes will 404 in production and CrashLoop it.
 
-- [ ] Compare `image.tag` in each app's `sandbox.yaml` and `production.yaml` against the first release that carries the health endpoints.
-- [ ] If both are current: land the block in `base.yaml` as written.
-- [ ] If production lags: put the block in `sandbox.yaml` only, verify per below, then move it to `base.yaml` once the production tag catches up. Leave a `TODO` comment naming the required tag so the split is not forgotten.
+- [x] Compare `image.tag` in each app's `sandbox.yaml` and `production.yaml` against the first release that carries the health endpoints.
+- [x] **Outcome for `qr-manager-ui`:** both environments already run `0.7.0`, so the *lagging-tag* reason for staging is gone. The second reason stands — a mistuned `failureThreshold` or boot budget should break the sandbox pod, not the production one — so the block went into `sandbox.yaml` with a `TODO` to promote it to `base.yaml` after a watched rollout.
+- [x] **Outcome for `homelab-dashboard-ui`:** no sandbox exists, values applied directly to `gitops/helm-values/server3/homelab-dashboard-ui.yaml`.
+- [ ] **Remaining:** after verification below, move the `qr-manager-ui` probe / `lifecycle` / `strategy` / `validate` block from `sandbox.yaml` to `base.yaml` and delete the `TODO` comment, so production is covered too.
 
 ### 7. Verification
 
@@ -265,8 +366,12 @@ kubectl rollout restart deploy/api-iot-qr-manager-api -n sandbox
   Expect zero non-200 responses. Without the `preStop` hook this test fails — it is the reason step 1 exists.
 - [ ] **ArgoCD health now carries signal:** during that restart the Application must pass through `Progressing` instead of sitting at `Healthy` the whole time.
 - [ ] **No telemetry noise:** via the Grafana MCP, query Tempo for spans matching `/health` over the last 15 minutes and Loki for request-log lines on the same paths. Both should be empty. If not, the exclusion is missing app-side — record it, it does not block this plan.
-- [ ] Repeat the probe-attachment and rollout checks for `homelab-dashboard-ui` on server3 (namespace `dashboards`).
+- [ ] Repeat the probe-attachment and rollout checks for `homelab-dashboard-ui` on server3, namespace **`homelab`** (not `dashboards` — that was wrong in the original draft; the Application is `homelab-dashboard-server3` and its destination namespace is `homelab`).
 - [ ] Only then promote to `production` and re-run the probe-attachment and rollout checks there.
+
+**Already verified for the two UIs, 2026-08-08** (before the values were written — see the Status block at the top): `/healthz` answers in all three environments, `/healthzzz` 404s, nginx is PID 1 on the dashboard, both validator images exist at the pinned tags, both accept the live rendered config, and a deliberately emptied `apiBaseURL` is rejected with `exit=1` and no value echoed.
+
+The MongoDB scale-to-0 and the Tempo/Loki telemetry checks above are **API-only** and cannot run until step 4 unblocks. The nginx UIs have no OTel SDK and no dependency checks, so there is nothing to exclude and nothing to degrade.
 
 ### 8. Documentation
 

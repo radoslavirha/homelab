@@ -128,6 +128,8 @@ spec:
             allowPrivilegeEscalation: false
             capabilities:
               drop: [ALL]
+            seccompProfile:
+              type: RuntimeDefault
           volumeMounts:
             - name: {{ include "iot-applications.identifier" $ctx }}-tpl-out-{{ $templateName }}
               mountPath: /config

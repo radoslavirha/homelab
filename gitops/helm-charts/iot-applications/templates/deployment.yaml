@@ -137,6 +137,8 @@ spec:
             allowPrivilegeEscalation: false
             capabilities:
               drop: [ALL]
+            seccompProfile:
+              type: RuntimeDefault
           volumeMounts:
             {{- /* Same emptyDir jinja-init wrote to — validate the rendered output. */}}
             - name: {{ include "iot-applications.identifier" $ctx }}-tpl-out-{{ $templateName }}

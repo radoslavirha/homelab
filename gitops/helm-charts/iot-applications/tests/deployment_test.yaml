@@ -537,6 +537,9 @@ tests:
           path: spec.template.spec.initContainers[1].securityContext.capabilities.drop
           value:
             - ALL
+      - equal:
+          path: spec.template.spec.initContainers[1].securityContext.seccompProfile.type
+          value: RuntimeDefault
 
   - it: should generate one validator per validated template only
     set:
