@@ -322,7 +322,7 @@ Reloader can only react to a Secret that already changed. ExternalSecrets here u
   4. wait one ArgoCD reconcile (~3 min) — Application must stay **Synced/Healthy**. If it flaps OutOfSync, the jq path in step 3 is wrong
   5. let ESO restore the real value if the Secret was hand-edited
 - [x] Regression test for the removed checksum: change a `templates.config.content` value for `qr-manager-ui` in git, sync, and confirm the pod restarts. This path used to be covered by `checksum/config`; if it does not restart, the annotation is missing or Reloader is not watching that namespace.
-- [ ] Repeat the `homelab-dashboard-ui` case specifically: rotate the Unifi key, confirm the new pod's `/usr/share/nginx/html/config.json` contains the new value (`kubectl exec … -- cat …`). This is the frontend case where a stale value is invisible from the outside.
+- [~] ~~Repeat the `homelab-dashboard-ui` case specifically: rotate the Unifi key, confirm the new pod's `/usr/share/nginx/html/config.json` contains the new value.~~ **Skipped by decision (2026-08-08)** — it requires minting and revoking a real UniFi API key purely as a test. The annotation is in place and the ESO → Reloader → restart chain is already proven by the ConfigMap test; the only untested link is the Jinja2 init container re-rendering with a new secret value, which is the same mechanism the miot/qr APIs exercise. Will be confirmed by the next genuine rotation.
 
 ### 7. Documentation
 
