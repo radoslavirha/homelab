@@ -1,0 +1,131 @@
+suite: rollout tests
+templates:
+  - templates/rollout.yaml
+tests:
+  # Argo Rollouts is installed in no cluster today, but rollout.yaml is kept in step with
+  # deployment.yaml as a rule. These cover the blocks that exist in both files, so the two
+  # cannot drift silently.
+  - it: should create a Rollout when rollout is enabled
+    set:
+      apps.my-app.image.repository: ghcr.io/example/my-app
+      apps.my-app.labels.component: api
+      apps.my-app.labels.partOf: iot
+      apps.my-app.ingress.enabled: false
+      apps.my-app.rollout.enabled: true
+      apps.my-app.rollout.strategy: canary
+    asserts:
+      - isKind:
+          of: Rollout
+      - equal:
+          path: metadata.name
+          value: api-iot-my-app
+
+  - it: should NOT create a Rollout when rollout is disabled
+    set:
+      apps.my-app.image.repository: ghcr.io/example/my-app
+      apps.my-app.labels.component: api
+      apps.my-app.labels.partOf: iot
+      apps.my-app.ingress.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should NOT render lifecycle or terminationGracePeriodSeconds when unset
+    set:
+      apps.my-app.image.repository: ghcr.io/example/my-app
+      apps.my-app.labels.component: api
+      apps.my-app.labels.partOf: iot
+      apps.my-app.ingress.enabled: false
+      apps.my-app.rollout.enabled: true
+      apps.my-app.rollout.strategy: canary
+    asserts:
+      - isNull:
+          path: spec.template.spec.terminationGracePeriodSeconds
+      - isNull:
+          path: spec.template.spec.containers[0].lifecycle
+
+  - it: should render lifecycle and terminationGracePeriodSeconds when set
+    set:
+      apps.my-app.image.repository: ghcr.io/example/my-app
+      apps.my-app.labels.component: api
+      apps.my-app.labels.partOf: iot
+      apps.my-app.ingress.enabled: false
+      apps.my-app.rollout.enabled: true
+      apps.my-app.rollout.strategy: canary
+      apps.my-app.terminationGracePeriodSeconds: 30
+      apps.my-app.lifecycle.preStop.sleep.seconds: 10
+    asserts:
+      - equal:
+          path: spec.template.spec.terminationGracePeriodSeconds
+          value: 30
+      - equal:
+          path: spec.template.spec.containers[0].lifecycle.preStop.sleep.seconds
+          value: 10
+
+  - it: should render all three probes when set
+    set:
+      apps.my-app.image.repository: ghcr.io/example/my-app
+      apps.my-app.labels.component: api
+      apps.my-app.labels.partOf: iot
+      apps.my-app.ingress.enabled: false
+      apps.my-app.rollout.enabled: true
+      apps.my-app.rollout.strategy: canary
+      apps.my-app.livenessProbe.httpGet.path: /health/live
+      apps.my-app.readinessProbe.httpGet.path: /health/ready
+      apps.my-app.startupProbe.httpGet.path: /health/live
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.path
+          value: /health/live
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.path
+          value: /health/ready
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.httpGet.path
+          value: /health/live
+
+  - it: should render the validator initContainer after the jinja2 one
+    set:
+      apps.my-app.image.repository: ghcr.io/example/my-app
+      apps.my-app.image.tag: "1.2.3"
+      apps.my-app.labels.component: api
+      apps.my-app.labels.partOf: iot
+      apps.my-app.ingress.enabled: false
+      apps.my-app.rollout.enabled: true
+      apps.my-app.rollout.strategy: canary
+      apps.my-app.templates.config.file: config.json
+      apps.my-app.templates.config.path: /app/config
+      apps.my-app.templates.config.content: '{"key":"value"}'
+      apps.my-app.templates.config.validate: true
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.initContainers
+          count: 2
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: api-iot-my-app-config-jinja2
+      - equal:
+          path: spec.template.spec.initContainers[1].name
+          value: api-iot-my-app-config-validate
+      - equal:
+          path: spec.template.spec.initContainers[1].image
+          value: ghcr.io/example/my-app-config-validator:1.2.3
+      - equal:
+          path: spec.template.spec.initContainers[1].args[0]
+          value: /config/config.json
+
+  - it: should NOT render a validator initContainer when validate is unset
+    set:
+      apps.my-app.image.repository: ghcr.io/example/my-app
+      apps.my-app.labels.component: api
+      apps.my-app.labels.partOf: iot
+      apps.my-app.ingress.enabled: false
+      apps.my-app.rollout.enabled: true
+      apps.my-app.rollout.strategy: canary
+      apps.my-app.templates.config.file: config.json
+      apps.my-app.templates.config.path: /app/config
+      apps.my-app.templates.config.content: '{"key":"value"}'
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.initContainers
+          count: 1

@@ -295,3 +295,263 @@ tests:
       - equal:
           path: spec.template.spec.containers[0].resources.limits.memory
           value: "500Mi"
+
+  - it: should NOT render lifecycle or terminationGracePeriodSeconds when unset
+    set:
+      apps.my-app.image.repository: ghcr.io/example/my-app
+      apps.my-app.labels.component: api
+      apps.my-app.labels.partOf: iot
+      apps.my-app.ingress.enabled: false
+    asserts:
+      - isNull:
+          path: spec.template.spec.terminationGracePeriodSeconds
+      - isNull:
+          path: spec.template.spec.containers[0].lifecycle
+
+  - it: should render lifecycle and terminationGracePeriodSeconds when set
+    set:
+      apps.my-app.image.repository: ghcr.io/example/my-app
+      apps.my-app.labels.component: api
+      apps.my-app.labels.partOf: iot
+      apps.my-app.ingress.enabled: false
+      apps.my-app.terminationGracePeriodSeconds: 30
+      apps.my-app.lifecycle.preStop.sleep.seconds: 10
+    asserts:
+      - equal:
+          path: spec.template.spec.terminationGracePeriodSeconds
+          value: 30
+      - equal:
+          path: spec.template.spec.containers[0].lifecycle.preStop.sleep.seconds
+          value: 10
+
+  - it: should render all three probes when set
+    set:
+      apps.my-app.image.repository: ghcr.io/example/my-app
+      apps.my-app.labels.component: api
+      apps.my-app.labels.partOf: iot
+      apps.my-app.ingress.enabled: false
+      apps.my-app.livenessProbe.httpGet.path: /health/live
+      apps.my-app.livenessProbe.httpGet.port: http
+      apps.my-app.readinessProbe.httpGet.path: /health/ready
+      apps.my-app.readinessProbe.httpGet.port: http
+      apps.my-app.startupProbe.httpGet.path: /health/live
+      apps.my-app.startupProbe.httpGet.port: http
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.path
+          value: /health/live
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.path
+          value: /health/ready
+      - equal:
+          path: spec.template.spec.containers[0].startupProbe.httpGet.path
+          value: /health/live
+
+  - it: should NOT render probes when unset
+    set:
+      apps.my-app.image.repository: ghcr.io/example/my-app
+      apps.my-app.labels.component: api
+      apps.my-app.labels.partOf: iot
+      apps.my-app.ingress.enabled: false
+    asserts:
+      - isNull:
+          path: spec.template.spec.containers[0].livenessProbe
+      - isNull:
+          path: spec.template.spec.containers[0].readinessProbe
+      - isNull:
+          path: spec.template.spec.containers[0].startupProbe
+
+  - it: should NOT render a validator initContainer when validate is unset
+    set:
+      apps.my-app.image.repository: ghcr.io/example/my-app
+      apps.my-app.labels.component: api
+      apps.my-app.labels.partOf: iot
+      apps.my-app.ingress.enabled: false
+      apps.my-app.templates.config.file: config.json
+      apps.my-app.templates.config.path: /app/config
+      apps.my-app.templates.config.content: '{"key":"value"}'
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.initContainers
+          count: 1
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: api-iot-my-app-config-jinja2
+
+  - it: should NOT render a validator initContainer when validate is false
+    set:
+      apps.my-app.image.repository: ghcr.io/example/my-app
+      apps.my-app.labels.component: api
+      apps.my-app.labels.partOf: iot
+      apps.my-app.ingress.enabled: false
+      apps.my-app.templates.config.file: config.json
+      apps.my-app.templates.config.path: /app/config
+      apps.my-app.templates.config.content: '{"key":"value"}'
+      apps.my-app.templates.config.validate: false
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.initContainers
+          count: 1
+
+  - it: should render the validator initContainer after the jinja2 one
+    set:
+      apps.my-app.image.repository: ghcr.io/example/my-app
+      apps.my-app.image.tag: "1.2.3"
+      apps.my-app.labels.component: api
+      apps.my-app.labels.partOf: iot
+      apps.my-app.ingress.enabled: false
+      apps.my-app.templates.config.file: config.json
+      apps.my-app.templates.config.path: /app/config
+      apps.my-app.templates.config.content: '{"key":"value"}'
+      apps.my-app.templates.config.validate: true
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.initContainers
+          count: 2
+      - equal:
+          path: spec.template.spec.initContainers[0].name
+          value: api-iot-my-app-config-jinja2
+      - equal:
+          path: spec.template.spec.initContainers[1].name
+          value: api-iot-my-app-config-validate
+
+  - it: should derive the validator image from the app image and tag
+    set:
+      apps.my-app.image.repository: ghcr.io/example/my-app
+      apps.my-app.image.tag: "1.2.3"
+      apps.my-app.labels.component: api
+      apps.my-app.labels.partOf: iot
+      apps.my-app.ingress.enabled: false
+      apps.my-app.templates.config.file: config.json
+      apps.my-app.templates.config.path: /app/config
+      apps.my-app.templates.config.content: '{"key":"value"}'
+      apps.my-app.templates.config.validate: true
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[1].image
+          value: ghcr.io/example/my-app-config-validator:1.2.3
+
+  - it: should default the validator tag to latest when the app image has no tag
+    set:
+      apps.my-app.image.repository: ghcr.io/example/my-app
+      apps.my-app.labels.component: api
+      apps.my-app.labels.partOf: iot
+      apps.my-app.ingress.enabled: false
+      apps.my-app.templates.config.file: config.json
+      apps.my-app.templates.config.path: /app/config
+      apps.my-app.templates.config.content: '{"key":"value"}'
+      apps.my-app.templates.config.validate: true
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[1].image
+          value: ghcr.io/example/my-app-config-validator:latest
+
+  - it: should allow the validate map form to override image and append args
+    set:
+      apps.my-app.image.repository: ghcr.io/example/my-app
+      apps.my-app.image.tag: "1.2.3"
+      apps.my-app.labels.component: api
+      apps.my-app.labels.partOf: iot
+      apps.my-app.ingress.enabled: false
+      apps.my-app.templates.config.file: config.json
+      apps.my-app.templates.config.path: /app/config
+      apps.my-app.templates.config.content: '{"key":"value"}'
+      apps.my-app.templates.config.validate.repository: ghcr.io/example/other-validator
+      apps.my-app.templates.config.validate.tag: "9.9.9"
+      apps.my-app.templates.config.validate.args:
+        - --strict
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[1].image
+          value: ghcr.io/example/other-validator:9.9.9
+      - equal:
+          path: spec.template.spec.initContainers[1].args
+          value:
+            - /config/config.json
+            - --strict
+
+  - it: should pass the rendered file path as the validator argument
+    set:
+      apps.my-app.image.repository: ghcr.io/example/my-app
+      apps.my-app.labels.component: api
+      apps.my-app.labels.partOf: iot
+      apps.my-app.ingress.enabled: false
+      apps.my-app.templates.config.file: production.json
+      apps.my-app.templates.config.path: /app/config
+      apps.my-app.templates.config.content: '{"key":"value"}'
+      apps.my-app.templates.config.validate: true
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[1].args[0]
+          value: /config/production.json
+
+  - it: should mount the rendered output emptyDir into the validator
+    set:
+      apps.my-app.image.repository: ghcr.io/example/my-app
+      apps.my-app.labels.component: api
+      apps.my-app.labels.partOf: iot
+      apps.my-app.ingress.enabled: false
+      apps.my-app.templates.config.file: config.json
+      apps.my-app.templates.config.path: /usr/share/nginx/html/config.json
+      apps.my-app.templates.config.subPath: config.json
+      apps.my-app.templates.config.content: '{"key":"value"}'
+      apps.my-app.templates.config.validate: true
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[1].volumeMounts[0].name
+          value: api-iot-my-app-tpl-out-config
+      - equal:
+          path: spec.template.spec.initContainers[1].volumeMounts[0].mountPath
+          value: /config
+      - lengthEqual:
+          path: spec.template.spec.initContainers[1].volumeMounts
+          count: 1
+
+  - it: should lock down the validator security context
+    set:
+      apps.my-app.image.repository: ghcr.io/example/my-app
+      apps.my-app.labels.component: api
+      apps.my-app.labels.partOf: iot
+      apps.my-app.ingress.enabled: false
+      apps.my-app.templates.config.file: config.json
+      apps.my-app.templates.config.path: /app/config
+      apps.my-app.templates.config.content: '{"key":"value"}'
+      apps.my-app.templates.config.validate: true
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[1].securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.initContainers[1].securityContext.readOnlyRootFilesystem
+          value: true
+      - equal:
+          path: spec.template.spec.initContainers[1].securityContext.allowPrivilegeEscalation
+          value: false
+      - equal:
+          path: spec.template.spec.initContainers[1].securityContext.capabilities.drop
+          value:
+            - ALL
+
+  - it: should generate one validator per validated template only
+    set:
+      apps.my-app.image.repository: ghcr.io/example/my-app
+      apps.my-app.labels.component: api
+      apps.my-app.labels.partOf: iot
+      apps.my-app.ingress.enabled: false
+      apps.my-app.templates.config.file: config.json
+      apps.my-app.templates.config.path: /app/config
+      apps.my-app.templates.config.content: '{"key":"value"}'
+      apps.my-app.templates.config.validate: true
+      apps.my-app.templates.other.file: other.json
+      apps.my-app.templates.other.path: /app/other
+      apps.my-app.templates.other.content: '{"key":"value"}'
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.initContainers
+          count: 3
+      - equal:
+          path: spec.template.spec.initContainers[1].name
+          value: api-iot-my-app-config-validate
+      - equal:
+          path: spec.template.spec.initContainers[2].name
+          value: api-iot-my-app-other-jinja2

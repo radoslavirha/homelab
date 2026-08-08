@@ -113,6 +113,24 @@
 #           {
 #             "key": "{{ VAR_EXAMPLE }}"
 #           }
+#         # templates.config.validate generates a second initContainer that checks the RENDERED
+#         # config before the main container starts. Opt-in, and only for apps that cannot
+#         # validate their own config: the Ts.ED APIs fail their own boot on a bad config, so
+#         # they leave this unset. The nginx UIs cannot — nginx has no JSON parser — so without
+#         # this they serve a blank page from a pod that reports itself perfectly healthy.
+#         # A rejected config gives Init:CrashLoopBackOff and the previous pod keeps serving.
+#         # Reason: kubectl logs <pod> -c <identifier>-<template>-validate
+#         #
+#         # The image defaults to <image.repository>-config-validator:<image.tag>, so the
+#         # existing deploy.json tag bump moves the app and its validator together.
+#         # The validator reads /config/<file> from the same emptyDir jinja-init wrote to,
+#         # so templates.config.path and .subPath do not affect it.
+#         validate: true
+#         # Map form, for when the derived image is not the right one:
+#         # validate:
+#         #   repository: ghcr.io/radoslavirha/some-other-validator
+#         #   tag: "1.2.3"
+#         #   args: ["--strict"]
 
 #     # env is a list of static environment variables injected into the main container.
 #     # Supports any valid Kubernetes env entry (value, valueFrom, secretKeyRef, etc.).
@@ -144,25 +162,55 @@
 #       # capabilities:
 #       #   drop: [ALL]
 
-#     # livenessProbe is the liveness probe configuration. Omitted when not set.
+#     # Probes. All three are omitted when not set. Deliberately NOT defaulted by the chart:
+#     # the right path and boot budget differ between the nginx UIs (/healthz) and the Ts.ED
+#     # APIs (/health/live, /health/ready), and a wrong default silently CrashLoops a new app.
+#     # Design notes: docs/superpowers/plans/2026-08-06-iot-app-health-checks.md
 #     # https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
+
+#     # livenessProbe MUST stay shallow: process-local only, no dependency I/O. A dependency
+#     # check here turns one database blip into a fleet-wide restart storm.
 #     livenessProbe: {}
 #       # httpGet:
-#       #   path: /health
+#       #   path: /health/live
+#       #   # port refers to a key from the services map, rendered as the container port name.
 #       #   port: http
-#       # initialDelaySeconds: 10
-#       # periodSeconds: 30
+#       # periodSeconds: 10
+#       # failureThreshold: 3
+#       # timeoutSeconds: 2
 
-#     # readinessProbe is the readiness probe configuration. Omitted when not set.
+#     # readinessProbe may check hard dependencies. Failure only removes the pod from the
+#     # Service Endpoints; it never restarts the container.
 #     readinessProbe: {}
 #       # httpGet:
-#       #   path: /ready
+#       #   path: /health/ready
 #       #   port: http
-#       # initialDelaySeconds: 5
-#       # periodSeconds: 10
+#       # periodSeconds: 5
+#       # failureThreshold: 3
+#       # timeoutSeconds: 3
 
-#     # startupProbe is the startup probe configuration. Omitted when not set.
+#     # startupProbe is the boot budget (periodSeconds × failureThreshold). Liveness and
+#     # readiness are suppressed until it passes once — the modern replacement for
+#     # initialDelaySeconds guesswork.
 #     startupProbe: {}
+#       # httpGet:
+#       #   path: /health/live
+#       #   port: http
+#       # periodSeconds: 5
+#       # failureThreshold: 24
+
+#     # terminationGracePeriodSeconds is the SIGTERM → SIGKILL budget.
+#     # Must exceed the preStop sleep plus the app's own drain time.
+#     terminationGracePeriodSeconds: 30
+
+#     # lifecycle hooks. preStop.sleep (native action, Kubernetes 1.30+) keeps the pod serving
+#     # while its removal from Endpoints propagates to Traefik. Pod deletion and Endpoints
+#     # removal are concurrent, so without this a rolling update drops requests even with
+#     # correct probes.
+#     lifecycle: {}
+#       # preStop:
+#       #   sleep:
+#       #     seconds: 10
 
 #     # strategy is the Deployment update strategy.
 #     # https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#strategy

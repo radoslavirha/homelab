@@ -52,6 +52,10 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- with $application.terminationGracePeriodSeconds }}
+      {{- /* SIGTERM → SIGKILL budget. Must exceed the preStop sleep plus the app's drain time. */}}
+      terminationGracePeriodSeconds: {{ . }}
+      {{- end }}
       {{- if $application.templates | default dict | len }}
       initContainers:
         {{- /* Loop all the Jinja2 templates, container can process only one template */}}
@@ -107,6 +111,31 @@ spec:
             {{- /* Volume with substituted config file. */}}
             - name: {{ include "iot-applications.identifier" $ctx }}-tpl-out-{{ $templateName }}
               mountPath: /config
+        {{- if $template.validate }}
+        {{- /* Validates the rendered config before the main container starts. Emitted inside
+               the same range and directly after the Jinja2 container, so initContainer order
+               guarantees it never reads unrendered template source. */}}
+        - name: {{ include "iot-applications.identifier" $ctx }}-{{ $templateName }}-validate
+          image: {{ include "iot-applications.template.validatorImage" (dict "application" $application "template" $template) }}
+          imagePullPolicy: {{ $application.image.pullPolicy | default "IfNotPresent" }}
+          args:
+            {{- /* The rendered file, where JINJA_DEST_FILE put it. Not $template.path — that
+                   is where the main container mounts it, which the validator never sees. */}}
+            - "/config/{{ $template.file }}"
+            {{- with (ternary dict $template.validate (kindIs "bool" $template.validate)).args }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          securityContext:
+            runAsNonRoot: true
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            {{- /* Same emptyDir jinja-init wrote to — validate the rendered output. */}}
+            - name: {{ include "iot-applications.identifier" $ctx }}-tpl-out-{{ $templateName }}
+              mountPath: /config
+        {{- end }}
         {{- end }}
       {{- end }}
       containers:
@@ -156,6 +185,12 @@ spec:
           {{- end }}
           {{- with $application.startupProbe }}
           startupProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with $application.lifecycle }}
+          {{- /* preStop.sleep keeps the pod serving while its Endpoints removal propagates
+                 to Traefik — without it a rolling update drops requests despite the probes. */}}
+          lifecycle:
             {{- toYaml . | nindent 12 }}
           {{- end }}
           {{- if $application.templates | default dict | len }}

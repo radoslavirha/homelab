@@ -41,7 +41,16 @@ gitops/
     iot-applications/       reusable chart for custom apps (Deployment/Rollout, Services, HTTPRoute,
                             Jinja2 config ConfigMap). Per-app `annotations` land on the WORKLOAD
                             metadata — set reloader.stakater.com/auto there; there is no
-                            checksum/config, Reloader is the only restart mechanism
+                            checksum/config, Reloader is the only restart mechanism.
+                            Health: `livenessProbe`/`readinessProbe`/`startupProbe` +
+                            `lifecycle` (preStop.sleep) + `terminationGracePeriodSeconds` are
+                            opt-in per app, never chart defaults. Paths by app type —
+                            /health/live + /health/ready (Ts.ED APIs), /healthz (nginx UIs).
+                            `templates.<name>.validate: true` generates an initContainer that
+                            runs the app's own schema against the RENDERED config, image
+                            derived as <image.repository>-config-validator:<image.tag>. Use it
+                            for apps that cannot validate their own config (the nginx UIs);
+                            the APIs fail their own boot and leave it unset
   helm-values/
     external-dns.yaml       shared: Unifi webhook provider, sources (gateway-httproute, traefik-proxy, crd), policy
     external-secrets.yaml   shared: installCRDs: true

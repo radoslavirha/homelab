@@ -34,3 +34,71 @@ tests:
     asserts:
       - failedTemplate:
           errorMessage: "Image has invalid pullPolicy 'InvalidPolicy'. Allowed values are: Always, IfNotPresent, Never. [apps.my-app.image]."
+
+  - it: should accept validate as a boolean
+    set:
+      apps.my-app.image.repository: ghcr.io/example/my-app
+      apps.my-app.labels.component: api
+      apps.my-app.labels.partOf: iot
+      apps.my-app.ingress.enabled: false
+      apps.my-app.templates.config.file: config.json
+      apps.my-app.templates.config.path: /app/config
+      apps.my-app.templates.config.content: '{"key":"value"}'
+      apps.my-app.templates.config.validate: true
+    asserts:
+      - notFailedTemplate: {}
+
+  - it: should accept validate as a map
+    set:
+      apps.my-app.image.repository: ghcr.io/example/my-app
+      apps.my-app.labels.component: api
+      apps.my-app.labels.partOf: iot
+      apps.my-app.ingress.enabled: false
+      apps.my-app.templates.config.file: config.json
+      apps.my-app.templates.config.path: /app/config
+      apps.my-app.templates.config.content: '{"key":"value"}'
+      apps.my-app.templates.config.validate.tag: "1.0.0"
+    asserts:
+      - notFailedTemplate: {}
+
+  - it: should fail when validate is a string
+    set:
+      apps.my-app.image.repository: ghcr.io/example/my-app
+      apps.my-app.labels.component: api
+      apps.my-app.labels.partOf: iot
+      apps.my-app.ingress.enabled: false
+      apps.my-app.templates.config.file: config.json
+      apps.my-app.templates.config.path: /app/config
+      apps.my-app.templates.config.content: '{"key":"value"}'
+      apps.my-app.templates.config.validate: "true"
+    asserts:
+      - failedTemplate:
+          errorMessage: "Template 'config' has an invalid validate key. Allowed values are a boolean or a map. [apps.my-app.templates]."
+
+  - it: should fail when validate is a number
+    set:
+      apps.my-app.image.repository: ghcr.io/example/my-app
+      apps.my-app.labels.component: api
+      apps.my-app.labels.partOf: iot
+      apps.my-app.ingress.enabled: false
+      apps.my-app.templates.config.file: config.json
+      apps.my-app.templates.config.path: /app/config
+      apps.my-app.templates.config.content: '{"key":"value"}'
+      apps.my-app.templates.config.validate: 1
+    asserts:
+      - failedTemplate:
+          errorMessage: "Template 'config' has an invalid validate key. Allowed values are a boolean or a map. [apps.my-app.templates]."
+
+  - it: should fail when the validate map has an unknown key
+    set:
+      apps.my-app.image.repository: ghcr.io/example/my-app
+      apps.my-app.labels.component: api
+      apps.my-app.labels.partOf: iot
+      apps.my-app.ingress.enabled: false
+      apps.my-app.templates.config.file: config.json
+      apps.my-app.templates.config.path: /app/config
+      apps.my-app.templates.config.content: '{"key":"value"}'
+      apps.my-app.templates.config.validate.image: ghcr.io/example/typo
+    asserts:
+      - failedTemplate:
+          errorMessage: "Template 'config' has an unknown validate key 'image'. Allowed keys are: repository, tag, args. [apps.my-app.templates]."

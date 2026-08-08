@@ -76,6 +76,33 @@ All `VAR_*` and `SECRET_*` keys from values files are passed as env vars to the 
 | `APPLICATION_GROUP` | `apps[name].labels.partOf` |
 | `NAMESPACE` | Helm `$.Release.Namespace` |
 
+### Validating the rendered config (`validate`)
+
+The rendered file is never checked. An app that parses its own config at boot catches a bad one itself — the Ts.ED APIs do, so a broken config fails the process and the pod CrashLoops. nginx cannot: it has no JSON parser, so a UI whose `config.json` is missing a value starts fine, answers `/healthz`, goes Ready, and serves a blank page while ArgoCD reports `Healthy`.
+
+Set `validate: true` on the template for apps in the second group:
+
+```yaml
+apps:
+  my-ui:
+    templates:
+      config:
+        file: config.json
+        path: /usr/share/nginx/html/config.json
+        subPath: config.json
+        validate: true
+```
+
+This generates a second initContainer, immediately after the Jinja2 one for that template, which runs the app's own schema against the rendered output. A rejected config gives `Init:CrashLoopBackOff` — and with `maxUnavailable: 0`, the previous pod keeps serving. The reason is in the container log:
+
+```bash
+kubectl logs <pod> -c <identifier>-<template>-validate
+```
+
+The image defaults to `<image.repository>-config-validator:<image.tag>`, so the app and its validator are bumped by the same `deploy.json` change and cannot come from different commits. Override with the map form (`repository`, `tag`, `args`) when that convention does not fit.
+
+The validator reads `/config/<file>` from the same emptyDir the Jinja2 container wrote to, so `path` and `subPath` — which describe the *main* container's mount — do not affect it.
+
 ## Secrets injection (`secretRefs`)
 
 Kubernetes Secrets can be injected into both the Jinja2 init container (for config file rendering) and the main application container (for runtime access) via `secretRefs`.

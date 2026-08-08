@@ -103,6 +103,35 @@
 {{- if not (hasKey .template "file") -}}
 {{- fail (printf "Template '%s' must have a file key. [apps.%s.templates]." .name .applicationName) -}}
 {{- end -}}
+
+{{- /* validate is optional. A typo that silently disables validation is exactly the
+       failure this feature exists to prevent, so reject anything unexpected. */}}
+{{- if hasKey .template "validate" -}}
+{{- $validate := .template.validate -}}
+{{- if not (or (kindIs "bool" $validate) (kindIs "map" $validate)) -}}
+{{- fail (printf "Template '%s' has an invalid validate key. Allowed values are a boolean or a map. [apps.%s.templates]." .name .applicationName) -}}
+{{- end -}}
+{{- if kindIs "map" $validate -}}
+{{- $allowed := list "repository" "tag" "args" -}}
+{{- range $key, $_ := $validate -}}
+{{- if not (has $key $allowed) -}}
+{{- fail (printf "Template '%s' has an unknown validate key '%s'. Allowed keys are: %s. [apps.%s.templates]." $.name $key (join ", " $allowed) $.applicationName) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/* Returns the config validator image reference for a template.
+     Defaults to <app image repository>-config-validator:<app image tag>, so the existing
+     deploy.json tag bump moves both images and a mismatched pair is unrepresentable.
+     Input is dictionary with application: dictionary, template: dictionary
+*/}}
+{{- define "iot-applications.template.validatorImage" -}}
+{{- $validate := ternary dict .template.validate (kindIs "bool" .template.validate) -}}
+{{- $repository := $validate.repository | default (printf "%s-config-validator" .application.image.repository) -}}
+{{- $tag := $validate.tag | default (include "iot-applications.defaults.tag" .application.image.tag) -}}
+{{- printf "%s:%s" $repository $tag -}}
 {{- end -}}
 
 {{/* Returns object identifier composed of component, partOf, and name */}}
