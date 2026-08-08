@@ -6,7 +6,7 @@ apps:
       reloader.stakater.com/auto: "true"
     image:
       repository: ghcr.io/radoslavirha/homelab-dashboard-ui
-      tag: "0.4.0"
+      tag: "0.4.1"
       pullPolicy: Always
     replicas: 1
     resources:
@@ -35,7 +35,6 @@ apps:
       - name: homelab-dashboard-ui-unifi-credentials
         keys:
           - SECRET_UNIFI_API_KEY
-
     # nginx serves a static SPA. /healthz is an exact-match location, so all three probes
     # share it: after the config validator has passed there is nothing a readiness check
     # could know that a liveness check could not.
@@ -60,7 +59,6 @@ apps:
         port: http
       periodSeconds: 5
       failureThreshold: 3
-
     # Keep serving while Endpoints removal propagates to Traefik. nginx's own graceful
     # shutdown (STOPSIGNAL SIGQUIT, inherited from the base image) handles connections it
     # already has; preStop covers the window where Traefik still sends new ones.
@@ -69,7 +67,6 @@ apps:
       preStop:
         sleep:
           seconds: 5
-
     # At replicas: 1 this is what makes the rollout gapless — the new pod must pass
     # readiness before the old one is torn down. It is also what contains a bad config:
     # the new pod fails init validation while the old pod keeps serving.
@@ -78,7 +75,6 @@ apps:
       rollingUpdate:
         maxSurge: 1
         maxUnavailable: 0
-
     templates:
       config:
         file: config.json
