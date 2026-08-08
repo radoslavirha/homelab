@@ -1,11 +1,67 @@
 # qr-manager-ui — sandbox overrides
+#
+# Health checks are staged here first, then promoted to base.yaml once a rollout has been
+# watched in sandbox — a mistuned failureThreshold or boot budget should break the sandbox
+# pod, not the production one. See docs/superpowers/plans/2026-08-06-iot-app-health-checks-homelab.md
+# TODO: promote the probe / lifecycle / strategy / validate block below to base.yaml after
+# a verified sandbox rollout, so production gets it too.
 
 apps:
   qr-manager-ui:
     image:
       tag: "0.7.0"
+
+    # nginx serves a static SPA. /healthz is an absolute path (exact-match location),
+    # independent of NGINX_BASE_PATH, and there is no live/ready distinction to make:
+    # after the config validator has passed there is nothing a readiness check could know
+    # that a liveness check could not.
+    #
+    # Deliberately NOT probing qr-manager-api from here: an API outage would empty this
+    # Deployment's Endpoints and turn a degraded page into a Traefik 502.
+    startupProbe:
+      httpGet:
+        path: /healthz
+        port: http
+      periodSeconds: 2
+      failureThreshold: 15
+    livenessProbe:
+      httpGet:
+        path: /healthz
+        port: http
+      periodSeconds: 10
+      failureThreshold: 3
+    readinessProbe:
+      httpGet:
+        path: /healthz
+        port: http
+      periodSeconds: 5
+      failureThreshold: 3
+
+    # Keep serving while Endpoints removal propagates to Traefik. nginx's own graceful
+    # shutdown (STOPSIGNAL SIGQUIT, inherited from the base image) handles connections it
+    # already has; preStop covers the window where Traefik still sends new ones.
+    terminationGracePeriodSeconds: 30
+    lifecycle:
+      preStop:
+        sleep:
+          seconds: 5
+
+    # At replicas: 1 this is what makes the rollout gapless — the new pod must pass
+    # readiness before the old one is torn down. It is also what contains a bad config:
+    # the new pod fails init validation while the old pod keeps serving.
+    strategy:
+      type: RollingUpdate
+      rollingUpdate:
+        maxSurge: 1
+        maxUnavailable: 0
+
     templates:
       config:
+        # nginx cannot check the config it serves, so the chart runs the app's own Zod
+        # schema in an initContainer. An empty {{ VAR_* }} substitution is valid JSON and
+        # would otherwise boot a Ready pod serving a blank page.
+        # Validator image: ghcr.io/radoslavirha/qr-manager-ui-config-validator:<image.tag>
+        validate: true
         content: |
           {
               "apiBaseURL": "{{ VAR_PROTOCOL }}://{{ VAR_SUBDOMAIN }}.api.{{ VAR_PUBLIC_DOMAIN }}/iot/qr-manager",

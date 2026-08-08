@@ -35,11 +35,60 @@ apps:
       - name: homelab-dashboard-ui-unifi-credentials
         keys:
           - SECRET_UNIFI_API_KEY
+
+    # nginx serves a static SPA. /healthz is an exact-match location, so all three probes
+    # share it: after the config validator has passed there is nothing a readiness check
+    # could know that a liveness check could not.
+    #
+    # Deliberately NOT probing the Unifi controller through this pod's own /proxy/network/
+    # reverse proxy: a controller reboot must not delete the dashboard from Endpoints.
+    startupProbe:
+      httpGet:
+        path: /healthz
+        port: http
+      periodSeconds: 2
+      failureThreshold: 15
+    livenessProbe:
+      httpGet:
+        path: /healthz
+        port: http
+      periodSeconds: 10
+      failureThreshold: 3
+    readinessProbe:
+      httpGet:
+        path: /healthz
+        port: http
+      periodSeconds: 5
+      failureThreshold: 3
+
+    # Keep serving while Endpoints removal propagates to Traefik. nginx's own graceful
+    # shutdown (STOPSIGNAL SIGQUIT, inherited from the base image) handles connections it
+    # already has; preStop covers the window where Traefik still sends new ones.
+    terminationGracePeriodSeconds: 30
+    lifecycle:
+      preStop:
+        sleep:
+          seconds: 5
+
+    # At replicas: 1 this is what makes the rollout gapless — the new pod must pass
+    # readiness before the old one is torn down. It is also what contains a bad config:
+    # the new pod fails init validation while the old pod keeps serving.
+    strategy:
+      type: RollingUpdate
+      rollingUpdate:
+        maxSurge: 1
+        maxUnavailable: 0
+
     templates:
       config:
         file: config.json
         path: /usr/share/nginx/html/config.json
         subPath: config.json
+        # nginx cannot check the config it serves, so the chart runs the app's own Zod
+        # schema in an initContainer. An empty SECRET_UNIFI_API_KEY substitution is valid
+        # JSON and would otherwise boot a Ready pod whose every Unifi request 401s.
+        # Validator image: ghcr.io/radoslavirha/homelab-dashboard-ui-config-validator:<image.tag>
+        validate: true
         content: |
           {
             "title": "homelab",
