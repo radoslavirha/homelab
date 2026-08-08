@@ -9,8 +9,7 @@
 apps:
   qr-manager-ui:
     image:
-      tag: "0.7.0"
-
+      tag: "0.7.1"
     # nginx serves a static SPA. /healthz is an absolute path (exact-match location),
     # independent of NGINX_BASE_PATH, and there is no live/ready distinction to make:
     # after the config validator has passed there is nothing a readiness check could know
@@ -36,7 +35,6 @@ apps:
         port: http
       periodSeconds: 5
       failureThreshold: 3
-
     # Keep serving while Endpoints removal propagates to Traefik. nginx's own graceful
     # shutdown (STOPSIGNAL SIGQUIT, inherited from the base image) handles connections it
     # already has; preStop covers the window where Traefik still sends new ones.
@@ -45,7 +43,6 @@ apps:
       preStop:
         sleep:
           seconds: 5
-
     # At replicas: 1 this is what makes the rollout gapless — the new pod must pass
     # readiness before the old one is torn down. It is also what contains a bad config:
     # the new pod fails init validation while the old pod keeps serving.
@@ -54,7 +51,6 @@ apps:
       rollingUpdate:
         maxSurge: 1
         maxUnavailable: 0
-
     templates:
       config:
         # nginx cannot check the config it serves, so the chart runs the app's own Zod
