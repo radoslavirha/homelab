@@ -212,6 +212,8 @@ Helm values use a two-layer approach:
 - **Shared base**: `gitops/helm-values/<name>.yaml` — common across all clusters
 - **Cluster overrides**: `gitops/helm-values/<cluster>/<name>.yaml` — cluster-specific values (merged last, wins)
 
+> The `iot-miniservers` deploy action rewrites the app values files with `yq` to bump `image.tag`. That **strips blank lines** from the whole file — comments survive, formatting does not. Don't spend effort on blank-line layout in `gitops/helm-values/apps/**` or `gitops/helm-values/server3/homelab-dashboard-ui.yaml`; the next release flattens it.
+
 For custom apps deployed via the `apps` stage, a third layer is used:
 - **App-level values**: `gitops/helm-values/apps/<app>/` — shared + env-specific (base.yaml, production.yaml, sandbox.yaml)
 - **Cluster+namespace common**: `gitops/helm-values/<cluster>/apps/common/{env}.yaml` — shared VAR_* for all apps in a namespace (e.g. VAR_PUBLIC_DOMAIN, VAR_SUBDOMAIN)

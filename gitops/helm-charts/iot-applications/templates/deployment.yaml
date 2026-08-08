@@ -127,11 +127,13 @@ spec:
             {{- end }}
           securityContext:
             runAsNonRoot: true
-            {{- /* runAsUser is REQUIRED, not belt-and-braces: the validator images declare
-                   `USER node`, a name. The kubelet cannot resolve a name to a UID, so with
-                   runAsNonRoot alone it refuses to start the container with
-                   CreateContainerConfigError "image has non-numeric user (node)".
-                   1000 is the `node` user in the node:*-alpine base both validators use. */}}
+            {{- /* Defensive default, not a requirement. Both validator images declare
+                   `USER 1000` since qr-manager-ui@0.7.1 / homelab-dashboard-ui@0.4.1 and
+                   satisfy runAsNonRoot unaided — verified in-cluster with this securityContext
+                   and no runAsUser. It is kept because the chart cannot know what an arbitrary
+                   validate.repository override contains, and an image whose USER is a NAME
+                   fails with CreateContainerConfigError "non-numeric user". Supplying a
+                   known-good UID costs nothing; override via validate.runAsUser. */}}
             runAsUser: {{ (ternary dict $template.validate (kindIs "bool" $template.validate)).runAsUser | default 1000 }}
             readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false

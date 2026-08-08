@@ -114,7 +114,7 @@ The `iot-miniservers` side is implemented, so this is observed behaviour rather 
 | Property | Value |
 | --- | --- |
 | Base image | `node:24-alpine` |
-| User | `USER node` (uid 1000). ~~Satisfies `runAsNonRoot: true` without a chart-supplied `runAsUser`~~ — **this was wrong, see below** |
+| User | `USER 1000` since `qr-manager-ui@0.7.1` / `homelab-dashboard-ui@0.4.1`. Satisfies `runAsNonRoot: true` without a chart-supplied `runAsUser` — **verified in-cluster 2026-08-08**, not merely intended. Was `USER node`, which did not; see below |
 | `ENTRYPOINT` | `["node", "/app/validate-config.js"]` |
 | `CMD` | `["/config/config.json"]` — a local-run default only; the chart always supplies the path as an arg |
 | Config path | **argv[1]**, not baked in. Verified against a non-default filename (`/config/production.json`) |
@@ -130,7 +130,11 @@ The `iot-miniservers` side is implemented, so this is observed behaviour rather 
 > non-numeric user (node), cannot verify user is non-root
 > ```
 >
-> This fired on both `sandbox` clusters the moment `validate: true` first synced. The chart now sets `runAsUser: 1000` explicitly (the `node` user's UID, confirmed with `id` inside the image), overridable via `validate.runAsUser` for a validator built on a different base. Only a numeric UID *in the image* would have made the chart-side setting optional.
+> This fired on both `sandbox` clusters the moment `validate: true` first synced. The chart set `runAsUser: 1000` explicitly (the `node` user's UID, confirmed with `id` inside the image), overridable via `validate.runAsUser`.
+>
+> **Resolved upstream.** `iot-miniservers` commit `c286c71` changed both validator stages to `USER 1000`, released as `qr-manager-ui@0.7.1` / `homelab-dashboard-ui@0.4.1` and rolled out on 2026-08-08. Proven rather than assumed: a scratch pod running the `0.7.1` validator with `runAsNonRoot: true` and **no** `runAsUser` starts and reports `running as uid 1000`, where the same spec previously gave `CreateContainerConfigError`.
+>
+> The chart still supplies `runAsUser`, now as a defensive default rather than a requirement — it cannot know what an arbitrary `validate.repository` override contains. Do not read the value as evidence the images are still broken.
 >
 > The failure mode was benign, and instructively so: the pod sat `Pending` on the init container while the previous pod kept serving the ingress. A chart bug in the validation mechanism was contained by the same fail-closed property the mechanism exists to provide.
 >
