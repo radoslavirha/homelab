@@ -38,6 +38,10 @@ iac/
 gitops/
   helm-charts/
     provisioner/            reusable PostSync provisioner Jobs chart (InfluxDB2, EMQX, MongoDB)
+    iot-applications/       reusable chart for custom apps (Deployment/Rollout, Services, HTTPRoute,
+                            Jinja2 config ConfigMap). Per-app `annotations` land on the WORKLOAD
+                            metadata — set reloader.stakater.com/auto there; there is no
+                            checksum/config, Reloader is the only restart mechanism
   helm-values/
     external-dns.yaml       shared: Unifi webhook provider, sources (gateway-httproute, traefik-proxy, crd), policy
     external-secrets.yaml   shared: installCRDs: true

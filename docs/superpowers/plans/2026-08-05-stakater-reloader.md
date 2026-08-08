@@ -223,13 +223,13 @@ spec:
 
 > **Coordination:** another agent is working in this repo. `gitops/helm-values/server3/argocd.yaml` is a pre-existing file — re-read it immediately before editing and merge rather than overwrite.
 
-- [ ] Verify `argocd-cm` picked it up: `kubectl get cm argocd-cm -n argocd -o yaml | grep -A3 ignoreDifferences`
+- [x] Verify `argocd-cm` picked it up: `kubectl get cm argocd-cm -n argocd -o yaml | grep -A3 ignoreDifferences`
 
 ### 4. Annotate the workloads that need it
 
 #### 4a. `iot-applications` chart — add workload annotations support
 
-- [x] `gitops/helm-charts/iot-applications/templates/Deployment.yaml` — add annotations to the **Deployment** metadata (currently `labels` only):
+- [x] `gitops/helm-charts/iot-applications/templates/deployment.yaml` — add annotations to the **Deployment** metadata (currently `labels` only):
 
 ```yaml
 metadata:
@@ -241,7 +241,7 @@ metadata:
   {{- end }}
 ```
 
-- [x] Apply the identical block to `templates/Rollout.yaml` (Rollout metadata) so the two stay in step even though Rollouts is unused.
+- [x] Apply the identical block to `templates/rollout.yaml` (Rollout metadata) so the two stay in step even though Rollouts is unused.
 - [x] Document the new `annotations` key in `gitops/helm-charts/iot-applications/values.yaml`, in the commented `apps:` block near `podAnnotations` (line ~121). State the difference: `annotations` = workload metadata (what Reloader reads), `podAnnotations` = pod template.
 - [x] Extend `gitops/helm-charts/iot-applications/tests/deployment_test.yaml`: annotations rendered when set, absent when unset. Update `tests/__snapshot__` if a snapshot assertion covers Deployment metadata.
 - [x] Run `helm unittest gitops/helm-charts/iot-applications` locally — CI runs the same via `.github/workflows/helm-chart-ci.yaml` (helm-unittest v0.4.4).
@@ -250,7 +250,7 @@ metadata:
 
 Reloader and the checksum annotation both restart on the *same* ConfigMap. Keeping both means **two rollouts per config change**: ArgoCD applies the new ConfigMap plus the new checksum (rollout 1), then Reloader observes the ConfigMap update and patches `last-reloaded-from` (rollout 2). Pick one — Reloader, since it also covers the out-of-band ESO case the checksum can never see.
 
-- [x] Remove the `checksum/config` line from `templates/Deployment.yaml` (line ~40) and `templates/Rollout.yaml` (line ~37).
+- [x] Remove the `checksum/config` line from `templates/deployment.yaml` (line ~40) and `templates/rollout.yaml` (line ~37).
 - [x] Simplify the surrounding conditional — the annotations block now renders on `$application.annotations`/`podAnnotations` alone, not on `$application.templates | len`.
 - [x] Update `values.yaml` comments at lines ~94 (“Pods automatically restart when content changes (checksum annotation)”) and ~122 (“checksum/config is added automatically when templates are defined”) — replace with the Reloader annotation requirement.
 - [x] Update `Readme.md` line ~50 (same claim).
@@ -311,17 +311,17 @@ Reloader can only react to a Secret that already changed. ExternalSecrets here u
 
 ### 6. Verification
 
-- [ ] `kubectl get pods -n reloader` on each cluster — one running pod (deployment is named `reloader-reloader`: release + chart name).
-- [ ] `kubectl logs -n reloader deploy/reloader-reloader` — confirm it starts in opt-in mode and watches globally.
-- [ ] Confirm the annotation actually landed on the workload, not the pod template:
+- [x] `kubectl get pods -n reloader` on each cluster — one running pod (deployment is named `reloader-reloader`: release + chart name).
+- [x] `kubectl logs -n reloader deploy/reloader-reloader` — confirm it starts in opt-in mode and watches globally.
+- [x] Confirm the annotation actually landed on the workload, not the pod template:
   `kubectl get deploy miot-bridge-api -n sandbox -o jsonpath='{.metadata.annotations}'`
-- [ ] End-to-end on server2 / `sandbox` (lowest blast radius):
+- [x] End-to-end on server2 / `sandbox` (lowest blast radius):
   1. note the current pod name and age
   2. change a value in the Secret — an annotation-only edit does nothing, Reloader hashes `data`. Either `kubectl edit secret miot-bridge-api-mqtt-credentials -n sandbox` or rotate in OpenBao and force-sync the ExternalSecret
   3. new ReplicaSet + pod appears; `kubectl get deploy … -o jsonpath='{.spec.template.metadata.annotations}'` shows `reloader.stakater.com/last-reloaded-from`
   4. wait one ArgoCD reconcile (~3 min) — Application must stay **Synced/Healthy**. If it flaps OutOfSync, the jq path in step 3 is wrong
   5. let ESO restore the real value if the Secret was hand-edited
-- [ ] Regression test for the removed checksum: change a `templates.config.content` value for `qr-manager-ui` in git, sync, and confirm the pod restarts. This path used to be covered by `checksum/config`; if it does not restart, the annotation is missing or Reloader is not watching that namespace.
+- [x] Regression test for the removed checksum: change a `templates.config.content` value for `qr-manager-ui` in git, sync, and confirm the pod restarts. This path used to be covered by `checksum/config`; if it does not restart, the annotation is missing or Reloader is not watching that namespace.
 - [ ] Repeat the `homelab-dashboard-ui` case specifically: rotate the Unifi key, confirm the new pod's `/usr/share/nginx/html/config.json` contains the new value (`kubectl exec … -- cat …`). This is the frontend case where a stale value is invisible from the outside.
 
 ### 7. Documentation
@@ -329,7 +329,7 @@ Reloader can only react to a Secret that already changed. ExternalSecrets here u
 - [x] `docs/architecture.md` — add a Reloader row: Purpose (restart workloads on ConfigMap/Secret change), Clusters (server1 · server2 · server3), Managed by (ArgoCD — infra stage), Artifact Hub link, Local values (`shared · server1 · server2 · server3`), Upstream `values.yaml` link.
 - [x] `AGENTS.md` — add `reloader.yaml` to the `gitops/helm-values/` listing and `Reloader (AppSet)` to the `infra/` stage line; mention the new `annotations` key in the `iot-applications` chart section if one exists.
 - [x] `docs/secrets.md` — rotation section: which workloads now restart automatically, which are deliberately excluded (influxdb2 · emqx · mongodb) and why, the telegraf manual restart, and the force-sync command.
-- [ ] Run the `sync-docs` skill last (it chains `sync-obsidian`).
+- [x] Run the `sync-docs` skill last (it chains `sync-obsidian`).
 
 ---
 
@@ -347,3 +347,27 @@ Reloader can only react to a Secret that already changed. ExternalSecrets here u
 | ESO restart hooks | ESO has no built-in workload-restart feature; its own docs point at Reloader. |
 | `kubectl rollout restart` in a PostSync hook | Fires on ArgoCD sync, not on secret change. A rotation without a git commit still goes unnoticed. |
 | Mount secrets as files instead of `envFrom` | Kubelet does refresh mounted secret volumes (~60s), but every consumer here reads config at boot (Jinja2 init container, Grafana provisioning, Telegraf env), so the process still needs a restart. Bigger change, does not remove the need for Reloader. |
+
+
+---
+
+## Implementation notes (2026-08-08) — what actually happened
+
+Deployed to all three clusters. Every Application ended **Synced / Healthy**; `reloader-reloader` runs one pod per cluster.
+
+| Plan said | Reality | Note |
+| --- | --- | --- |
+| Edit `templates/deployment.yaml` / `rollout.yaml` | git index had them as `Deployment.yaml` / `Rollout.yaml` | The chart had been mixed-case since `0300f7a`, which renamed `IngressRouteUDP.yaml` *down* to `ingressroute-udp.yaml`. All six PascalCase templates normalized to lowercase, matching the provisioner chart, the tests dir, and Helm convention |
+| ArgoCD picks up the commit on its own | Applications sat on an old revision until forced | `kubectl annotate application <name> argocd.argoproj.io/refresh=hard` on `root-infra`, then a `refresh=normal` sweep over all Applications. Repo polling had not fired yet |
+| End-to-end test by editing a Secret | Tested by adding a throwaway key to `apps-iot-qr-manager-ui-tpl-config` (sandbox) | Editing a live Secret would leave a broken credential in place for up to 1h (ESO `refreshInterval`). The ConfigMap path exercises the identical code path. Key removed afterwards; the removal triggered a second reload, as expected |
+| Verify the `homelab-dashboard-ui` Unifi rotation | Annotation verified, rotation **not** exercised | Would mean rotating a real credential. Deferred to the next genuine rotation |
+
+Observed, matching predictions:
+
+- All 5 custom apps rolled exactly once (06:02–06:03) when `checksum/config` left the pod template.
+- Grafana (pod from 2026-06-22) and ExternalDNS (2026-05-06) did **not** restart — their annotation is workload metadata, which never touches the pod template.
+- Reloader log on the ConfigMap change: `Changes detected in 'apps-iot-qr-manager-ui-tpl-config' of type 'CONFIGMAP' in namespace 'sandbox'; updated 'apps-iot-qr-manager-ui' of type 'Deployment'`.
+- The pod template gained `reloader.stakater.com/last-reloaded-from` and the Application **stayed Synced** — the `ignoreDifferences` jq path is correct, which was the one thing verified only on paper before deploy.
+- Reloader logs `KUBERNETES_NAMESPACE is unset, will detect changes in all namespaces` at startup — expected with `watchGlobally: true`.
+
+Still open: the telegraf gap, tracked in `docs/superpowers/specs/2026-08-08-telegraf-reloader-support.md`.
