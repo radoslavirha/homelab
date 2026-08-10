@@ -1,14 +1,14 @@
 kind: ConfigMap
 apiVersion: v1
 metadata:
-  name: kube-prometheus-stack-grafana-dashboard-loxone
+  name: kube-prometheus-stack-grafana-dashboard-loxone1
   namespace: monitoring
   annotations:
     argocd.argoproj.io/sync-wave: "-50"
   labels:
     grafana_dashboard: "1"
 data:
-  dashboard.loxone.json: |
+  dashboard.loxone1.json: |
     {
       "annotations": {
         "list": [
@@ -649,7 +649,7 @@ data:
       },
       "timepicker": {},
       "timezone": "browser",
-      "title": "Loxone",
+      "title": "Loxone valves/temperature/humidity",
       "uid": "adkltw2",
       "version": 7
     }
