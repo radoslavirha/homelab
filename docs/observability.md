@@ -111,6 +111,22 @@ Chart v4 split pod-log collection into `podLogsViaLoki` and `podLogsViaOpenTelem
 
 Chart v4 moved kube-state-metrics and node-exporter into the `telemetryServices` subchart, where every service defaults to `deploy: false`. Both are enabled in the shared base — `clusterMetrics` needs kube-state-metrics and `hostMetrics` needs node-exporter. `windows-exporter` stays off (all nodes are Talos Linux).
 
+### Metric allow-lists
+
+Each `clusterMetrics` scrape target is filtered by the chart's built-in allow-list (`useDefaultAllowList: true`, the default). Extend it with `metricsTuning.includeMetrics` — the chart **concatenates** the default list and the additions, so nothing already collected is dropped. Replacing `useDefaultAllowList` instead is the risky path and is not used here.
+
+Two adjustments are in place, both in `gitops/helm-values/k8s-monitoring.yaml`, and both exist to make probe failure visible:
+
+**`kube_pod_status_ready`** (added to the kube-state-metrics allow-list) — the chart default carries `kube_pod_status_phase`, `kube_pod_status_reason` and the container restart/waiting series, but not this one. The custom apps gate readiness on MongoDB/EMQX, so a dependency outage takes their pods out of the Service Endpoints while `phase` stays `Running` and `restarts_total` stays flat. Without this metric that outage changes nothing in Prometheus and no alert can fire.
+
+**`kubeletProbes`** (enabled; off by default) — kubelet's own `prober_*` counters, scraped from `/metrics/probes` on each node. This is a **separate scrape target** from `kube-state-metrics`, but it reuses the node discovery, serviceaccount token and TLS config of the existing `kubelet` scrape, so it needs no extra RBAC. `kube_pod_status_ready` says a pod is NotReady; `prober_probe_total` says *which* probe failed. `probe_type="Readiness"` failing while `probe_type="Liveness"` stays clean is what proves the shallow-liveness/deep-readiness split is working. It also surfaces probe flapping that never reaches `failureThreshold`.
+
+`prober_probe_duration_seconds` is excluded — a histogram costing roughly 7× the rest of `prober_*`, answering a question (probe latency) that only matters when tuning `timeoutSeconds`. Timeouts still appear in `prober_probe_total` as `result="failed"`. The exclusion is applied post-scrape in Alloy, so it saves storage and remote-write, not scrape work.
+
+> `prober_probe_total` carries a `pod_uid` label, which is regenerated on every pod restart — series accumulate with churn instead of staying flat. If cardinality grows, drop it with a `labeldrop` rule under `kubeletProbes.extraMetricProcessingRules`.
+
+No alerting consumes either metric yet; that is a separate piece of work pending a notification channel.
+
 ### server3 fan-out routing (local)
 
 | Signal | Destination |

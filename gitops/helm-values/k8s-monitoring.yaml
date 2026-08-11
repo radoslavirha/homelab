@@ -49,6 +49,38 @@ collectors:
 clusterMetrics:
   enabled: true
   collector: alloy-receiver
+  # The chart's default kube-state-metrics allow-list
+  # (charts/feature-cluster-metrics/default-allow-lists/kube-state-metrics.yaml) carries
+  # kube_pod_status_phase, kube_pod_status_reason and the container restart/waiting series,
+  # but NOT kube_pod_status_ready. Without it a readiness failure is invisible: the pod
+  # leaves the Service's Endpoints while phase stays Running and restarts_total stays flat,
+  # so nothing in Prometheus changes and no alert can fire. The custom apps have readiness
+  # probes gating on MongoDB/EMQX, which makes that the expected shape of an outage.
+  # includeMetrics is additive to the default allow-list (the template concatenates both),
+  # so nothing else is dropped. Cost is ~3 series per pod, one per condition value.
+  kube-state-metrics:
+    metricsTuning:
+      includeMetrics:
+        - kube_pod_status_ready
+  # kube_pod_status_ready says a pod is NotReady. It does not say WHICH probe failed.
+  # These are kubelet's own probe counters, a separate scrape of /metrics/probes on each
+  # node — same node discovery, serviceaccount token and TLS config as the kubelet and
+  # kubeletResource scrapes above, so this needs no extra RBAC.
+  # Why it matters here: liveness is deliberately shallow and readiness gates on
+  # MongoDB/EMQX. `probe_type="Readiness"` failing while `probe_type="Liveness"` stays
+  # clean is the proof that split is working rather than an inference. It also surfaces
+  # probe flapping that never reaches failureThreshold, which is invisible otherwise.
+  #
+  # prober_probe_duration_seconds is dropped: it is a histogram (~14 series per container
+  # per probe type, ~7x the cost of the rest of prober_*) and answers a question we do not
+  # have — probe latency only matters when tuning timeoutSeconds. Timeouts still show up
+  # in prober_probe_total as result="failed", just without the distribution. Note the drop
+  # is post-scrape in Alloy, so it saves storage and remote-write, not scrape work.
+  kubeletProbes:
+    enabled: true
+    metricsTuning:
+      excludeMetrics:
+        - prober_probe_duration_seconds.*
 hostMetrics:
   enabled: true
   collector: alloy-receiver
