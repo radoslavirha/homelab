@@ -288,9 +288,9 @@ Request headers are dropped wholesale by Traefik's default (`fields.headers.defa
 
 ### Access log ↔ trace correlation
 
-With tracing enabled Traefik writes `TraceId` / `SpanId` into every access log record — but only in the structured formats, which is the second reason for `format: json`. It uses those stdio spellings rather than the OTel attribute names, so the lowercase `trace_id`/`span_id` extraction that serves the Winston-instrumented APIs does not match them.
+With tracing enabled Traefik writes the trace context into every access log record — but only in the structured formats, which is the second reason for `format: json`. It writes it **twice**, as `TraceId`/`SpanId` (its own stdio spelling) and as `trace_id`/`span_id`, so the lowercase extraction in `podLogsViaLoki.extraLogProcessingStages` that serves the Winston-instrumented APIs already covers Traefik unchanged. Access logs get the same Loki→Tempo derived field and `tracesToLogsV2` correlation with no Traefik-specific stage.
 
-A `stage.match` scoped to `{job="traefik/traefik"}` in `podLogsViaLoki.extraLogProcessingStages` adds the second mapping, giving Traefik access logs the same Loki→Tempo derived field and `tracesToLogsV2` correlation the APIs have. It is scoped because the mapping overwrites the extracted `trace_id`/`span_id`, which must not happen to app logs, and there is exactly **one** `stage.structured_metadata`, kept last — two would emit the key twice, once empty, on every line only one extraction matched.
+Verified on a live line (Traefik v3.6.12): `trace_id`, `span_id` and `level` all land in structured metadata, and `detected_level` reads `info` instead of `unknown`.
 
 ## Sending telemetry from an application
 
