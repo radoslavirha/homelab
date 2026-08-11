@@ -251,6 +251,14 @@ logs:
     level: INFO
   access:
     enabled: true
+    format: json          # CLF (the default) is unparseable by `| json`
+    fields:
+      headers:
+        defaultmode: drop
+        names:
+          X-Real-Ip: keep
+          Cf-Connecting-Ip: keep
+          Cf-Ipcountry: keep
 
 tracing:
   otlp:
@@ -271,6 +279,18 @@ metrics:
 - **Traces** appear in Tempo and are linked to application-level spans via the `traceparent` header.
 - **Metrics** (per-entrypoint, per-router, per-service) appear in Prometheus under the `traefik_*` namespace.
 - **Logs** (general + access) appear in Loki via Alloy pod-log collection — no Traefik-side OTLP config required.
+
+### Why access logs are JSON
+
+The chart default is `common` (CLF), a plain text line. The [Traefik dashboard](../gitops/k8s-manifests/server3/grafana/ConfigMap.grafana.dashboard.traefik-opentelemetry.yaml) parses every log panel with `| json` and reads Traefik's field names (`OriginStatus`, `RequestMethod`, `RequestPath`, `ServiceAddr`), so under CLF all of them render empty while the metric panels look healthy. JSON also emits `"level":"info"`, which is what turns `detected_level` from `unknown` into a usable filter for the error-log panel.
+
+Request headers are dropped wholesale by Traefik's default (`fields.headers.defaultmode: drop`); the three the dashboard reads are kept by name. Loki's `| json` rewrites `-` to `_`, so `request_X-Real-Ip` is queried as `request_X_Real_Ip`. The `Cf-*` pair only populates behind Cloudflare and is simply absent on the private network.
+
+### Access log ↔ trace correlation
+
+With tracing enabled Traefik writes `TraceId` / `SpanId` into every access log record — but only in the structured formats, which is the second reason for `format: json`. It uses those stdio spellings rather than the OTel attribute names, so the lowercase `trace_id`/`span_id` extraction that serves the Winston-instrumented APIs does not match them.
+
+A `stage.match` scoped to `{job="traefik/traefik"}` in `podLogsViaLoki.extraLogProcessingStages` adds the second mapping, giving Traefik access logs the same Loki→Tempo derived field and `tracesToLogsV2` correlation the APIs have. It is scoped because the mapping overwrites the extracted `trace_id`/`span_id`, which must not happen to app logs, and there is exactly **one** `stage.structured_metadata`, kept last — two would emit the key twice, once empty, on every line only one extraction matched.
 
 ## Sending telemetry from an application
 

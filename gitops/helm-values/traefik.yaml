@@ -79,6 +79,30 @@ logs:
     level: INFO
   access:
     enabled: true
+    # The chart default is `common` (CLF) — a plain text line. Every log panel of the
+    # Traefik dashboard runs `| json` over the line and reads Traefik's own field names
+    # (OriginStatus, RequestMethod, RequestPath, ServiceAddr), so with CLF they render
+    # empty while metrics and traces look healthy. JSON also emits `"level":"info"`,
+    # which is what makes detected_level something other than `unknown` for these lines.
+    #
+    # JSON is what carries TraceId/SpanId as well: with tracing enabled Traefik writes
+    # them into every access log record, but only in the structured formats. Those two
+    # fields are lifted into Loki structured metadata by the Traefik-scoped stage in
+    # gitops/helm-values/k8s-monitoring.yaml — that is what links an access log line to
+    # its Tempo trace, the same correlation the Winston-instrumented APIs get.
+    format: json
+    fields:
+      headers:
+        # Headers are dropped wholesale by default. The dashboard reads three of them.
+        # Loki's `| json` rewrites `-` to `_`, so `request_X-Real-Ip` is queried as
+        # `request_X_Real_Ip`. The Cf-* pair only ever populates behind Cloudflare —
+        # kept so the client-country panels work if this is ever fronted by it, and
+        # simply absent on the private network.
+        defaultmode: drop
+        names:
+          X-Real-Ip: keep
+          Cf-Connecting-Ip: keep
+          Cf-Ipcountry: keep
 
 tracing:
   otlp:

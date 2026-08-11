@@ -121,9 +121,26 @@ podLogsViaLoki:
   # when it is not JSON, so plaintext logs (Cilium, Longhorn, nginx) are unaffected.
   # level is extracted too, but note Loki already derives detected_level correctly from
   # these lines — this makes it an explicit field rather than a heuristic.
+  # Traefik writes the same trace context under its own field names. Its JSON access log
+  # carries TraceId/SpanId (the stdio spelling; the OTLP exporter would use the OTel
+  # attribute names instead, but access logs are scraped from stdout like everything else)
+  # so the lowercase stage above extracts nothing from them and the dashboard's log panels
+  # cannot link to Tempo. Scoped with stage.match to the Traefik pods: the second mapping
+  # overwrites the extracted trace_id/span_id, which must not happen to the Winston lines.
+  # The selector matches the Loki-format labels present at this point in the pipeline —
+  # the chart's logToResource conversion to k8s_*/service_* runs later, at the OTLP bridge.
+  #
+  # There is exactly ONE stage.structured_metadata, kept last: two of them would emit the
+  # key twice, once empty, for every line that only one of the extractions matched.
   extraLogProcessingStages: |-
     stage.json {
       expressions = { level = "level", trace_id = "trace_id", span_id = "span_id" }
+    }
+    stage.match {
+      selector = "{job=\"traefik/traefik\"}"
+      stage.json {
+        expressions = { trace_id = "TraceId", span_id = "SpanId" }
+      }
     }
     stage.structured_metadata {
       values = { level = "level", trace_id = "trace_id", span_id = "span_id" }
