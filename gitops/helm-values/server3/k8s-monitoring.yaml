@@ -7,9 +7,78 @@ destinations:
   prometheus:
     type: prometheus
     url: http://prometheus.monitoring.svc.cluster.local:80/api/v1/write
+  # Logs go to Loki's NATIVE OTLP endpoint, not /loki/api/v1/push.
+  #
+  # `type: loki` renders otelcol.exporter.loki, which is Alloy's own converter (explicitly
+  # "unrelated to the standard lokiexporter"). Its behaviour is hardcoded and fatal here:
+  #   - the log line is ALWAYS the JSON envelope {"body":…,"attributes":…,"resources":…}
+  #     — there is no loki.format hint in Alloy's converter
+  #   - StructuredMetadata is ALWAYS nil (see its convert_test.go — every case)
+  #   - only resource attributes named in `loki.resource.labels` become labels; the rest are
+  #     stuffed back into the line
+  # Everything arriving over OTLP passed through it: Traefik's logs, the pod logs
+  # server1/server2 bridge over the wire, and any SDK logs. Result was an unreadable
+  # double-encoded line whose only structured metadata was Loki's own detected_level guess,
+  # which then read `unknown` because the escaped "level":"info" defeats the heuristic.
+  #
+  # Loki's native OTLP ingest does the right thing instead: body -> log line, resource
+  # attributes -> index labels, and severity / trace_id / span_id / scope / every log
+  # attribute -> structured metadata. See Grafana's own comparison page:
+  # https://grafana.com/docs/loki/latest/send-data/otel/native_otlp_vs_loki_exporter
+  #
+  # This is not new — it is what the pre-k8s-monitoring OTel gateway did (394db38^:
+  # gitops/helm-values/server3/otel-gateway.yaml, `otlp_http/loki` -> :3100/otlp).
+  # The migration to k8s-monitoring regressed it; this restores it.
+  #
+  # There is deliberately NO `type: loki` destination alongside this one. A second
+  # destination would split the label schema by cluster — server3's own scraped logs on
+  # Loki-native labels, server1/server2's on OTel labels — because server3 cannot tell a
+  # bridged pod log from an SDK log (both arrive on the same otelcol.receiver.otlp, and the
+  # chart has no otelcol.connector.routing). One destination, one schema, all three clusters.
+  #
+  # Labels are Loki's default_resource_attributes_as_index_labels, so expect the OTel names
+  # (k8s_pod_name, k8s_namespace_name, k8s_cluster_name, service_name, …) rather than the
+  # Loki-native ones (pod, namespace, cluster). Accepted deliberately; dashboards follow.
   loki:
-    type: loki
-    url: http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push
+    type: otlp
+    url: http://loki.monitoring.svc.cluster.local:3100/otlp
+    protocol: http
+    # Logs only — metrics go to Prometheus, traces to Tempo.
+    metrics:
+      enabled: false
+    logs:
+      enabled: true
+      # Explicit. The chart only renders `logs_endpoint` when `path` is non-empty; left
+      # unset it falls through to otlphttp's own default of appending /v1/logs to
+      # `endpoint`, which lands in the same place but only by convention. Spell it out.
+      path: v1/logs
+    traces:
+      enabled: false
+    # MUST be empty. The default [cluster, k8s.cluster.name] renders an UNCONDITIONAL
+    # `set(attributes["cluster"], "server3")` in this destination's transform, which every
+    # log passes through — including the pod logs server1 and server2 bridge over OTLP,
+    # which already carry the correct value stamped by their own destination transform.
+    # With the old `type: loki` destination the stamp only reached loki.write's
+    # external_labels, so it corrupted the label while leaving the resource attribute
+    # intact (visible today: server1 logs labelled k8s_cluster_name=server3 over
+    # resources.k8s.cluster.name=server1). Under native OTLP the resource attribute IS the
+    # label, so the unconditional set would relabel every cluster's logs as server3.
+    clusterLabels: []
+    processors:
+      transform:
+        logs:
+          resource:
+            # Replaces clusterLabels, guarded. server1/server2 arrive already stamped; only
+            # server3's own logs reach here without a cluster attribute.
+            - 'set(attributes["cluster"], "server3") where attributes["cluster"] == nil'
+            - 'set(attributes["k8s.cluster.name"], "server3") where attributes["k8s.cluster.name"] == nil'
+            # applicationObservability sets this hint on the RESOURCE context; the otlp
+            # destination's built-in cleanup only deletes it from the LOG context, so it
+            # survives. Harmless with otelcol.exporter.loki (which consumed it), but Loki's
+            # native OTLP ingest indexes nothing it doesn't recognise and files the rest as
+            # structured metadata — leaving a literal
+            # loki_resource_labels="cluster, namespace, job, pod" on every record.
+            - 'delete_key(attributes, "loki.resource.labels")'
   tempo:
     type: otlp
     url: http://tempo.monitoring.svc.cluster.local:4317

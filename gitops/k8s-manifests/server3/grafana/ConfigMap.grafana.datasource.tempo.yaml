@@ -24,7 +24,15 @@ data:
             datasourceUid: loki
             spanStartTimeShift: "-1h"
             spanEndTimeShift: "1h"
-            filterByTraceID: true
+            # filterByTraceID appends a LINE filter (|= "<traceID>"). Since logs moved to
+            # Loki's native OTLP ingest the trace ID is structured metadata, not text in
+            # the line, so that filter matches nothing. customQuery filters on the
+            # structured-metadata field instead.
+            filterByTraceID: false
             filterBySpanID: false
+            customQuery: true
+            # Needs a stream selector; k8s_cluster_name is present on every OTLP-ingested
+            # log. The ±1h span shift above bounds the scan.
+            query: '{k8s_cluster_name=~".+"} | trace_id = "$${__span.traceId}"'
           tracesToMetrics:
             datasourceUid: prometheus

@@ -8,8 +8,11 @@
 
 **Also deferred from the k8s-monitoring migration** (see `docs/observability.md` → "Open items"):
 
-- [ ] Add `resource.opentelemetry.io/service.name|service.version|service.namespace` podAnnotations to the custom APIs, so Loki labels match the Resource attributes their traces and metrics already carry. Purely additive — the chart's labelmap rule already handles them. Template `service.version` from `image.tag`.
-- [ ] Add `podLogsViaLoki.extraLogProcessingStages` (`stage.json`) + `structuredMetadata` for `level`/`trace_id`/`span_id`, enabling level filtering and trace↔log correlation.
+- [x] **Route logs to Loki's native OTLP endpoint** (done 2026-08-11). server3's `loki` destination changed from `type: loki` to `type: otlp` → `:3100/otlp`. `type: loki` renders the deprecated `otelcol.exporter.loki`, which always JSON-envelopes the line and never emits structured metadata. See `docs/observability.md` → "Why logs use `type: otlp`".
+- [x] **Enable the Winston OTLP transport in the custom APIs** (done 2026-08-11). `otel.logs.enabled: true` in all six `gitops/helm-values/apps/<app>/{production,sandbox}.yaml` config templates. `@opentelemetry/winston-transport` maps `message` → body, `level` → severity, every other field → log attributes, which native OTLP ingest files as structured metadata. Supersedes the old `stage.json` plan below.
+- [ ] **Verify OTLP logs arrive, then decide on the scrape opt-out** (`logs.grafana.com/pods.enabled: "false"`). Both paths run today, so every line is stored twice. Opting out halves storage but gives up crash/boot-failure coverage — a real trade, not a cleanup. Never add the annotation before the OTLP path is confirmed.
+- [ ] Add `resource.opentelemetry.io/service.name|service.version|service.namespace` podAnnotations — **for pods that stay on stdout scraping only**; a workload that adopts SDK export carries its Resource already. Purely additive — the chart's labelmap rule already handles them. Template `service.version` from `image.tag`.
+- [ ] *(fallback only)* `podLogsViaLoki.extraLogProcessingStages` (`stage.json`) + `structuredMetadata` for `level`/`trace_id`/`span_id`, for any app that keeps logging JSON to stdout and never adopts SDK export.
 
 **Prerequisite:** k8s-monitoring migration complete (see `docs/superpowers/plans/2026-05-18-k8s-monitoring-migration.md`). Alloy-receiver endpoint and podLogs are live.
 

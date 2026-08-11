@@ -105,7 +105,7 @@ Adding a second node to any cluster **without splitting** causes: k8s events emi
 
 ### Pod logs — Loki pipeline, not OpenTelemetry
 
-Chart v4 split pod-log collection into `podLogsViaLoki` and `podLogsViaOpenTelemetry`. This repo uses `podLogsViaLoki` on **all** clusters: the OpenTelemetry variant needs `otelcol.receiver.filelog`, which is still public-preview in Alloy and requires lowering the collector's `stabilityLevel`. On server1/server2 the Loki-format logs are bridged into the OTLP destination automatically via `otelcol.receiver.loki`, so nothing is lost.
+Chart v4 split pod-log collection into `podLogsViaLoki` and `podLogsViaOpenTelemetry`. This repo uses `podLogsViaLoki` on **all** clusters: the OpenTelemetry variant needs `otelcol.receiver.filelog`, which is still public-preview in Alloy and requires lowering the collector's `stabilityLevel`. The Loki-format logs are bridged into an OTLP destination automatically via `otelcol.receiver.loki` — on server1/server2 that is the forwarding destination to server3, and on server3 it is the local Loki destination, which is now `type: otlp` as well. So pod logs are Loki-format only up to the bridge; everything reaches Loki as OTLP.
 
 ### Supplemental telemetry services
 
@@ -129,11 +129,47 @@ No alerting consumes either metric yet; that is a separate piece of work pending
 
 ### server3 fan-out routing (local)
 
-| Signal | Destination |
-|--------|-------------|
-| metrics | `http://prometheus.monitoring…:80/api/v1/write` |
-| logs | `http://loki.monitoring…:3100/loki/api/v1/push` |
-| traces | `tempo.monitoring…:4317` (OTLP gRPC) |
+| Signal | Destination | Chart destination `type` |
+|--------|-------------|--------------------------|
+| metrics | `http://prometheus.monitoring…:80/api/v1/write` | `prometheus` |
+| logs | `http://loki.monitoring…:3100/otlp` (native OTLP, `/v1/logs`) | `otlp` |
+| traces | `tempo.monitoring…:4317` (OTLP gRPC) | `otlp` |
+
+#### Why logs use `type: otlp`, not `type: loki`
+
+`type: loki` renders `otelcol.exporter.loki` — Alloy's own converter, explicitly *"unrelated to the standard `lokiexporter`"*. Three behaviours are hardcoded in it, and every one is fatal here:
+
+- the log line is **always** the JSON envelope `{"body":…,"attributes":…,"resources":…}`; Alloy's converter has no `loki.format` hint
+- `StructuredMetadata` is **always** `nil` — every case in its `convert_test.go`
+- only resource attributes named in the `loki.resource.labels` hint become labels; everything else is folded back into the line
+
+Everything arriving over OTLP passed through it: Traefik's logs, the pod logs server1/server2 bridge over the wire, and any SDK logs. The result was a double-encoded line whose only structured metadata was Loki's own `detected_level` guess — which then read `unknown`, because an escaped `\"level\":\"info\"` inside the envelope defeats the heuristic.
+
+Loki's native OTLP ingest does the right thing instead: body → log line, resource attributes → index labels, and severity / `trace_id` / `span_id` / scope / every log attribute → structured metadata. See Grafana's own [native OTLP vs Loki exporter](https://grafana.com/docs/loki/latest/send-data/otel/native_otlp_vs_loki_exporter) comparison.
+
+This is not new. The pre-k8s-monitoring OTel gateway already exported to `:3100/otlp` (`394db38^:gitops/helm-values/server3/otel-gateway.yaml`, exporter `otlp_http/loki`); the migration to k8s-monitoring regressed it.
+
+**There is deliberately no second `type: loki` destination.** It would split the label schema by cluster — server3's own scraped logs on Loki-native labels, server1/server2's on OTel labels — because server3 cannot tell a bridged pod log from an SDK log. Both arrive on the same `otelcol.receiver.otlp`, and the chart exposes no `otelcol.connector.routing`. One destination, one schema, all three clusters.
+
+#### Two overrides the destination needs
+
+**`clusterLabels: []`.** The default `[cluster, k8s.cluster.name]` renders an *unconditional* `set(attributes["cluster"], "server3")` into the destination's transform, which every log passes through — including logs from server1/server2 that already carry the correct value, stamped by their own destination transform. Under `type: loki` that stamp only reached `loki.write`'s `external_labels`, so it corrupted the label while leaving the resource attribute intact (the old data shows `k8s_cluster_name=server3` sitting over `resources.k8s.cluster.name=server1`). Under native OTLP the resource attribute *is* the label, so the unconditional set would relabel every cluster's logs as server3. Guarded OTTL in `processors.transform.logs.resource` replaces it, setting the value only when absent.
+
+**`delete_key(attributes, "loki.resource.labels")`.** `applicationObservability` sets this hint on the **resource** context; the otlp destination's built-in cleanup only deletes it from the **log** context, so it survives. Harmless when `otelcol.exporter.loki` consumed it — but native OTLP ingest files anything it does not recognise as structured metadata, leaving a literal `loki_resource_labels="cluster, namespace, job, pod"` on every record.
+
+#### Resulting log shape
+
+Verified by POSTing a synthetic record to the live Loki 3.7.1 `/otlp/v1/logs` (HTTP 204):
+
+| | |
+|---|---|
+| **line** | the log body, verbatim |
+| **index labels** | `k8s_cluster_name`, `k8s_namespace_name`, `k8s_pod_name`, `k8s_container_name`, `service_name`, `service_namespace` — Loki's `default_resource_attributes_as_index_labels` |
+| **structured metadata** | `severity_text`, `severity_number`, `detected_level`, `trace_id`, `span_id`, `scope_name`, `cluster`, `stream`, and every log attribute |
+
+> **Label names changed.** Queries now use the OTel names (`k8s_pod_name`, `k8s_namespace_name`, `k8s_cluster_name`) rather than the Loki-native ones (`pod`, `namespace`, `cluster`). `cluster`, `container` and `stream` still exist as **structured metadata** — filterable with `| cluster = "server1"`, just not indexed. Accepted deliberately; the alternative is adding them to Loki's `distributor.otlp_config.default_resource_attributes_as_index_labels`.
+
+> For logs the chart's `logToResource` map does the heavy lifting on the bridged Loki-format pod logs, promoting `pod`/`namespace`/`container`/`service_name`/`deployment`/`statefulset`/… into their `k8s.*` and `service.*` resource-attribute equivalents before they reach Loki. That is why scraped pod logs land with the same index labels as SDK logs.
 
 ### server1/server2 forwarding (OTLP to server3)
 
@@ -155,7 +191,9 @@ Retention: **30 days**. Storage: 20 Gi Longhorn PVC.
 
 ## Loki — Monolithic mode
 
-Loki runs as a single binary (Monolithic deployment mode). Receives logs from Alloy via the native push API on port 3100 (`/loki/api/v1/push`). Uses filesystem storage backed by a 20 Gi Longhorn PVC.
+Loki runs as a single binary (Monolithic deployment mode). Receives logs from Alloy on port 3100 via the **native OTLP endpoint** (`/otlp/v1/logs`) — not the Loki push API; see [Why logs use `type: otlp`](#why-logs-use-type-otlp-not-type-loki). Uses filesystem storage backed by a 20 Gi Longhorn PVC.
+
+Structured metadata is required and is on by default for schema v13 + TSDB. All ingest defaults are untouched, including `distributor.otlp_config.default_resource_attributes_as_index_labels` — that list is what determines which resource attributes become index labels, and Loki caps index labels at 15 (current usage: ~6).
 
 Auth is disabled (`auth_enabled: false`). Schema v13 (TSDB store). Self-monitoring and canary pods are disabled.
 
@@ -179,11 +217,13 @@ Datasources are provisioned automatically via ConfigMaps watched by the Grafana 
 
 ### Cross-datasource correlations configured
 
-- **Traces → Logs** (`tracesToLogsV2`): Tempo links trace IDs to Loki using the `traceID` label. Extracted from log lines via the regex `"TraceID":"(\w+)"`.
+- **Traces → Logs** (`tracesToLogsV2`): Tempo links to Loki with a `customQuery` filtering the **structured-metadata** field — `{k8s_cluster_name=~".+"} | trace_id = "$${__span.traceId}"`. `filterByTraceID` is off: it appends a *line* filter (`|= "<traceID>"`), and since logs moved to Loki's native OTLP ingest the trace ID is structured metadata, not text in the line, so that filter matches nothing.
 - **Traces → Metrics** (`tracesToMetrics`): Tempo links to Prometheus `traces_spanmetrics_*` series (from metricsGenerator).
 - **Service graph** (`serviceMap`): Tempo service graph queries Prometheus for topology.
-- **Logs → Traces** (`derivedFields`): Loki extracts `trace_id` from log lines and creates a link to the Tempo datasource.
+- **Logs → Traces** (`derivedFields`): Loki links to Tempo via `matcherType: label` on `trace_id` — again structured metadata, so the previous `matcherRegex: "trace_id=(\w+)"` line scan no longer applies.
 - **Node graph**: enabled on Tempo datasource.
+
+> Both directions depend on `trace_id` being structured metadata. Anything that puts logs back on the Loki push API breaks both.
 
 ## Grafana admin credentials
 
@@ -256,21 +296,34 @@ OTLP gRPC:  k8s-monitoring-alloy-receiver.monitoring.svc.cluster.local:4317
 
 All three signal types (metrics, logs, traces) are accepted on both endpoints.
 
-### Custom apps push metrics and traces only — not logs
+### Custom apps push all three signals, logs included
 
-The Node.js APIs set `otel.logs.enabled: false` in their config templates. Their Winston logger already writes to stdout, and Alloy ships that to Loki via `podLogsViaLoki` — pushing over OTLP as well would store every line twice.
+The Node.js APIs set `otel.logs.enabled: true` in their config templates — one `"logs"` block per app per environment, in `gitops/helm-values/apps/<app>/{production,sandbox}.yaml`, pointing at `k8s-monitoring-alloy-receiver…:4318/v1/logs`. The ConfigMap is mounted, and each app carries `reloader.stakater.com/auto: "true"`, so Reloader restarts the pod on change.
 
-Three reasons stdout is the primary path:
+It was `true` until `394db38` (the k8s-monitoring migration) turned it off, on the reasoning that Winston already writes to stdout and `podLogsViaLoki` ships that to Loki, so OTLP export would only duplicate. That reasoning held only because the destination was `type: loki`, which flattened OTLP logs into an unreadable JSON envelope — so the OTLP copy was strictly worse than the scraped one. With Loki's native OTLP endpoint the ordering reverses:
 
-1. **`kubectl logs` keeps working.** Routing logs OTLP-only would leave `kubectl logs <pod>` empty except for crash output, forcing every debugging session through Grafana.
-2. **Crash coverage.** OTLP export loses anything emitted before the exporter initializes, plus OOMKills, unhandled exceptions at exit, and whatever sits in the batch buffer when a pod is killed. The kubelet writes pod logs to disk, so they survive all of it — including an Alloy outage.
-3. **No duplication.** One pipeline, one copy of each line.
+| | scraped stdout | SDK OTLP |
+|---|---|---|
+| line | the whole Winston JSON blob | `message`, readable |
+| `level` | text inside the blob | `severityText`/`severityNumber` → structured metadata |
+| `trace_id`/`span_id` | text inside the blob | native LogRecord fields → structured metadata |
+| other Winston fields | text inside the blob | log attributes → structured metadata |
+| Resource attributes | absent — must be reconstructed from `resource.opentelemetry.io/*` podAnnotations | `service.name`, `service.version`, `process.*`, `host.*`, `telemetry.sdk.*` all present — the few in Loki's default list (`service.name`, `service.namespace`, `service.instance.id`) become index labels, the rest structured metadata |
+| timestamp | kubelet's read time | the record's own |
 
-The tradeoff: **OTel Resource attributes do not reach stdout.** `@opentelemetry/instrumentation-winston` injects `trace_id`/`span_id`/`trace_flags` into the Winston record itself (so those *are* on stdout), but `service.name`, `service.version`, `process.*`, `host.*` and `telemetry.sdk.*` come from the LoggerProvider's Resource and are attached only to the exported OTLP payload. Traces and metrics still carry the full Resource — this affects logs alone.
+`@opentelemetry/winston-transport`'s `emitLogRecord()` is what does it: `message` → body, `level` → severity, **every other field** → attributes, with exceptions mapped to `exception.type`/`message`/`stacktrace`.
+
+**Pod-log scraping is still on for these apps, so every line is currently stored twice.** That overlap is deliberate — it is the safe state while confirming OTLP logs actually arrive. See open item 2 for the opt-out that ends it, and for why you may decide to keep the overlap.
+
+The reasons stdout was the primary path have not gone away, and they are what the opt-out decision turns on:
+
+1. **`kubectl logs` keeps working.** Independent of this setting — Winston still writes stdout regardless; only the *collection* of it is opt-out-able.
+2. **Crash coverage.** OTLP export loses anything emitted before the exporter initializes, plus OOMKills, unhandled exceptions at exit, and whatever sits in the batch buffer when a pod is killed. The kubelet writes pod logs to disk, so they survive all of it — including an Alloy outage. This is the real cost of opting out of scraping, and it bites exactly when you most need logs.
+3. **No duplication.** Currently violated, by design, until the opt-out lands.
 
 #### Open items (deferred)
 
-**1. Restore resource attributes as Loki labels.** No chart change needed — the rendered pod-logs pipeline already contains a generic labelmap:
+**1. Restore resource attributes as Loki labels — for scraped pods only.** Relevant to any workload whose logs are collected from stdout; a workload that adopts SDK export (item 2) carries its full Resource on the record already and needs none of this. No chart change needed — the rendered pod-logs pipeline already contains a generic labelmap:
 
 ```
 rule {
@@ -290,7 +343,22 @@ podAnnotations:
 
 `service.version` is worth templating from `image.tag` in the iot-applications chart rather than maintaining by hand.
 
-**2. Trace↔log correlation and level filtering.** Pod logs are stored verbatim with no JSON parsing, so Winston JSON lands in Loki as a raw string — queryable with `| json` at read time, but `level` and `trace_id` are not labels or structured metadata. Fixed by adding to `podLogsViaLoki`:
+**2. Decide whether to stop scraping the custom APIs' stdout.** `otel.logs.enabled: true` is now set for all three APIs in both environments, so their logs arrive over OTLP *and* are still scraped from stdout — every line is stored twice. Sequencing:
+
+1. ~~Enable the Winston OTLP transport in each app (`otel.logs.enabled`).~~ Done — all six `{production,sandbox}.yaml` config templates.
+2. **Confirm the logs arrive over OTLP.** The two copies are easy to tell apart: the OTLP record's line is just `message` and it carries `severity_text`/`severity_number` in structured metadata, while the scraped copy's line is the whole Winston JSON blob and carries `stream` and `flags` instead. (`service_version` is *not* an index label — `service.version` is absent from Loki's default list, so it lands in structured metadata too.)
+3. *Then* decide on the opt-out — the chart's drop rule applies regardless of `discoveryMethod`:
+
+```yaml
+podAnnotations:
+  logs.grafana.com/pods.enabled: "false"
+```
+
+> **Do not add that annotation before step 2 succeeds** — it deletes the scraped copy, and if OTLP export is not actually working that is all the logs.
+
+Step 3 is a genuine trade, not a cleanup. Opting out halves storage and removes the duplicate, but SDK export cannot cover boot failures before the exporter initializes, OOMKills, or whatever sits in the batch buffer when a pod is killed — the cases where logs matter most. Keeping both is a defensible permanent choice; the duplicate is the premium paid for crash coverage.
+
+**3. JSON-on-stdout parsing — only for workloads that never adopt SDK export.** If some app keeps logging JSON to stdout, the line can be parsed at collection instead, in `podLogsViaLoki`:
 
 ```yaml
 extraLogProcessingStages: |-
@@ -303,14 +371,7 @@ structuredMetadata:
   span_id: span_id
 ```
 
-`stage.json` extracts nothing and passes the line through unchanged when it isn't JSON, so plain-text startup banners and stack traces are safe.
-
-To opt a specific workload out of pod-log collection instead (for example if it does push OTLP logs), annotate the pod — the chart's drop rule applies regardless of `discoveryMethod`:
-
-```yaml
-podAnnotations:
-  logs.grafana.com/pods.enabled: "false"
-```
+`stage.json` extracts nothing and passes the line through unchanged when it isn't JSON, so plain-text startup banners and stack traces are safe. This is strictly a fallback — it duplicates by hand what the SDK does natively, and it is per-field.
 
 ## Helm values — two-layer structure
 

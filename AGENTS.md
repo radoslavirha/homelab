@@ -63,7 +63,9 @@ gitops/
     telegraf.yaml           shared: InfluxDB2 + MQTT outputs, env secretKeyRefs
     prometheus.yaml         shared: TSDB only, remote-write receiver, Longhorn 20Gi, 30d retention
     grafana.yaml            shared: existingSecret grafana-admin, sidecar datasources+dashboards, Longhorn 5Gi
-    loki.yaml               shared: Monolithic, filesystem storage, Longhorn 20Gi
+    loki.yaml               shared: Monolithic, filesystem storage, Longhorn 20Gi.
+                            Ingest is the native OTLP endpoint (/otlp/v1/logs); index labels
+                            come from Loki's default_resource_attributes_as_index_labels
     tempo.yaml              shared: local backend, OTLP receivers, metrics generator, Longhorn 20Gi
     k8s-monitoring.yaml     shared: Alloy collector map, feature toggles, telemetryServices, OTLP receiver (no destinations)
     apps/
@@ -93,7 +95,12 @@ gitops/
       traefik.yaml          dashboard hostname/IP, externalIPs, statusAddress.ip, OTLP tracing endpoint
       prometheus.yaml       server3 overrides (currently empty)
       grafana.yaml          server3 overrides: extraSecretMounts for influxdb2-grafana secret
-      k8s-monitoring.yaml   server3 self-contained: cluster name + local LGTM destinations
+      k8s-monitoring.yaml   server3 self-contained: cluster name + local LGTM destinations.
+                            Logs destination is type: otlp -> Loki's NATIVE OTLP endpoint
+                            (:3100/otlp), NOT type: loki — that renders the deprecated
+                            otelcol.exporter.loki, which always JSON-envelopes the line and
+                            never emits structured metadata. Needs clusterLabels: [] plus
+                            guarded OTTL, or it relabels every cluster's logs as server3
   argocd-manifests/
     ArgoCD.yaml             ArgoCD self-management (manual apply #1)
     Bootstrap.yaml          Meta App-of-Apps (manual apply #2) — discovers roots/, orders via sync waves
@@ -283,8 +290,9 @@ export TALOSCONFIG=iac/clusters/<cluster>/credentials/talosconfig
 > separate bugs during the k8s-monitoring migration (a scrape gated behind
 > `hostMetrics.linuxHosts.enabled`, and an OTLP exporter that could not start) sat green
 > for hours while collecting nothing. Verify observability changes by querying the data —
-> `count by (cluster) (kube_pod_status_phase)` and the Loki `cluster` label — not by
-> reading sync status.
+> `count by (cluster) (kube_pod_status_phase)` and the Loki `k8s_cluster_name` label — not
+> by reading sync status. (Logs reach Loki over its native OTLP endpoint, so the index
+> label is the OTel name `k8s_cluster_name`; `cluster` survives as structured metadata.)
 
 ### Run freely (read-only / safe)
 

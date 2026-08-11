@@ -21,7 +21,12 @@ data:
         editable: false
         jsonData:
           derivedFields:
+            # Loki's native OTLP ingest files trace_id as STRUCTURED METADATA, not text in
+            # the log line, so the old `matcherRegex: "trace_id=(\\w+)"` scan of the line
+            # finds nothing. matcherType: label reads structured metadata directly
+            # (Grafana 10.4+; this instance is 13.0.1).
             - datasourceUid: tempo
-              matcherRegex: "trace_id=(\\w+)"
+              matcherType: label
+              matcherRegex: trace_id
               name: TraceID
               url: "$${__value.raw}"
