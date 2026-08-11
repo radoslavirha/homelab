@@ -1425,7 +1425,7 @@ data:
               },
               "direction": "backward",
               "editorMode": "code",
-              "expr": "{service_name=\"traefik\"} | k8s_cluster_name=~\"$cluster\" |= \"RequestProtocol\" | json  | line_format \"Status: {{.OriginStatus}} Client From {{.request_Cf_Ipcountry}} IP {{.request_Cf_Connecting_Ip}} {{.request_X_Real_Ip}} {{.RequestMethod}} {{.RequestAddr}}{{.RequestPath}} Route To {{.ServiceAddr}}\"",
+              "expr": "{service_name=\"traefik\"} | k8s_cluster_name=~\"$cluster\" |= \"RequestProtocol\" | json | drop level_extracted, trace_id_extracted, span_id_extracted | line_format \"Status: {{.OriginStatus}} Client From {{.request_Cf_Ipcountry}} IP {{.request_Cf_Connecting_Ip}} {{.request_X_Real_Ip}} {{.RequestMethod}} {{.RequestAddr}}{{.RequestPath}} Route To {{.ServiceAddr}}\"",
               "legendFormat": "",
               "queryType": "range",
               "refId": "A"
@@ -1469,7 +1469,7 @@ data:
               },
               "direction": "backward",
               "editorMode": "code",
-              "expr": "{service_name=\"traefik\"} | k8s_cluster_name=~\"$cluster\" \r\n|= \"RequestProtocol\" | json | __error__=\"\"\r\n| detected_level=\"info\" \r\n| DownstreamStatus != 200\r\n| DownstreamStatus!=\"0\"\r\n| OriginStatus!=\"0\"\r\n| DownstreamStatus!=\"\"\r\n| line_format \"Status: {{.OriginStatus}} Client From {{.request_Cf_Ipcountry}} IP {{.request_Cf_Connecting_Ip}} {{.RequestMethod}} {{.RequestAddr}}{{.RequestPath}} Route To {{.ServiceAddr}}\"",
+              "expr": "{service_name=\"traefik\"} | k8s_cluster_name=~\"$cluster\" \r\n|= \"RequestProtocol\" | json | __error__=\"\"\r\n| drop level_extracted, trace_id_extracted, span_id_extracted\r\n| detected_level=\"info\" \r\n| DownstreamStatus != 200\r\n| DownstreamStatus!=\"0\"\r\n| OriginStatus!=\"0\"\r\n| DownstreamStatus!=\"\"\r\n| line_format \"Status: {{.OriginStatus}} Client From {{.request_Cf_Ipcountry}} IP {{.request_Cf_Connecting_Ip}} {{.RequestMethod}} {{.RequestAddr}}{{.RequestPath}} Route To {{.ServiceAddr}}\"",
               "queryType": "range",
               "refId": "A"
             }
