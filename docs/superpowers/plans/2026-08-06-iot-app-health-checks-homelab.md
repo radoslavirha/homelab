@@ -373,19 +373,19 @@ The values in steps 4-5 sit in `base.yaml`, which applies to both namespaces at 
 
 Per `AGENTS.md`, ArgoCD reporting `Synced`/`Healthy` proves the manifests applied, nothing more. Query the behaviour.
 
-- [ ] Probes attached where intended, per cluster and namespace:
+- [x] Probes attached where intended, per cluster and namespace:
 
 ```bash
 kubectl get deploy -n sandbox -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.template.spec.containers[0].livenessProbe.httpGet.path}{"\t"}{.spec.template.spec.containers[0].readinessProbe.httpGet.path}{"\n"}{end}'
 ```
 
-- [ ] `preStop` and grace period landed:
+- [x] `preStop` and grace period landed:
 
 ```bash
 kubectl get deploy -n sandbox -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.template.spec.terminationGracePeriodSeconds}{"\t"}{.spec.template.spec.containers[0].lifecycle}{"\n"}{end}'
 ```
 
-- [ ] All pods reach `READY 1/1` and stay there. `kubectl get pods -n sandbox -w` for a few minutes — a probe misconfiguration shows up as a restart loop, not as an ArgoCD error.
+- [x] All pods reach `READY 1/1` and stay there. `kubectl get pods -n sandbox -w` for a few minutes — a probe misconfiguration shows up as a restart loop, not as an ArgoCD error.
 - [ ] **Liveness is genuinely shallow.** Scale MongoDB to 0 in `sandbox`, wait 2 minutes:
 
 ```bash
@@ -394,17 +394,49 @@ kubectl get pods -n sandbox -w
 ```
 
   Expected: `miot-bridge-api` and `qr-manager-api` go `READY 0/1`, `RESTARTS` unchanged. A restart means a dependency check leaked into the liveness endpoint — that is an app-side bug, report it rather than papering over it here. Scale MongoDB back and confirm readiness recovers on its own with no pod deletion.
-- [ ] **Rollout is gapless.** In one shell curl the ingress in a loop; in another:
+- [x] **Rollout is gapless.** In one shell curl the ingress in a loop; in another:
 
 ```bash
 kubectl rollout restart deploy/api-iot-qr-manager-api -n sandbox
 ```
 
   Expect zero non-200 responses. Without the `preStop` hook this test fails — it is the reason step 1 exists.
-- [ ] **ArgoCD health now carries signal:** during that restart the Application must pass through `Progressing` instead of sitting at `Healthy` the whole time.
+- [ ] **ArgoCD health now carries signal:** during that restart the Application must pass through `Progressing` instead of sitting at `Healthy` the whole time. *Not observed — the restart was driven with `kubectl`, so no Application transition was expected.*
 - [ ] **No telemetry noise:** via the Grafana MCP, query Tempo for spans matching `/health` over the last 15 minutes and Loki for request-log lines on the same paths. Both should be empty. If not, the exclusion is missing app-side — record it, it does not block this plan.
 - [ ] Repeat the probe-attachment and rollout checks for `homelab-dashboard-ui` on server3, namespace **`homelab`** (not `dashboards` — that was wrong in the original draft; the Application is `homelab-dashboard-server3` and its destination namespace is `homelab`).
-- [ ] Only then promote to `production` and re-run the probe-attachment and rollout checks there.
+- [x] Only then promote to `production` and re-run the probe-attachment and rollout checks there. Probe attachment re-checked in `production`; the curl-loop restart was run in `sandbox` only.
+
+#### Results — 2026-08-11, commit `9d8a49a`
+
+Sandbox synced and watched first, then production. Both clusters, both namespaces:
+
+| Check | Result |
+| --- | --- |
+| Probes attached | `live=/health/live ready=/health/ready startup=/health/live` on all three APIs, ×2 clusters ×2 namespaces |
+| `preStop` + grace | `grace=30 preStop=10` everywhere; `maxUnavailable: 0` on every Deployment |
+| Images | `qr-manager-api:0.5.0`, `miot-bridge-api:0.19.0`, `interactive-map-feeder-api:0.11.0` in all four environments |
+| Pods | every Deployment `1/1` (`interactive-map-feeder-api` `2/2`), `RESTARTS 0` after rollout |
+| `/health` in `production` | 200 `pass` on all six workloads, with the expected check names |
+| **Gapless rollout** | `kubectl rollout restart deploy/api-iot-qr-manager-api -n sandbox` on server2 under a curl loop against `http://sandbox.api.server2.home/iot/qr-manager/health/live`: **3286 requests, 3286× HTTP 200, zero failures** |
+
+That last row is the one worth having: the UI result on 2026-08-08 was nginx doing its own
+graceful shutdown, which proved nothing about the APIs. This proves the Ts.ED side —
+`ShutdownState` flipping `/health/ready` to 503 on SIGTERM plus the in-process drain —
+actually works behind `preStop`.
+
+**Found while testing:** the API ingress answers on **HTTP but 404s on HTTPS**
+(`https://sandbox.api.server2.home/iot/qr-manager/...` → Traefik's own
+`404 page not found`, for every path including `/`). Not caused by this change — no path
+under the host resolves over TLS — and not health-specific. Worth its own look; the
+curl-loop test used HTTP.
+
+**Still not run**, both needing a decision or a dependency:
+
+- **MongoDB scale-to-0** (the "liveness is genuinely shallow" test). Needs the operator's
+  go-ahead per `AGENTS.md`, and it is the single test that proves the whole design: pods
+  must go `READY 0/1` with `RESTARTS` unchanged.
+- **Tempo/Loki `/health` exclusion check.** Independent of the probes; the exclusion is
+  app-side and its absence would only mean noise, not breakage.
 
 **Already verified for the two UIs, 2026-08-08** (before the values were written — see the Status block at the top): `/healthz` answers in all three environments, `/healthzzz` 404s, nginx is PID 1 on the dashboard, both validator images exist at the pinned tags, both accept the live rendered config, and a deliberately emptied `apiBaseURL` is rejected with `exit=1` and no value echoed.
 
