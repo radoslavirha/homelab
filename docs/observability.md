@@ -313,13 +313,17 @@ It was `true` until `394db38` (the k8s-monitoring migration) turned it off, on t
 
 `@opentelemetry/winston-transport`'s `emitLogRecord()` is what does it: `message` → body, `level` → severity, **every other field** → attributes, with exceptions mapped to `exception.type`/`message`/`stacktrace`.
 
-**Pod-log scraping is still on for these apps, so every line is currently stored twice.** That overlap is deliberate — it is the safe state while confirming OTLP logs actually arrive. See open item 2 for the opt-out that ends it, and for why you may decide to keep the overlap.
+**Pod-log scraping is off for these three apps** — `logs.grafana.com/pods.enabled: "false"` in each app's `podAnnotations` in `gitops/helm-values/apps/<app>/base.yaml`, so it covers both environments. OTLP is their only path into Loki.
+
+> It must be `podAnnotations`, not the `annotations` key above it. Alloy's drop rule matches `__meta_kubernetes_pod_annotation_logs_grafana_com_pods_enabled` against `(false|no|skip)`, so it reads the **pod template**; the chart's `annotations` lands on the workload metadata, which is where Reloader reads but Alloy never looks. Put it in the wrong one and it silently does nothing.
+
+`qr-manager-ui` is deliberately still scraped — it is nginx, has no SDK, and its access logs exist nowhere else.
 
 The reasons stdout was the primary path have not gone away, and they are what the opt-out decision turns on:
 
-1. **`kubectl logs` keeps working.** Independent of this setting — Winston still writes stdout regardless; only the *collection* of it is opt-out-able.
-2. **Crash coverage.** OTLP export loses anything emitted before the exporter initializes, plus OOMKills, unhandled exceptions at exit, and whatever sits in the batch buffer when a pod is killed. The kubelet writes pod logs to disk, so they survive all of it — including an Alloy outage. This is the real cost of opting out of scraping, and it bites exactly when you most need logs.
-3. **No duplication.** Currently violated, by design, until the opt-out lands.
+1. **`kubectl logs` keeps working.** Unaffected — Winston still writes to stdout; only the *collection* of it stopped.
+2. **Crash coverage.** This one was given up, and it is the real cost. OTLP export loses anything emitted before the exporter initializes, plus OOMKills, unhandled exceptions at exit, and whatever sits in the batch buffer when a pod is killed. The kubelet writes pod logs to disk, so scraping survived all of it — including an Alloy outage. **Boot failures and OOMKills for these three apps are now visible only through `kubectl logs` on the dead pod, not in Loki.** If that bites, re-enabling is one annotation.
+3. **No duplication.** Restored.
 
 #### Open items (deferred)
 
