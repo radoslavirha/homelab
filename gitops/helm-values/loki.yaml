@@ -43,14 +43,17 @@ backend:
 minio:
   enabled: false
 
-# Disable self-monitoring and test pods for homelab
-monitoring:
-  selfMonitoring:
-    enabled: false
-    grafanaAgent:
-      installOperator: false
-  lokiCanary:
-    enabled: false
+# Disable the canary and test pods for homelab.
+#
+# lokiCanary is TOP-LEVEL in this chart and defaults to enabled: true. It was previously
+# nested under `monitoring:` here, where the chart's `monitoring:` key only accepts
+# `dashboards` and `rules` — Helm ignores unknown keys silently, so the setting never
+# applied and the canary ran anyway. It sat in a liveness crash-loop for months
+# (30k+ restarts, HTTP 404 on /loki/api/v1/status/buildinfo) before kubelet's prober_*
+# metrics made it visible. `monitoring.selfMonitoring` was dead for the same reason;
+# that feature no longer exists in the chart, so it is simply dropped.
+lokiCanary:
+  enabled: false
 
 test:
   enabled: false
