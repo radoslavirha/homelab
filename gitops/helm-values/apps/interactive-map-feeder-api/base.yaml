@@ -36,6 +36,51 @@ apps:
       enabled: true
       serviceRef: http
       pathName: iot/interactive-map-feeder
+    # Boot budget: 5s × 24 = 120s. Liveness and readiness stay suppressed until this passes,
+    # which is the modern replacement for initialDelaySeconds guesswork.
+    startupProbe:
+      httpGet:
+        path: /health/live
+        port: http
+      periodSeconds: 5
+      failureThreshold: 24
+      timeoutSeconds: 2
+    # Shallow by design — /health/live never touches the check registry.
+    livenessProbe:
+      httpGet:
+        path: /health/live
+        port: http
+      periodSeconds: 10
+      failureThreshold: 3
+      timeoutSeconds: 2
+    # Always a static pass. This app's only dependencies are third-party HTTP APIs, and they
+    # are registered as critical: false — a failure degrades /health to warn while
+    # /health/ready stays 200. Do NOT make readiness depend on them: an outage you cannot
+    # fix would delete your own pods from Endpoints and turn someone else's incident into
+    # yours.
+    readinessProbe:
+      httpGet:
+        path: /health/ready
+        port: http
+      periodSeconds: 5
+      failureThreshold: 3
+      successThreshold: 1
+      timeoutSeconds: 3
+    # preStop covers Endpoints removal → Traefik; the app's own SIGTERM drain (readiness
+    # flips to 503, in-flight requests finish) covers the window after it. Budget:
+    # preStop 10s + drain 5s + teardown, well inside 30s.
+    terminationGracePeriodSeconds: 30
+    lifecycle:
+      preStop:
+        sleep:
+          seconds: 10
+    # Correct at replicas: 2 as well — maxUnavailable: 0 keeps a Ready pod serving through
+    # every step of the rollout.
+    strategy:
+      type: RollingUpdate
+      rollingUpdate:
+        maxSurge: 1
+        maxUnavailable: 0
     templates:
       config:
         file: production.json

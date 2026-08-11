@@ -41,6 +41,50 @@ apps:
           - SECRET_MONGODB_DATABASE
           - SECRET_MONGODB_USERNAME
           - SECRET_MONGODB_PASSWORD
+    # Boot budget: 5s × 24 = 120s. Liveness and readiness stay suppressed until this passes,
+    # which is the modern replacement for initialDelaySeconds guesswork.
+    startupProbe:
+      httpGet:
+        path: /health/live
+        port: http
+      periodSeconds: 5
+      failureThreshold: 24
+      timeoutSeconds: 2
+    # Shallow by design — /health/live never touches the check registry. A MongoDB outage
+    # must degrade readiness, never restart pods.
+    livenessProbe:
+      httpGet:
+        path: /health/live
+        port: http
+      periodSeconds: 10
+      failureThreshold: 3
+      timeoutSeconds: 2
+    # Checks MongoDB (critical: true). Failing here only removes the pod from Endpoints.
+    # timeoutSeconds is above the app's own per-check deadline (2s) so a slow dependency
+    # reports a failed check with detail rather than being cut off as a probe timeout.
+    readinessProbe:
+      httpGet:
+        path: /health/ready
+        port: http
+      periodSeconds: 5
+      failureThreshold: 3
+      successThreshold: 1
+      timeoutSeconds: 3
+    # preStop covers Endpoints removal → Traefik; the app's own SIGTERM drain (readiness
+    # flips to 503, in-flight requests finish) covers the window after it. Budget:
+    # preStop 10s + drain 5s + teardown, well inside 30s.
+    terminationGracePeriodSeconds: 30
+    lifecycle:
+      preStop:
+        sleep:
+          seconds: 10
+    # At replicas: 1 this is what makes a rollout gapless — the new pod must pass readiness
+    # before the old one is torn down.
+    strategy:
+      type: RollingUpdate
+      rollingUpdate:
+        maxSurge: 1
+        maxUnavailable: 0
     templates:
       config:
         file: production.json

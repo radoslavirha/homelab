@@ -1,4 +1,8 @@
 # qr-manager-api — sandbox overrides
+#
+# Probes, lifecycle and strategy live in base.yaml — they were staged here first and
+# promoted once a sandbox rollout had been watched.
+# See docs/superpowers/plans/2026-08-06-iot-app-health-checks-homelab.md
 
 apps:
   qr-manager-api:

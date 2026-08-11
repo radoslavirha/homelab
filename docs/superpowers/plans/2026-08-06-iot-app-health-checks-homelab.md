@@ -13,14 +13,16 @@
 **Check concerns of agent in apps repository**
 [Spec](./2026-08-07-probe-state-not-observable.md)
 
-## Status — 2026-08-08
+## Status — 2026-08-11
 
 | Part | State |
 | --- | --- |
 | Chart (steps 1-3) | **done.** `lifecycle` + `terminationGracePeriodSeconds` in both templates, documented, 72 helm-unittest assertions passing |
-| Frontends (step 5) | **done, deployed and verified in cluster.** `qr-manager-ui` staged in `sandbox.yaml`; `homelab-dashboard-ui` direct |
-| Backends (step 4) | **blocked.** The three APIs still run pre-health images (`miot-bridge-api@0.18.4`, `qr-manager-api@0.4.4`, `interactive-map-feeder-api@0.10.2`) — no `/health/*` endpoint exists yet. `iot-miniservers` backend spec is in progress |
-| Docs (step 8) | pending — do it once the backend half lands, so `docs/iot-overview.md` is written once |
+| Frontends (step 5) | **done, deployed and verified in cluster.** `qr-manager-ui` staged in `sandbox.yaml`, since promoted to `base.yaml` (`c445ccd`); `homelab-dashboard-ui` direct |
+| Backends (step 4) | **done.** The health release is live: `qr-manager-api@0.5.0`, `miot-bridge-api@0.19.0`, `interactive-map-feeder-api@0.11.0`. Gate re-run and passed. Probe block staged in each `sandbox.yaml`, then promoted to `base.yaml` in the same session once the sandbox rollout had been watched |
+| Production | **deployed.** All six production Applications synced; probes, `lifecycle` and `strategy` attached on both clusters |
+| Observability (`kube_pod_status_ready`) | **still missing.** `gitops/helm-values/k8s-monitoring.yaml` sets no `metricsTuning`. Step 4's ordering note said land this first; it was deliberately deferred to a separate session, so a readiness failure is currently invisible to Prometheus in every namespace |
+| Docs (step 8) | pending — do it once the backend half is deployed, so `docs/iot-overview.md` is written once |
 
 The `templates.<name>.validate` support the UIs need landed at the same time, from the sibling plan [`2026-08-07-iot-applications-template-validation.md`](2026-08-07-iot-applications-template-validation.md). The two changes touch the same two template files, so they were applied together.
 
@@ -115,14 +117,31 @@ Additional expectations, all of them the app side's responsibility:
 - **`/health*` is excluded from traces and request logs**, otherwise a permanent stream of identical spans hits Tempo.
 - Health bodies contain no URLs, credentials or stack traces — the ingress exposes these paths publicly (`stripPrefix: true` on the APIs means `https://api.<cluster>.home/iot/qr-manager/health/ready` reaches `/health/ready`).
 
-**Gate — run this before step 1**, per app and cluster, replacing the deployment name:
+**Gate — run this before step 1**, per app and cluster, replacing the deployment name.
+
+**The API images ship no `wget`** (`exec: "wget": executable file not found in $PATH`) — the
+original form of this gate could not run. Use the Node runtime that is in the image:
 
 ```bash
-kubectl exec -n sandbox deploy/api-iot-qr-manager-api -- wget -qO- -S localhost:4000/health/ready
-kubectl exec -n sandbox deploy/api-iot-qr-manager-api -- wget -qO- -S localhost:4000/health/live
+kubectl exec -n sandbox deploy/api-iot-qr-manager-api -- node -e \
+  'fetch("http://localhost:4000"+process.argv[1]).then(async r=>console.log(r.status, await r.text()))' \
+  -- /health/ready
 ```
 
-A 404 on either means the image is not ready — stop and finish the app-side plan first.
+A 404 means the image is not ready — stop and finish the app-side plan first.
+
+**Gate result — 2026-08-11, passed on server1 + server2 `sandbox`** after syncing the six
+sandbox Applications to `c7cbb93`:
+
+| Workload | `/health/live` | `/health/ready` | `/health` |
+| --- | --- | --- | --- |
+| `qr-manager-api@0.5.0` | 200 `{"status":"pass"}` | 200 `{"status":"pass"}` | 200, checks `mongodb` |
+| `miot-bridge-api@0.19.0` | 200 `{"status":"pass"}` | 200 `{"status":"pass"}` | 200, checks `mongodb`, `mqtt` |
+| `interactive-map-feeder-api@0.11.0` | 200 `{"status":"pass"}` | 200 `{"status":"pass"}` | 200, checks `upstream-apis` |
+
+The check-name sets match what the backend spec promises, which is the assertion that
+matters: a check missing its `type: HEALTH_CHECKS` still resolves and would report a
+healthy app that checks nothing.
 
 ---
 
@@ -213,9 +232,24 @@ Probes without these two keys still drop requests: pod deletion and Endpoints re
 
 ### 4. Values — the three Ts.ED APIs
 
-> **Blocked as of 2026-08-08.** All three APIs still run pre-health images and serve no `/health/*` path — committing these values would 404 the startup probe and CrashLoop three working apps. The `iot-miniservers` backend spec (`docs/superpowers/specs/2026-08-06-backend-health-checks.md`) is in progress; it introduces `@radoslavirha/health` + `@radoslavirha/tsed-health` and keeps the `/health`, `/health/live`, `/health/ready` paths this block assumes. Re-run the gate at the top of this plan against each API before ticking anything below.
+> **Unblocked 2026-08-11.** The backend spec (`iot-miniservers` —
+> `docs/superpowers/specs/2026-08-06-backend-health-checks.md`) shipped: the
+> `@radoslavirha/health` and `@radoslavirha/tsed-health` packages are in, and
+> `qr-manager-api@0.5.0`, `miot-bridge-api@0.19.0`,
+> `interactive-map-feeder-api@0.11.0` are released and serve all three paths. Gate re-run and
+> passed — see the table under [Assumed contract](#assumed-contract).
 >
-> One contract change to fold in when unblocking: the backend spec adds a `critical` flag per check — a non-critical failure degrades `/health` to `warn` while `/health/ready` still returns 200. That does not change the probe values here, but it does mean "ready" and "healthy" are no longer the same question.
+> The `critical` flag from that spec is live: `interactive-map-feeder-api` registers its
+> upstreams as `critical: false`, so a third-party outage degrades `/health` to `warn` while
+> `/health/ready` stays 200. It does not change the probe values here, but it does mean
+> "ready" and "healthy" are no longer the same question.
+>
+> **The `kube_pod_status_ready` ordering note below was NOT satisfied.**
+> `gitops/helm-values/k8s-monitoring.yaml` still sets no `metricsTuning`, and the probe
+> values shipped anyway — deferred to a separate session by decision, not oversight. Until
+> it lands, a MongoDB or MQTT outage takes pods out of Endpoints with no metric moving:
+> `restarts_total` stays flat by design and `kube_pod_status_phase` still reports `Running`.
+> `/health` on each pod is the only readiness signal that exists right now.
 
 #### Notes from the frontend rollout, for whoever does this half
 
@@ -228,7 +262,7 @@ The chart side is done and exercised. What the UI rollout on 2026-08-08 establis
 - **PodSecurity `restricted` is warn-only in these namespaces and no app container meets it.** Independent of health checks, but the warning will appear on every API rollout too. Do not let it be mistaken for something the probe change caused.
 - **`kube_pod_status_ready` is still not collected** (`2026-08-07-probe-state-not-observable.md`). It did not matter for the UIs — a static file server with no dependency checks cannot go NotReady for an interesting reason. It matters a great deal for the APIs, where the entire point is that a MongoDB or MQTT outage takes pods out of Endpoints *without* restarting them, which no currently-collected metric can see. **Land that before the API probe values**, or the first dependency outage after this change is invisible.
 
-Add to each app key in `gitops/helm-values/apps/miot-bridge-api/base.yaml`, `gitops/helm-values/apps/qr-manager-api/base.yaml` and `gitops/helm-values/apps/interactive-map-feeder-api/base.yaml`. Identical block for all three — the difference in behaviour lives in the image, not here.
+**Written 2026-08-11 to each app's `sandbox.yaml` first, then promoted to `base.yaml`** in the same session once the sandbox rollout had been watched — same two-step the UIs used. The block is identical for all three apart from the comments; the difference in behaviour lives in the image, not here.
 
 ```yaml
     # Boot budget: 5s × 24 = 120s. Liveness and readiness stay suppressed until this passes.
@@ -278,9 +312,9 @@ Add to each app key in `gitops/helm-values/apps/miot-bridge-api/base.yaml`, `git
         maxUnavailable: 0
 ```
 
-- [ ] `port: http` is the key from each app's `services` map, which the chart renders as the container port name. Confirm each of the three apps uses `services.http` (they do today, `targetPort: 4000`) so the name resolves.
-- [ ] `interactive-map-feeder-api` already runs `replicas: 2`; the `strategy` block is still correct there.
-- [ ] Do not add a readiness dependency on the third-party HTTP upstreams that `interactive-map-feeder-api` calls. Its `/health/ready` is a static pass on purpose.
+- [x] `port: http` is the key from each app's `services` map, which the chart renders as the container port name. Confirmed by `helm template` against the real value-file stack for all three: each renders `containerPort: 4000` named `http`, and every probe resolves to it. `miot-bridge-api` also declares a `udp` port on 4000 — the name, not the number, is what disambiguates them.
+- [x] `interactive-map-feeder-api` already runs `replicas: 2`; the `strategy` block is still correct there. Rendered and checked.
+- [x] Do not add a readiness dependency on the third-party HTTP upstreams that `interactive-map-feeder-api` calls. Its `/health/ready` is a static pass on purpose — the image registers them as one `upstream-apis` check with `critical: false`, so they show up in `/health` without gating Endpoints.
 
 ### 5. Values — the two nginx UIs
 
@@ -330,7 +364,10 @@ The values in steps 4-5 sit in `base.yaml`, which applies to both namespaces at 
 - [x] Compare `image.tag` in each app's `sandbox.yaml` and `production.yaml` against the first release that carries the health endpoints.
 - [x] **Outcome for `qr-manager-ui`:** both environments already run `0.7.0`, so the *lagging-tag* reason for staging is gone. The second reason stands — a mistuned `failureThreshold` or boot budget should break the sandbox pod, not the production one — so the block went into `sandbox.yaml` with a `TODO` to promote it to `base.yaml` after a watched rollout.
 - [x] **Outcome for `homelab-dashboard-ui`:** no sandbox exists, values applied directly to `gitops/helm-values/server3/homelab-dashboard-ui.yaml`.
-- [ ] **Remaining:** after verification below, move the `qr-manager-ui` probe / `lifecycle` / `strategy` / `validate` block from `sandbox.yaml` to `base.yaml` and delete the `TODO` comment, so production is covered too.
+- [x] **Done for `qr-manager-ui`** (`c445ccd`): the probe / `lifecycle` / `strategy` / `validate` block moved from `sandbox.yaml` to `base.yaml` after a watched rollout, so production is covered too.
+- [x] **Tag comparison for the three APIs, 2026-08-11:** `sandbox.yaml` and `production.yaml` both pin the health release (`0.5.0` / `0.19.0` / `0.11.0`) — the deploy action bumped both in `9d7cc59` + `c7cbb93`. So the *lagging-tag* reason for staging is again absent; the second reason (a mistuned probe should break sandbox first) plus the `kube_pod_status_ready` gap are why the block still went into `sandbox.yaml`.
+- [x] **Production pods were still on the pre-health images** (`0.4.4` / `0.18.4` / `0.10.2`) on both clusters when this session started — git was ahead of the cluster, the production Applications having last reconciled 2026-08-08. Synced after the sandbox rollout was watched, so they picked up the image and the probes in one step.
+- [x] **Promoted:** each API's probe / `lifecycle` / `strategy` block moved from `sandbox.yaml` to `base.yaml`, `TODO` comments replaced with the same "staged here first" pointer `qr-manager-ui` carries.
 
 ### 7. Verification
 

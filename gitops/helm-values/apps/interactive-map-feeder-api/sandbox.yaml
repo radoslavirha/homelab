@@ -1,5 +1,9 @@
 # interactive-map-feeder-api — sandbox overrides
 # Cluster-specific VAR_* (VAR_PUBLIC_DOMAIN, VAR_SUBDOMAIN, VAR_PROTOCOL) are in server2/apps/common/sandbox.yaml
+#
+# Probes, lifecycle and strategy live in base.yaml — they were staged here first and
+# promoted once a sandbox rollout had been watched.
+# See docs/superpowers/plans/2026-08-06-iot-app-health-checks-homelab.md
 
 apps:
   interactive-map-feeder-api:
