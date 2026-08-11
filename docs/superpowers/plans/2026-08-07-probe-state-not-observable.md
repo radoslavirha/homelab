@@ -132,7 +132,48 @@ Decision 4 (whether alerting lands together) went the other way: alerting is def
 because there is no notification channel yet. Alertmanager is disabled and no Grafana
 contact point exists, so an alert would have had nothing to fire into.
 
-### Verified results
+### Verified results — the MongoDB test
+
+The end-to-end test this document asks for was run on server2 on 2026-08-11: `mongodb`
+StatefulSet scaled to 0, apps observed, then recovery confirmed.
+
+**Note for whoever repeats it: MongoDB is not per-environment.** There is one release per
+cluster in the `mongodb` namespace and `gitops/helm-values/apps/common/values.yaml` points
+*both* `sandbox` and `production` at it, so this test is not sandbox-scoped — it takes
+production apps down on the chosen cluster too. Scaling the StatefulSet does not touch
+`datadir-mongodb-0`; the PVC stayed `Bound` on the same volume throughout.
+
+Result, exactly as predicted:
+
+| Pod | Depends on MongoDB | `kube_pod_status_ready` | restarts |
+| --- | --- | --- | --- |
+| `qr-manager-api` (sandbox + production) | yes | 1 → **0** | 0 |
+| `miot-bridge-api` (sandbox + production) | yes | 1 → **0** | 0 |
+| `interactive-map-feeder-api` (×4) | no | 1 throughout | 0 |
+| `qr-manager-ui` (×2) | no | 1 throughout | 0 |
+
+`kube_pod_container_status_restarts_total` recorded **zero** increase across every
+namespace. That is the whole point of the document: a total dependency outage, four pods
+pulled from their Service Endpoints, and the pre-existing metrics would have shown nothing.
+
+`prober_*` resolved it to the individual probe. For `qr-manager-api` in sandbox:
+
+```text
+Readiness successful   828 → 832   (+4, normally +12 per minute)
+Readiness failed       series did not exist → 9
+Liveness  successful   413 → 419   (+6, unbroken, never failed)
+Startup                unchanged
+```
+
+Liveness passing while readiness fails is the shallow-liveness rule working, now visible
+as data rather than asserted in a plan. Note the `Readiness failed` series is *born* at
+first failure — `increase()` and `rate()` return nothing for it until a second sample
+exists, so an alert must not depend on a rate over a series that may not exist yet.
+
+Recovery needed no intervention: ArgoCD `selfHeal` restored the StatefulSet and all ten
+pods returned to Ready with restart counts still at 0.
+
+### Verified results — pod roll
 
 A rolled sandbox pod produced the complete picture the plan was written to get:
 
@@ -170,7 +211,9 @@ Returns 0 against a healthy cluster, versus 6 false positives for the naive form
 
 `prober_probe_total` supplies the annotation that makes such an alert actionable:
 `probe_type` distinguishes a dependency-gated readiness failure from a liveness kill loop,
-which is exactly the discrimination `kube_pod_status_ready` alone cannot make.
+which is exactly the discrimination `kube_pod_status_ready` alone cannot make. Use it for
+enrichment, not as the alert condition — the `result="failed"` series does not exist until
+the first failure, so any `rate()` over it is empty precisely when it matters most.
 
 Remaining work: a notification channel, a contact point, and the rule itself. Note also
 that `prober_probe_total` carries a `pod_uid` label, so its series count grows with pod
