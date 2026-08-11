@@ -94,7 +94,7 @@ apps:
                       }
                   },
                   "logs": {
-                      "enabled": true,
+                      "enabled": false,
                       "exporter": {
                           "url": "http://k8s-monitoring-alloy-receiver.monitoring.svc.cluster.local:4318/v1/logs"
                       }

@@ -7,19 +7,6 @@ apps:
     # generated config ConfigMap. Both are read once, at pod start.
     annotations:
       reloader.stakater.com/auto: "true"
-    # Opt out of pod-log scraping — this app exports logs over OTLP via the Winston
-    # transport (otel.logs.enabled in the config template), so scraping stdout as well
-    # stored every line twice. Alloy's drop rule reads a POD annotation
-    # (__meta_kubernetes_pod_annotation_logs_grafana_com_pods_enabled, regex
-    # "(false|no|skip)"), so this belongs in podAnnotations — putting it in `annotations`
-    # above lands it on the workload metadata, where Alloy never looks and it silently
-    # does nothing.
-    #
-    # The cost: SDK export cannot cover anything emitted before the exporter initializes,
-    # OOMKills, or whatever sits in the batch buffer when a pod is killed. `kubectl logs`
-    # is unaffected — Winston still writes stdout; only collection of it stops.
-    podAnnotations:
-      logs.grafana.com/pods.enabled: "false"
     image:
       repository: ghcr.io/radoslavirha/qr-manager-api
       tag: "0.2.1"

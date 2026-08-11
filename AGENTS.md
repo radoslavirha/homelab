@@ -42,6 +42,11 @@ gitops/
                             Jinja2 config ConfigMap). Per-app `annotations` land on the WORKLOAD
                             metadata — set reloader.stakater.com/auto there; there is no
                             checksum/config, Reloader is the only restart mechanism.
+                            `podAnnotations` land on the POD template — anything Alloy reads
+                            (logs.grafana.com/*, resource.opentelemetry.io/*) belongs there, NOT
+                            in `annotations`, where it fails silently. The chart auto-injects
+                            resource.opentelemetry.io/service.name and .version (from image.tag)
+                            onto every pod; a podAnnotations entry overrides either.
                             Health: `livenessProbe`/`readinessProbe`/`startupProbe` +
                             `lifecycle` (preStop.sleep) + `terminationGracePeriodSeconds` are
                             opt-in per app, never chart defaults. Paths by app type —
@@ -67,7 +72,11 @@ gitops/
                             Ingest is the native OTLP endpoint (/otlp/v1/logs); index labels
                             come from Loki's default_resource_attributes_as_index_labels
     tempo.yaml              shared: local backend, OTLP receivers, metrics generator, Longhorn 20Gi
-    k8s-monitoring.yaml     shared: Alloy collector map, feature toggles, telemetryServices, OTLP receiver (no destinations)
+    k8s-monitoring.yaml     shared: Alloy collector map, feature toggles, telemetryServices,
+                            OTLP receiver (no destinations). podLogsViaLoki.extraLogProcessingStages
+                            lifts level/trace_id/span_id out of JSON log lines into structured
+                            metadata — BOTH stage.json and stage.structured_metadata must live
+                            there; the chart renders its own structuredMetadata: key earlier
     apps/
       common/               values.yaml (cluster-agnostic VAR_PROTOCOL, VAR_MQTT_URL, VAR_MONGODB_URL), production.yaml, sandbox.yaml
       miot-bridge-api/  base.yaml, production.yaml, sandbox.yaml

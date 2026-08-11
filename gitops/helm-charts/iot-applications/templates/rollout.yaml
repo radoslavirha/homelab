@@ -33,7 +33,13 @@ spec:
   template:
     metadata:
       labels: {{ include "iot-applications.labels.selector" $ctx | nindent 8 }}
-      {{- with $application.podAnnotations }}
+      {{- /* OTel Resource attributes for SCRAPED pod logs — see deployment.yaml for the
+             full rationale. Kept identical in both workload templates on purpose. */}}
+      {{- $otelResource := dict "resource.opentelemetry.io/service.name" $applicationName }}
+      {{- with $application.image.tag }}
+      {{- $_ := set $otelResource "resource.opentelemetry.io/service.version" (. | toString) }}
+      {{- end }}
+      {{- with merge (deepCopy ($application.podAnnotations | default dict)) $otelResource }}
       annotations:
         {{- toYaml . | nindent 8 }}
       {{- end }}

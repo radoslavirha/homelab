@@ -7,14 +7,6 @@ apps:
     # and of the generated config ConfigMap. Both are read once, at pod start.
     annotations:
       reloader.stakater.com/auto: "true"
-    # Opt out of pod-log scraping — logs go out over OTLP via the Winston transport.
-    # Must be a POD annotation: Alloy's drop rule reads
-    # __meta_kubernetes_pod_annotation_logs_grafana_com_pods_enabled. In `annotations`
-    # above it would land on the workload and silently do nothing.
-    # Cost: no coverage for pre-exporter boot output, OOMKills, or the unflushed batch
-    # buffer at kill time. `kubectl logs` is unaffected.
-    podAnnotations:
-      logs.grafana.com/pods.enabled: "false"
     image:
       repository: ghcr.io/radoslavirha/miot-bridge-api
       tag: "0.17.0"

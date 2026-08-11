@@ -99,6 +99,35 @@ clusterEvents:
 podLogsViaLoki:
   enabled: true
   collector: alloy-receiver
+  # Lift trace context and level out of JSON log lines into structured metadata.
+  #
+  # The custom Node APIs log Winston JSON to stdout. Everything in it — including the
+  # trace_id/span_id that @opentelemetry/instrumentation-winston injects — is just
+  # characters inside the line, so Grafana's Loki->Tempo derived field (matcherType:
+  # label) and Tempo's tracesToLogsV2 customQuery (`| trace_id = ...`) find nothing.
+  # These two stages restore the correlation that OTLP log export gave for free.
+  #
+  # BOTH stages must live here, not split across the chart's `structuredMetadata:` key.
+  # The chart renders stage.structured_metadata from that key BEFORE this block
+  # (charts/feature-pod-logs-via-loki/templates/_processing.alloy.tpl:54 vs :79), so it
+  # would run before stage.json has extracted anything and silently map nothing.
+  #
+  # Deliberately only three fields, all injected by the OTel instrumentation rather than
+  # by application code, so they do not drift as the apps change what they log. Everything
+  # else in the JSON stays queryable at read time with `| json`; enumerating more here
+  # would couple this file to three apps' logging schemas in another repo.
+  #
+  # Safe cluster-wide: stage.json extracts nothing and passes the line through untouched
+  # when it is not JSON, so plaintext logs (Cilium, Longhorn, nginx) are unaffected.
+  # level is extracted too, but note Loki already derives detected_level correctly from
+  # these lines — this makes it an explicit field rather than a heuristic.
+  extraLogProcessingStages: |-
+    stage.json {
+      expressions = { level = "level", trace_id = "trace_id", span_id = "span_id" }
+    }
+    stage.structured_metadata {
+      values = { level = "level", trace_id = "trace_id", span_id = "span_id" }
+    }
 
 # OTLP receiver for app telemetry — apps push to k8s-monitoring-alloy-receiver:4317/4318.
 applicationObservability:

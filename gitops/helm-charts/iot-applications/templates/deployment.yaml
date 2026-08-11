@@ -36,7 +36,27 @@ spec:
   template:
     metadata:
       labels: {{ include "iot-applications.labels.selector" $ctx | nindent 8 }}
-      {{- with $application.podAnnotations }}
+      {{- /* OTel Resource attributes for SCRAPED pod logs. k8s-monitoring's pod-log
+             pipeline labelmaps every resource.opentelemetry.io/* pod annotation into a
+             Loki label, and its service_name detection prefers this annotation over the
+             app.kubernetes.io/name label.
+
+             service.name is already correct without this (the annotation, the label and
+             the SDK's serviceName all resolve to $applicationName) — it is declared here
+             so it stops depending on that coincidence.
+
+             service.version is the real gain: it is the one attribute the apps push to
+             the SDK that cannot reach stdout, so scraped logs lack it entirely. Templated
+             from image.tag so it cannot drift from the deployed image, and it picks up the
+             per-environment tag override automatically.
+
+             merge gives precedence to the destination, so a per-app podAnnotations entry
+             still overrides either of these. */}}
+      {{- $otelResource := dict "resource.opentelemetry.io/service.name" $applicationName }}
+      {{- with $application.image.tag }}
+      {{- $_ := set $otelResource "resource.opentelemetry.io/service.version" (. | toString) }}
+      {{- end }}
+      {{- with merge (deepCopy ($application.podAnnotations | default dict)) $otelResource }}
       annotations:
         {{- toYaml . | nindent 8 }}
       {{- end }}

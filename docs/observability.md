@@ -296,86 +296,86 @@ OTLP gRPC:  k8s-monitoring-alloy-receiver.monitoring.svc.cluster.local:4317
 
 All three signal types (metrics, logs, traces) are accepted on both endpoints.
 
-### Custom apps push all three signals, logs included
+### Custom apps log to stdout; Alloy scrapes it
 
-The Node.js APIs set `otel.logs.enabled: true` in their config templates — one `"logs"` block per app per environment, in `gitops/helm-values/apps/<app>/{production,sandbox}.yaml`, pointing at `k8s-monitoring-alloy-receiver…:4318/v1/logs`. The ConfigMap is mounted, and each app carries `reloader.stakater.com/auto: "true"`, so Reloader restarts the pod on change.
+The Node.js APIs set `otel.logs.enabled: false` in their config templates — one `"logs"` block per app per environment, in `gitops/helm-values/apps/<app>/{production,sandbox}.yaml`. Metrics and traces still go over OTLP; logs do not. Winston writes JSON to stdout and `podLogsViaLoki` collects it, the same path as every other workload in the cluster.
 
-It was `true` until `394db38` (the k8s-monitoring migration) turned it off, on the reasoning that Winston already writes to stdout and `podLogsViaLoki` ships that to Loki, so OTLP export would only duplicate. That reasoning held only because the destination was `type: loki`, which flattened OTLP logs into an unreadable JSON envelope — so the OTLP copy was strictly worse than the scraped one. With Loki's native OTLP endpoint the ordering reverses:
+This was reconsidered twice, so the reasoning is worth recording.
+
+`otel.logs.enabled` was `true` until `394db38` (the k8s-monitoring migration) turned it off. It was briefly turned back on, on the grounds that the scraped copy was much worse — an unreadable double-encoded line whose only structured metadata was a `detected_level` that read `unknown`. **That was true, but the cause was the destination, not scraping.** `otelcol.exporter.loki` was flattening every OTLP log into a JSON envelope. Once the destination moved to Loki's native OTLP endpoint, the scraped copy became good on its own and the comparison that justified SDK export no longer held.
+
+What each path gives, after the destination fix:
 
 | | scraped stdout | SDK OTLP |
 |---|---|---|
-| line | the whole Winston JSON blob | `message`, readable |
-| `level` | text inside the blob | `severityText`/`severityNumber` → structured metadata |
-| `trace_id`/`span_id` | text inside the blob | native LogRecord fields → structured metadata |
-| other Winston fields | text inside the blob | log attributes → structured metadata |
-| Resource attributes | absent — must be reconstructed from `resource.opentelemetry.io/*` podAnnotations | `service.name`, `service.version`, `process.*`, `host.*`, `telemetry.sdk.*` all present — the few in Loki's default list (`service.name`, `service.namespace`, `service.instance.id`) become index labels, the rest structured metadata |
+| line | the Winston JSON, readable via `\| json \| line_format` | `message` directly |
+| `level` | `detected_level` resolves correctly, plus an explicit `level` field | `severityText`/`severityNumber` |
+| `trace_id`/`span_id` | structured metadata, via the `stage.json` below | native LogRecord fields |
+| other Winston fields | query-time with `\| json` | structured metadata, automatically |
+| `service.name`/`.version` | `resource.opentelemetry.io/*` pod annotations, injected by the chart | on the Resource |
+| `process.*`, `host.*`, `telemetry.sdk.*` | **unavailable** | present |
 | timestamp | kubelet's read time | the record's own |
+| **pre-init boot output, OOMKills, unflushed batch buffer** | **captured** | **lost** |
 
-`@opentelemetry/winston-transport`'s `emitLogRecord()` is what does it: `message` → body, `level` → severity, **every other field** → attributes, with exceptions mapped to `exception.type`/`message`/`stacktrace`.
+That last row decided it. SDK export cannot cover anything emitted before the exporter initializes — that is structural, not a tuning problem. The kubelet writes pod logs to disk, so scraping survives boot failures, OOMKills and Alloy outages alike. The attributes scraping cannot recover (`process.*`, `host.arch`, `telemetry.sdk.*`) are ones the apps never set deliberately; the two they do set are recovered by pod annotation.
 
-**Pod-log scraping is off for these three apps** — `logs.grafana.com/pods.enabled: "false"` in each app's `podAnnotations` in `gitops/helm-values/apps/<app>/base.yaml`, so it covers both environments. OTLP is their only path into Loki.
+Running both was considered — the duplicate costs only ~2% of total ingest — but it means two copies of every line and two shapes to reason about, for a second copy of logs already captured well.
 
-> It must be `podAnnotations`, not the `annotations` key above it. Alloy's drop rule matches `__meta_kubernetes_pod_annotation_logs_grafana_com_pods_enabled` against `(false|no|skip)`, so it reads the **pod template**; the chart's `annotations` lands on the workload metadata, which is where Reloader reads but Alloy never looks. Put it in the wrong one and it silently does nothing.
+#### Resource attributes come from the chart
 
-`qr-manager-ui` is deliberately still scraped — it is nginx, has no SDK, and its access logs exist nowhere else.
-
-The reasons stdout was the primary path have not gone away, and they are what the opt-out decision turns on:
-
-1. **`kubectl logs` keeps working.** Unaffected — Winston still writes to stdout; only the *collection* of it stopped.
-2. **Crash coverage.** This one was given up, and it is the real cost. OTLP export loses anything emitted before the exporter initializes, plus OOMKills, unhandled exceptions at exit, and whatever sits in the batch buffer when a pod is killed. The kubelet writes pod logs to disk, so scraping survived all of it — including an Alloy outage. **Boot failures and OOMKills for these three apps are now visible only through `kubectl logs` on the dead pod, not in Loki.** If that bites, re-enabling is one annotation.
-3. **No duplication.** Restored.
-
-#### Open items (deferred)
-
-**1. Restore resource attributes as Loki labels — for scraped pods only.** Relevant to any workload whose logs are collected from stdout; a workload that adopts SDK export (item 2) carries its full Resource on the record already and needs none of this. No chart change needed — the rendered pod-logs pipeline already contains a generic labelmap:
-
-```
-rule {
-  action = "labelmap"
-  regex = "__meta_kubernetes_pod_annotation_resource_opentelemetry_io_(.+)"
-}
-```
-
-Any `resource.opentelemetry.io/*` pod annotation becomes a Loki label, and the `service_name` detection chain checks `resource.opentelemetry.io/service.name` before falling back to the `app.kubernetes.io/name` label and then the container name. So this is purely additive on the app side:
+`iot-applications` injects these onto every pod template, in `deployment.yaml` and `rollout.yaml`:
 
 ```yaml
-podAnnotations:
-  resource.opentelemetry.io/service.name: qr-manager-api
-  resource.opentelemetry.io/service.version: "0.2.1"
-  resource.opentelemetry.io/service.namespace: iot
+resource.opentelemetry.io/service.name: <application name>
+resource.opentelemetry.io/service.version: <image.tag>
 ```
 
-`service.version` is worth templating from `image.tag` in the iot-applications chart rather than maintaining by hand.
+The pod-logs pipeline labelmaps any `resource.opentelemetry.io/*` annotation into a Loki label, and its `service_name` detection chain prefers that annotation over the `app.kubernetes.io/name` label.
 
-**2. Decide whether to stop scraping the custom APIs' stdout.** `otel.logs.enabled: true` is now set for all three APIs in both environments, so their logs arrive over OTLP *and* are still scraped from stdout — every line is stored twice. Sequencing:
+`service.name` was already correct without this — the annotation, the label and the app's own `serviceName` config all resolve to the same application name — so it is declared to stop depending on that coincidence. `service.version` is the real gain: it is the one attribute the apps push to the SDK that cannot reach stdout. Templating it from `image.tag` means it cannot drift from the deployed image and picks up the per-environment override automatically. A per-app `podAnnotations` entry still overrides either.
 
-1. ~~Enable the Winston OTLP transport in each app (`otel.logs.enabled`).~~ Done — all six `{production,sandbox}.yaml` config templates.
-2. **Confirm the logs arrive over OTLP.** The two copies are easy to tell apart: the OTLP record's line is just `message` and it carries `severity_text`/`severity_number` in structured metadata, while the scraped copy's line is the whole Winston JSON blob and carries `stream` and `flags` instead. (`service_version` is *not* an index label — `service.version` is absent from Loki's default list, so it lands in structured metadata too.)
-3. *Then* decide on the opt-out — the chart's drop rule applies regardless of `discoveryMethod`:
+`service_version` lands as **structured metadata**, not an index label — `service.version` is absent from both Loki's default index-label list and the otlp destination's `logToResource` map. That is the same place SDK export put it.
 
-```yaml
-podAnnotations:
-  logs.grafana.com/pods.enabled: "false"
-```
+#### Trace correlation needs two stages
 
-> **Do not add that annotation before step 2 succeeds** — it deletes the scraped copy, and if OTLP export is not actually working that is all the logs.
-
-Step 3 is a genuine trade, not a cleanup. Opting out halves storage and removes the duplicate, but SDK export cannot cover boot failures before the exporter initializes, OOMKills, or whatever sits in the batch buffer when a pod is killed — the cases where logs matter most. Keeping both is a defensible permanent choice; the duplicate is the premium paid for crash coverage.
-
-**3. JSON-on-stdout parsing — only for workloads that never adopt SDK export.** If some app keeps logging JSON to stdout, the line can be parsed at collection instead, in `podLogsViaLoki`:
+Everything in a Winston JSON line is just characters, including the `trace_id`/`span_id` that `@opentelemetry/instrumentation-winston` injects. Grafana's Loki→Tempo derived field (`matcherType: label`) and Tempo's `tracesToLogsV2` customQuery both read structured metadata, so without parsing they find nothing. `podLogsViaLoki.extraLogProcessingStages` restores it:
 
 ```yaml
 extraLogProcessingStages: |-
   stage.json {
     expressions = { level = "level", trace_id = "trace_id", span_id = "span_id" }
   }
-structuredMetadata:
-  level: level
-  trace_id: trace_id
-  span_id: span_id
+  stage.structured_metadata {
+    values = { level = "level", trace_id = "trace_id", span_id = "span_id" }
+  }
 ```
 
-`stage.json` extracts nothing and passes the line through unchanged when it isn't JSON, so plain-text startup banners and stack traces are safe. This is strictly a fallback — it duplicates by hand what the SDK does natively, and it is per-field.
+> **Both stages must be in `extraLogProcessingStages`.** It is tempting to put the extraction here and the mapping in the chart's own `structuredMetadata:` key, but the chart renders that key's `stage.structured_metadata` *before* this block (`charts/feature-pod-logs-via-loki/templates/_processing.alloy.tpl:54` vs `:79`), so it would run before `stage.json` had extracted anything and silently map nothing.
+
+Only three fields, all injected by the OTel instrumentation rather than by application code, so they do not drift as the apps change what they log. Everything else stays queryable at read time with `| json`; enumerating more here would couple the platform values to three apps' logging schemas in another repo.
+
+Safe cluster-wide: `stage.json` extracts nothing and passes the line through untouched when it is not JSON, so Cilium, Longhorn and nginx logs are unaffected.
+
+Trace context survives `otel.logs.enabled: false` — the injection comes from the winston *instrumentation*, not the exporter.
+
+#### Reading these logs in Grafana
+
+The stored line is the raw Winston JSON. To render it like the SDK did:
+
+```logql
+{service_name="qr-manager-api"} | json | line_format "{{.message}}"
+{service_name="qr-manager-api"} | json | line_format "{{.level}}{{if .scope}} [{{.scope}}]{{end}} {{.message}}"
+```
+
+Query-time only — nothing changes at ingest and the raw JSON stays stored. `detected_level` already drives level colouring without any parsing.
+
+`qr-manager-ui` and the other non-SDK workloads need nothing extra — they are plaintext, already collected, and now carry `service.name`/`service.version` from the same chart injection.
+
+#### Open item (deferred)
+
+**Re-evaluate `podLogsViaOpenTelemetry`.** It uses `otelcol.receiver.filelog`, which does JSON parsing, severity mapping, timestamp parsing and trace-context extraction as declarative operators and emits native OTLP LogRecords. That is the OTel-native version of what the `stage.json` block above does by hand — it would drop the Loki→OTLP bridge entirely and produce proper severity and record timestamps rather than kubelet read times.
+
+It was skipped because the receiver was public-preview in Alloy and required lowering the collector's `stabilityLevel`. Worth rechecking on each chart bump; if it has gone stable, it is the better long-term shape for this pipeline.
 
 ## Helm values — two-layer structure
 
