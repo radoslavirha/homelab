@@ -32,7 +32,7 @@ apps:
                   "level": "info"
               },
               "otel": {
-                  "debug": true,
+                  "debug": false,
                   "metrics": {
                       "enabled": true,
                       "exporter": {
