@@ -3,6 +3,12 @@ global:
 
 notifications:
   argocdUrl: http://argocd.server3.home
+  metrics:
+    enabled: true
+    service:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9001"
 
 configs:
   cm:
@@ -79,8 +85,52 @@ configs:
 dex:
   enabled: false
 
+# Metrics Services for every component. They default to enabled: false, which is why no
+# argocd_* series existed — the metrics ports are always in the workload spec, so this
+# creates five Services and restarts nothing.
+#
+# Annotations opt each Service into k8s-monitoring's annotation autodiscovery
+# (annotationAutodiscovery in gitops/helm-values/k8s-monitoring.yaml). serviceMonitor is
+# left off — there are no Prometheus Operator CRDs in this cluster.
+#
+# Ports are the chart's own defaults, verified against argo-cd 9.5.2, and differ per
+# component. Re-check them on a chart upgrade; a wrong port scrapes nothing and says so
+# nowhere.
+controller:
+  replicas: 1
+  metrics:
+    enabled: true
+    service:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8082"
+
+repoServer:
+  replicas: 1
+  metrics:
+    enabled: true
+    service:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8084"
+
+applicationSet:
+  replicas: 1
+  metrics:
+    enabled: true
+    service:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+
 server:
   replicas: 1
+  metrics:
+    enabled: true
+    service:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8083"
   httproute:
     enabled: true
     parentRefs:
@@ -96,11 +146,4 @@ server:
               type: PathPrefix
               value: /
 
-repoServer:
-  replicas: 1
-
-applicationSet:
-  replicas: 1
-
-controller:
-  replicas: 1
+# notifications has no replicas key here — the chart default is 1.
