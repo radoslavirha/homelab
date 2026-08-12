@@ -24,6 +24,20 @@ tempo:
     enabled: true
     remoteWriteUrl: "http://prometheus.monitoring.svc.cluster.local:9090/api/v1/write"
 
+  # Without this the generator loads no processors and emits only traces_host_info.
+  # `metricsGenerator.enabled` renders the generator's ring/storage config, but the
+  # processor list is per-tenant and lives in overrides; the chart writes this block
+  # verbatim into the config's `overrides.defaults` (configmap-tempo.yaml).
+  # These two feed Grafana's Tempo datasource `tracesToMetrics` (traces_spanmetrics_*)
+  # and `serviceMap` (traces_service_graph_*), both dead links until now.
+  # Dimensions stay at the defaults — set metricsGenerator.processor to extend them.
+  overrides:
+    defaults:
+      metrics_generator:
+        processors:
+          - service-graphs
+          - span-metrics
+
   retention: 336h  # 14 days
 
   reportingEnabled: false
