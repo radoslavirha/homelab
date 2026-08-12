@@ -86,8 +86,43 @@ dashboardProviders:
         options:
           path: /var/lib/grafana/dashboards/kubernetes
 
+# dotdc/grafana-dashboards-kubernetes, all pinned to the same tag so the set stays coherent —
+# they share template variables and cross-link by uid, so mixing versions is asking for trouble.
+# Bump every url together.
+#
+# `title` rewrites the dashboard's own name. Upstream calls these "Kubernetes / Views / Global"
+# etc., which is redundant once they are all sitting in a folder named Kubernetes, so each is
+# shortened to its distinguishing word. The chart implements this as a sed anchored on a
+# 1-or-2-level indent (`/^(\t|  |    )"title":/`), which in these files matches the top-level
+# title and nothing else — verified 1 match against 31 "title" keys per file. Panel titles are
+# indented deeper and are untouched.
+#
+# Deliberately omitted from the upstream set:
+#   k8s-system-api-server     needs clusterMetrics.apiServer, which is off — item 0.2 disabled
+#                             the Prometheus chart's apiserver job and nothing replaced it, so
+#                             apiserver_request_total does not exist and every panel is empty.
+#   k8s-addons-trivy-operator no Trivy in this cluster.
 dashboards:
   kubernetes:
     # grafana.com id 15757. Sourced from the repo rather than the mirror — see above.
     k8s-views-global:
+      title: Global
       url: https://raw.githubusercontent.com/dotdc/grafana-dashboards-kubernetes/v3.0.6/dashboards/k8s-views-global.json
+    # grafana.com id 15758
+    k8s-views-namespaces:
+      title: Namespaces
+      url: https://raw.githubusercontent.com/dotdc/grafana-dashboards-kubernetes/v3.0.6/dashboards/k8s-views-namespaces.json
+    # grafana.com id 15760. Needs the widened node-exporter allow-list (item 0.4) for its disk
+    # and load panels; node_load1 and node_disk_io_time_seconds_total are confirmed on all three.
+    k8s-views-nodes:
+      title: Nodes
+      url: https://raw.githubusercontent.com/dotdc/grafana-dashboards-kubernetes/v3.0.6/dashboards/k8s-views-nodes.json
+    # grafana.com id 15759. The drill-down for restart storms and OOMKills.
+    k8s-views-pods:
+      title: Pods
+      url: https://raw.githubusercontent.com/dotdc/grafana-dashboards-kubernetes/v3.0.6/dashboards/k8s-views-pods.json
+    # grafana.com id 15762. Reaches CoreDNS through annotation autodiscovery (item 0.3) —
+    # kube-system/kube-dns already carries prometheus.io/scrape on :9153.
+    k8s-system-coredns:
+      title: CoreDNS
+      url: https://raw.githubusercontent.com/dotdc/grafana-dashboards-kubernetes/v3.0.6/dashboards/k8s-system-coredns.json
