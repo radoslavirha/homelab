@@ -46,6 +46,32 @@ collectors:
       - otel-receiver           # opens OTLP :4317 gRPC and :4318 HTTP
       - clustered               # required by clusterMetrics; a no-op at 1 replica
 
+# Scrape any pod or service that opts in with the de-facto standard annotations.
+#
+# The chart defaults to k8s.grafana.com/* and supports exactly one annotation set.
+# prometheus.io/* is the one that already exists on all three clusters, unset by us:
+#   kube-system/cilium-agent      pod      :9962
+#   kube-system/cilium-operator   pod      :9963
+#   kube-system/cilium-envoy      service  :9964
+#   kube-system/hubble-metrics    service  :9965
+#   kube-system/kube-dns          service  :9153
+# and it is the same convention ArgoCD, Longhorn, EMQX and the bitnami charts use, so
+# picking it needs no upstream chart edits to reach the control plane.
+#
+# This replaces the Prometheus chart's own kubernetes-pods / kubernetes-service-endpoints
+# jobs (disabled in prometheus.yaml): those carried no `cluster` label and only ever saw
+# server3, so nothing they collected was reachable from a cluster-scoped dashboard.
+#
+# The chart's own node-exporter Service carries prometheus.io/scrape: "false", so
+# hostMetrics stays the single source of node_* — no double collection.
+annotationAutodiscovery:
+  enabled: true
+  collector: alloy-receiver
+  annotations:
+    scrape: "prometheus.io/scrape"
+    metricsPath: "prometheus.io/path"
+    metricsPortNumber: "prometheus.io/port"
+
 clusterMetrics:
   enabled: true
   collector: alloy-receiver
