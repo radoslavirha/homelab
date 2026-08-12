@@ -15,6 +15,42 @@ prometheus-node-exporter:
 prometheus-pushgateway:
   enabled: false
 
+# Prometheus is a remote-write sink only — every scrape is done by Alloy on each cluster,
+# which stamps the `cluster` label. The chart ships six scrape jobs enabled by default
+# (prometheus, kubernetes-api-servers, kubernetes-nodes, kubernetes-nodes-cadvisor,
+# kubernetes-service-endpoints, kubernetes-pods) whose series carry NO cluster label and
+# only ever see server3. They duplicated Alloy's cadvisor/kubelet data and were invisible
+# to every cluster-scoped dashboard. The useful part (Cilium, Hubble, CoreDNS) now arrives
+# correctly labelled from all three clusters via annotationAutodiscovery in k8s-monitoring.yaml.
+#
+# Keys are the chart's own (note kubernetes-api-servers, not -apiservers); `enabled: false`
+# is the documented disable and unknown keys are silently ignored, so re-diff this list
+# against `helm show values` on any chart upgrade.
+#
+# Drops apiserver_*, etcd_* and workqueue_* — nothing consumes them; item 4.3 of
+# docs/grafana-dashboards-plan.md restores them cluster-labelled if wanted.
+scrapeConfigs:
+  prometheus:
+    enabled: false
+  kubernetes-api-servers:
+    enabled: false
+  kubernetes-nodes:
+    enabled: false
+  kubernetes-nodes-cadvisor:
+    enabled: false
+  kubernetes-service-endpoints:
+    enabled: false
+  kubernetes-service-endpoints-slow:
+    enabled: false
+  prometheus-pushgateway:
+    enabled: false
+  kubernetes-services:
+    enabled: false
+  kubernetes-pods:
+    enabled: false
+  kubernetes-pods-slow:
+    enabled: false
+
 server:
   # Override the generated name so the Service is named "prometheus" instead of "prometheus-server".
   # All internal references (Alloy, Tempo metricsGenerator, Grafana datasource) use
