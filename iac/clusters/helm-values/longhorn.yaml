@@ -7,6 +7,16 @@ defaultSettings:
 
 longhornManager:
   tolerations: []
+  # Manager metrics live on the longhorn-backend Service, port 9500 (port name "manager").
+  # These annotations opt it into k8s-monitoring's annotation autodiscovery
+  # (gitops/helm-values/k8s-monitoring.yaml). The chart's metrics.serviceMonitor path is
+  # not used — there are no Prometheus Operator CRDs in any of these clusters.
+  #
+  # Longhorn holds every byte of Prometheus, Loki, Tempo, MongoDB and InfluxDB data and
+  # there was no signal at all for volume health, degraded replicas or rebuild activity.
+  serviceAnnotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9500"
 
 longhornDriver:
   tolerations: []
