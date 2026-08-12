@@ -28,6 +28,16 @@ sidecar:
   dashboards:
     enabled: true
     searchNamespace: ALL
+    # The sidecar reads this annotation off each ConfigMap and files the dashboard into
+    # /tmp/dashboards/<annotation value>/ instead of the flat root.
     folderAnnotation: grafana_folder
     provider:
-      foldersFromFilesStructure: false
+      # Required for folderAnnotation to do anything. The chart renders provider.yaml with
+      # `folder: ''` + `options.foldersFromFilesStructure: false` when this is false
+      # (templates/_config.tpl), and Grafana's file provisioner then ignores subdirectories
+      # entirely — the sidecar still sorts the files on disk, Grafana just files every
+      # dashboard under General. Silent: nothing logs, the annotation simply has no effect.
+      #
+      # Turning it on drops `folder`/`folderUid` from provider.yaml, so folders come only
+      # from the annotation. A ConfigMap without one lands at the path root, i.e. General.
+      foldersFromFilesStructure: true

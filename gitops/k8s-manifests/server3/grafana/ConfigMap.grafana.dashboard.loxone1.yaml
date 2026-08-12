@@ -5,6 +5,7 @@ metadata:
   namespace: monitoring
   annotations:
     argocd.argoproj.io/sync-wave: "-50"
+    grafana_folder: "Loxone"
   labels:
     grafana_dashboard: "1"
 data:
@@ -649,7 +650,7 @@ data:
       },
       "timepicker": {},
       "timezone": "browser",
-      "title": "Loxone valves/temperature/humidity",
+      "title": "Valves/temperature/humidity",
       "uid": "adkltw2",
       "version": 7
     }

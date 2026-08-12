@@ -84,10 +84,59 @@ clusterMetrics:
   # probes gating on MongoDB/EMQX, which makes that the expected shape of an outage.
   # includeMetrics is additive to the default allow-list (the template concatenates both),
   # so nothing else is dropped. Cost is ~3 series per pod, one per condition value.
+  #
+  # The rest of this list exists for the dotdc dashboards (grafana.com 15757-15762).
+  # kube_namespace_created is the important one: every "by namespace" panel in them is
+  #
+  #   sum(...) by (namespace) + on (namespace) (<windows series> OR kube_namespace_created * 0)
+  #
+  # The OR arm is the dashboards' portable way of forcing a zero row for namespaces with no
+  # workload. On Talos there are no windows_container_* series, so that arm is the only one
+  # left, and with kube_namespace_created absent the whole right-hand vector is empty — an
+  # `on()` binary op against an empty vector yields nothing, so CPU / Memory / Network
+  # "by namespace" all render blank even though the left-hand side has data.
+  #
+  # The *_info / *_labels entries below back the Resource Count and Namespaces panels; each
+  # is one series per object (~450 total across all three clusters), so they are cheap.
+  # kube_node.* and kube_daemonset.* are already in the default list via wildcards.
   kube-state-metrics:
     metricsTuning:
       includeMetrics:
         - kube_pod_status_ready
+        - kube_namespace_created
+        - kube_namespace_labels
+        - kube_service_info
+        - kube_endpoint_info
+        - kube_ingress_info
+        - kube_deployment_labels
+        - kube_statefulset_labels
+        - kube_daemonset_labels
+        - kube_hpa_labels
+        - kube_secret_info
+        - kube_networkpolicy_labels
+        - kube_pod_status_qos_class
+  # The chart's cadvisor allow-list
+  # (charts/feature-cluster-metrics/default-allow-lists/cadvisor.yaml) is 19 entries and
+  # misses three the dotdc dashboards need. All three used to exist and stopped when item 0.2
+  # disabled the Prometheus chart's own kubernetes-nodes-cadvisor job — that job carried no
+  # `cluster` label, so the panels were never actually usable, they were reading a series
+  # that no cluster-scoped query could reach.
+  #
+  #   container_cpu_cfs_throttled_seconds_total  the list has _throttled_periods_total only,
+  #                                             which counts throttling events, not time lost
+  #   container_oom_events_total                 the only counter for OOMKills; kube-state's
+  #                                             last_terminated_reason is a gauge that resets
+  #   machine_cpu_cores                          the list has machine_memory_bytes but not its
+  #                                             CPU twin, so every request/limit-vs-capacity
+  #                                             ratio panel has no denominator
+  #
+  # Cost is one series per container for the first two, one per node for the last.
+  cadvisor:
+    metricsTuning:
+      includeMetrics:
+        - container_cpu_cfs_throttled_seconds_total
+        - container_oom_events_total
+        - machine_cpu_cores
   # kube_pod_status_ready says a pod is NotReady. It does not say WHICH probe failed.
   # These are kubelet's own probe counters, a separate scrape of /metrics/probes on each
   # node — same node discovery, serviceaccount token and TLS config as the kubelet and
