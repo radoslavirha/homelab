@@ -191,6 +191,31 @@ applicationObservability:
       http:
         enabled: true
 
+# Self-monitoring for the collector. Without alloy_* there is no signal for a pipeline
+# that is Running but collecting or exporting nothing — the failure mode behind both
+# silent-collection bugs in this repo's history (see AGENTS.md, "Green does not mean
+# working"). alloy_component_evaluation_* and prometheus_remote_write_* are the two that
+# answer it. Feeds the Alloy mixin dashboards (item 2.6 of docs/grafana-dashboards-plan.md).
+#
+# Not covered by annotationAutodiscovery above: the Alloy pods carry no prometheus.io/*
+# annotations. Integrations discover by label selector instead, and ship a curated
+# allow-list per component, so this is a few hundred series, not everything Alloy emits.
+#
+# The selector is alloy-RECEIVER — the collector is named alloy-receiver (see the
+# collectors block at the top), so app.kubernetes.io/name is alloy-receiver, not the
+# chart default of "alloy", which matches nothing here.
+#
+# Loki, Tempo and Grafana run on server3 only; their instances live in
+# gitops/helm-values/server3/k8s-monitoring.yaml. Helm merges the two integrations maps
+# by key, so this alloy entry survives.
+integrations:
+  collector: alloy-receiver
+  alloy:
+    instances:
+      - name: alloy
+        labelSelectors:
+          app.kubernetes.io/name: alloy-receiver
+
 # Chart v4 extracted these into the telemetryServices subchart; all default to deploy: false.
 # These two are the node/cluster telemetry: clusterMetrics needs kube-state-metrics,
 # hostMetrics needs node-exporter. windows-exporter stays off (all nodes are Talos Linux).

@@ -3,6 +3,47 @@
 cluster:
   name: server3
 
+# Self-monitoring for the LGTM stack, which runs on server3 only. The shared base adds the
+# alloy instance (every cluster); Helm merges the two integrations maps by key.
+#
+# Each instance below matches the live pod labels and container PORT NAMES — discovery
+# selects the port by name, not number, so a wrong name silently discovers nothing:
+#   loki-0    app.kubernetes.io/name=loki    http-metrics:3100   (chart default)
+#   tempo-0   app.kubernetes.io/name=tempo   prom-metrics:3200   (NOT the chart's
+#                                                                 http-metrics default)
+#   grafana   app.kubernetes.io/name=grafana grafana:3000        (chart default)
+#
+# logs.enabled is off on all three. These integrations do not collect a second copy of the
+# logs — they inject relabel/process rules into the existing podLogsViaLoki pipeline
+# (rewriting `job` to namespace/component for the upstream mixins, dropping debug lines).
+# Every pod's logs are already collected cluster-wide, the OTLP path uses the OTel label
+# schema rather than the mixins' `job`, and podLogsViaLoki carries hand-tuned stages in the
+# shared base. Metrics are what this item is for; leave the log pipeline alone.
+integrations:
+  loki:
+    instances:
+      - name: loki
+        labelSelectors:
+          app.kubernetes.io/name: loki
+        logs:
+          enabled: false
+  tempo:
+    instances:
+      - name: tempo
+        labelSelectors:
+          app.kubernetes.io/name: tempo
+        metrics:
+          portName: prom-metrics
+        logs:
+          enabled: false
+  grafana:
+    instances:
+      - name: grafana
+        labelSelectors:
+          app.kubernetes.io/name: grafana
+        logs:
+          enabled: false
+
 destinations:
   prometheus:
     type: prometheus
