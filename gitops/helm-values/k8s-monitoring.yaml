@@ -115,6 +115,27 @@ hostMetrics:
   # and silently collects nothing. windowsHosts stays off (all nodes are Talos).
   linuxHosts:
     enabled: true
+    # The chart's default node-exporter allow-list is ten patterns — node_cpu.*,
+    # node_filesystem.*, node_memory.*, four node_network_* counters and two process_*.
+    # No disk I/O, no load average, no uname, no boot time, no PSI, so every node
+    # dashboard renders those panels empty.
+    #
+    # includeMetrics is concatenated onto the default list, nothing is dropped. The
+    # alternative is metricsTuning.useIntegrationAllowList, which swaps in the chart's
+    # ~150-entry Node Exporter integration list; this stays narrower on purpose — three
+    # single-node boxes, and node_disk_.* is already per-device.
+    metricsTuning:
+      includeMetrics:
+        - node_disk_.*
+        - node_load.*
+        - node_uname_info
+        - node_boot_time_seconds
+        - node_pressure_.*
+        - node_vmstat_pgmajfault
+        - node_context_switches_total
+        - node_intr_total
+        - node_time_seconds
+        - node_timex_.*
 clusterEvents:
   enabled: true
   collector: alloy-receiver
