@@ -79,6 +79,32 @@ configs:
       g, claude, role:claude
   params:
     server.insecure: "true"
+    # Bound how long a values-only commit can stay invisible.
+    #
+    # Every Helm Application here is multi-source: the chart source pins a fixed
+    # targetRevision (a chart version like 4.3.2) and the values come from a second
+    # source declared `ref: values`, referenced as $values/gitops/helm-values/*.yaml.
+    # repo-server caches generated manifests per source, and for the chart source that
+    # cache key is the chart version — which does not move when only a values file
+    # changes. So a values-only commit hits the stale entry: the controller compares
+    # the previously rendered manifests, finds no drift, and reports Synced against the
+    # NEW commit sha while the cluster still runs the OLD rendering.
+    #
+    # Observed 2026-08-12: commit 5da5906 touched only helm-values/k8s-monitoring.yaml;
+    # all three k8s-monitoring apps showed Synced at 5da5906 with the previous Alloy
+    # config live. `argocd.argoproj.io/refresh=hard` fixed it immediately.
+    #
+    # 24h (the default) means a values change can sit unapplied for a day while every
+    # dashboard says green. 10m keeps that window short enough to be a non-event. Cost
+    # is re-rendering each app's manifests at most every 10m instead of once a day —
+    # ~68 apps of helm template on one node, which is well within budget here.
+    #
+    # This bounds the staleness, it does not remove it. For an immediate apply after a
+    # values-only commit, still hard-refresh the app:
+    #   kubectl -n argocd annotate app <name> argocd.argoproj.io/refresh=hard --overwrite
+    # The real fix is a git webhook into /api/webhook, which invalidates the cache on
+    # push — that needs ArgoCD reachable from GitHub, which this homelab is not.
+    reposerver.repo.cache.expiration: 10m
   secret:
     createSecret: false
 
