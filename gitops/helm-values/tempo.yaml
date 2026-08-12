@@ -22,7 +22,10 @@ tempo:
   # Metrics generator writes span metrics to Prometheus
   metricsGenerator:
     enabled: true
-    remoteWriteUrl: "http://prometheus.monitoring.svc.cluster.local:9090/api/v1/write"
+    # Port 80, not 9090. `server.fullnameOverride: prometheus` renders a Service that
+    # listens on 80 only (the chart's servicePort default) — nothing answers on 9090.
+    # Same endpoint k8s-monitoring's server3 prometheus destination writes to.
+    remoteWriteUrl: "http://prometheus.monitoring.svc.cluster.local:80/api/v1/write"
 
   # Without this the generator loads no processors and emits only traces_host_info.
   # `metricsGenerator.enabled` renders the generator's ring/storage config, but the
