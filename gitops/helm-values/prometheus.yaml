@@ -52,6 +52,16 @@ scrapeConfigs:
     enabled: false
 
 server:
+  # Prometheus still scrapes itself — that part of the chart's `prometheus` job was worth
+  # keeping, it just had no cluster label. Routing it through Alloy's annotation
+  # autodiscovery (k8s-monitoring.yaml) brings prometheus_tsdb_head_series,
+  # prometheus_target_* and the remote-write receiver counters back stamped cluster=server3.
+  # Port 80 is servicePort, matching the Service this chart renders.
+  service:
+    annotations:
+      prometheus.io/scrape: "true"
+      prometheus.io/port: "80"
+
   # Override the generated name so the Service is named "prometheus" instead of "prometheus-server".
   # All internal references (Alloy, Tempo metricsGenerator, Grafana datasource) use
   # prometheus.monitoring.svc.cluster.local:9090
