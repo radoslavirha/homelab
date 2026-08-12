@@ -11,6 +11,15 @@ metadata:
 data:
   dashboard.loxone1.json: |
     {
+      "time": {
+        "from": "now-24h",
+        "to": "now"
+      },
+      "timepicker": {},
+      "timezone": "browser",
+      "title": "Valves/temperature/humidity",
+      "uid": "adkltw2",
+      "version": 7,
       "annotations": {
         "list": [
           {
@@ -643,14 +652,5 @@ data:
             "type": "query"
           }
         ]
-      },
-      "time": {
-        "from": "now-24h",
-        "to": "now"
-      },
-      "timepicker": {},
-      "timezone": "browser",
-      "title": "Valves/temperature/humidity",
-      "uid": "adkltw2",
-      "version": 7
+      }
     }
