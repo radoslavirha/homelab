@@ -41,3 +41,53 @@ sidecar:
       # Turning it on drops `folder`/`folderUid` from provider.yaml, so folders come only
       # from the annotation. A ConfigMap without one lands at the path root, i.e. General.
       foldersFromFilesStructure: true
+
+# ---------------------------------------------------------------------------
+# Third-party dashboards — declared, not vendored.
+#
+# The chart's download-dashboards initContainer fetches each entry at pod start, so a
+# dashboard costs three lines here instead of an ~80 KB JSON blob in git.
+#
+# `url` and `gnetId` mix freely inside one provider — the chart branches on whichever key
+# an entry carries (templates/_config.tpl). Choose per dashboard:
+#
+#   url     preferred whenever upstream publishes the JSON in a tagged git repo. It pins to
+#           a real release and picks up fixes the author never re-uploaded to grafana.com.
+#           Measured for 15757: the grafana.com mirror is stuck at revision 43 (2025-02-11)
+#           while dotdc v3.0.6 (2026-03-24) is two versions ahead.
+#   gnetId  fallback for dashboards published only on grafana.com. Always pin `revision` —
+#           the chart silently substitutes revision 1 when it is omitted.
+#
+# Do NOT add a `datasource:` key. Its string form seds every `"datasource":` line in the
+# file; these dashboards use a `${datasource}` template variable, which resolves by itself
+# against the isDefault Prometheus datasource (proven by the Loxone dashboard, whose
+# datasource variable has an empty `current` and still binds).
+#
+# One provider per Grafana folder — `folder` is a provider-level setting, so a new folder
+# means a new provider. This is independent of the sidecar's grafana_folder annotation
+# above, which keeps filing the hand-built ConfigMap dashboards; both providers coexist.
+#
+# Accepted trade-off: download_dashboards.sh runs `set -euf` with `curl -skf`, so an
+# unreachable upstream fails the initContainer and Grafana does not start. Kubernetes keeps
+# retrying it, so this self-heals once the source is back — but Grafana is down until then.
+# That is the price of not keeping the JSON in git.
+# ---------------------------------------------------------------------------
+dashboardProviders:
+  dashboardproviders.yaml:
+    apiVersion: 1
+    providers:
+      - name: kubernetes
+        orgId: 1
+        folder: Kubernetes
+        type: file
+        disableDeletion: false
+        # Provisioned dashboards are read-only; edit upstream and bump the ref instead.
+        editable: false
+        options:
+          path: /var/lib/grafana/dashboards/kubernetes
+
+dashboards:
+  kubernetes:
+    # grafana.com id 15757. Sourced from the repo rather than the mirror — see above.
+    k8s-views-global:
+      url: https://raw.githubusercontent.com/dotdc/grafana-dashboards-kubernetes/v3.0.6/dashboards/k8s-views-global.json
