@@ -264,6 +264,50 @@ integrations:
       - name: alloy
         labelSelectors:
           app.kubernetes.io/name: alloy-receiver
+        # The chart's alloy allow-list
+        # (charts/feature-integrations/default-allow-lists/alloy.yaml) contains exactly seven
+        # otelcol_* entries, and every one of them is about SPANS:
+        #   otelcol_exporter_sent_spans_total          otelcol_receiver_accepted_spans_total
+        #   otelcol_exporter_send_failed_spans_total   otelcol_receiver_refused_spans_total
+        #   otelcol_processor_batch_batch_send_size_bucket, _metadata_cardinality,
+        #   _timeout_trigger_send_total
+        #
+        # So the collector can prove traces are flowing and CANNOT say whether logs or metrics
+        # are. Every log-record and metric-point counter is dropped post-scrape, including all
+        # three otelcol_exporter_send_failed_* variants — the exact signal that distinguishes
+        # "exporting fine" from "accepting data and silently failing to ship it".
+        #
+        # That is the blind spot item 0.5 was added to close, and it did not close it. It
+        # matters most on server1/server2: they forward everything to server3 over OTLP, so
+        # otelcol.exporter.otlp IS their entire egress path. They never instantiate a
+        # prometheus.remote_write component, which is why prometheus_remote_storage_* exists
+        # only on server3 and the Alloy remote-write mixin dashboard is a server3-only view.
+        #
+        # Two prefixes rather than an enumerated list, because enumerating means silently
+        # missing whatever a future Alloy release adds to the same families — which is exactly
+        # how the current gap arose.
+        #
+        # Cost measured against the live /metrics endpoints, not estimated: 21 distinct names
+        # / 69 series on server1, 20 / 109 on server3. Call it ~250 series across all three.
+        # Two histograms are 55% of that (otelcol_exporter_queue_batch_send_size_bucket and
+        # ..._bytes_bucket); if this ever needs trimming, exclude those two first — nothing
+        # queries them today. The rest is one series per exporter or receiver per signal.
+        #
+        # What this actually buys, all confirmed present on the live endpoints:
+        #   otelcol_exporter_sent_{spans,metric_points,log_records}_total
+        #   otelcol_receiver_{accepted,refused,failed}_{spans,metric_points,log_records}_total
+        #   otelcol_exporter_queue_size / queue_capacity   <- backpressure, the early warning
+        #   otelcol_exporter_in_flight_requests
+        #
+        # Note otelcol_exporter_send_failed_* is NOT currently on the endpoint. That is not an
+        # allow-list problem: the counter is only created once it first increments, so it
+        # appears the moment an export actually fails. The .* prefix catches it then; an
+        # enumerated list written from today's output would too, but only by luck.
+        metrics:
+          tuning:
+            includeMetrics:
+              - otelcol_exporter_.*
+              - otelcol_receiver_.*
 
 # Chart v4 extracted these into the telemetryServices subchart; all default to deploy: false.
 # These two are the node/cluster telemetry: clusterMetrics needs kube-state-metrics,
