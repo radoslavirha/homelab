@@ -101,14 +101,6 @@ dashboardProviders:
         editable: false
         options:
           path: /var/lib/grafana/dashboards/gitops
-      - name: cilium
-        orgId: 1
-        folder: Cilium
-        type: file
-        disableDeletion: false
-        editable: false
-        options:
-          path: /var/lib/grafana/dashboards/cilium
 
 # dotdc/grafana-dashboards-kubernetes, all pinned to the same tag so the set stays coherent —
 # they share template variables and cross-link by uid, so mixing versions is asking for trouble.
@@ -202,15 +194,26 @@ dashboards:
     argocd:
       url: https://raw.githubusercontent.com/argoproj/argo-cd/v3.3.7/examples/dashboard.json
 
-  cilium:
-    # Only ONE of the four Hubble dashboards is worth having. Note the -namespace suffix; plain
-    # hubble-network-overview.json does not exist.
-    #   hubble-dashboard.json              no cluster variable, 4/11 metrics
-    #   hubble-dns-namespace.json          0/2 metrics
-    #   hubble-l7-http-metrics-by-workload not evaluated, same L7 dependency
-    # The DNS and HTTP families are empty because L7 visibility is never engaged — the handlers
-    # are enabled in cilium-config but emit nothing without a CiliumNetworkPolicy carrying L7
-    # rules. Verified by scraping hubble-metrics:9965 directly. This one needs none of that:
-    # 4/4 metrics live, 8/8 queries cluster-filtered.
-    hubble-network-overview-namespace:
-      url: https://raw.githubusercontent.com/cilium/cilium/v1.19.2/install/kubernetes/cilium/files/hubble/dashboards/hubble-network-overview-namespace.json
+  # NO Cilium provider yet, deliberately. hubble-network-overview-namespace.json passed every
+  # check that looks at metric NAMES — 4/4 present, 8/8 queries cluster-filtered, no ${DS_*}
+  # problem — and is still 0/8 useful panels, because every query filters on
+  # source_namespace / destination_namespace and those LABELS do not exist here:
+  #
+  #   hubble_flows_processed_total{cluster, instance, job, k8s_cluster_name, namespace,
+  #                                protocol, service, subtype, type, verdict}
+  #
+  # Hubble only emits source/destination identity when the metric handler is given context
+  # options. iac/clusters/helm-values/cilium.yaml enables the bare handler names
+  # (`dns drop tcp flow icmp http`), so the counters are aggregate-only. The fix is a Cilium
+  # values change, applied per cluster with Terraform, not a dashboard change:
+  #
+  #   hubble:
+  #     metrics:
+  #       enabled:
+  #         - flow:sourceContext=namespace;destinationContext=namespace
+  #         - drop:sourceContext=namespace;destinationContext=namespace
+  #         - tcp:sourceContext=namespace;destinationContext=namespace
+  #         - icmp:sourceContext=namespace;destinationContext=namespace
+  #
+  # Weigh the cardinality first: context labels turn a handful of aggregate series into
+  # roughly namespace x namespace per handler. See item 2.2 of docs/grafana-dashboards-plan.md.
