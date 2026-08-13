@@ -185,22 +185,27 @@ dashboards:
     # three clusters. Fixing it means vendoring the JSON, so it is accepted as-is for now.
     alloy-opentelemetry:
       url: https://raw.githubusercontent.com/grafana/alloy/v1.18.0/operations/alloy-mixin/rendered/dashboards/alloy-opentelemetry.json
-    # grafana/loki mixin, tag matches the running Loki. 106/106 queries cluster-filtered.
+    # NO loki-operational.json. It was added in 95d41d9 and removed again — 13 of its 69
+    # panels are even plausibly alive, and once the per-component CPU/Memory panels (which
+    # filter by pod-name pattern) are discounted, roughly 7 are. Classified precisely:
     #
-    # EXPECT DEAD PANELS, by design rather than by mistake. The mixin targets a microservices
-    # Loki (distributor / ingester / querier / ruler as separate deployments); this is a
-    # single-binary install, so every panel scoped to a component job is empty —
-    # loki_request_duration_seconds_count here carries job="monitoring/single-binary".
-    # Roughly 19 of 38 referenced metrics are absent, all of them object-store and KV families
-    # this deployment does not use: loki_s3_*, loki_gcs_*, loki_dynamo_*, loki_azure_blob_*,
-    # loki_bigtable_*, loki_consul_*, loki_boltdb_shipper_*.
+    #   27 panels  filter on job=~"($namespace)/(distributor|ingester.*|querier|query-frontend)"
+    #              -- this Loki is single-binary, its job label is "monitoring/single-binary"
+    #   29 panels  reference only metrics that do not exist here: loki_s3_*, loki_gcs_*,
+    #              loki_dynamo_*, loki_bigtable_*, loki_azure_blob_*, loki_consul_*,
+    #              loki_boltdb_shipper_request_*, loki_memcache_*, promtail_*
+    #   13 panels  plausibly alive, several of which are also pod-pattern scoped
     #
-    # What does work is the part worth having: loki_request_duration_seconds_bucket (390
-    # series), loki_distributor_{bytes,lines}_received_total, and the loki_ingester_* set
-    # (memory_streams, streams_created_total, chunks_flushed_total, chunk_utilization_bucket).
-    # Ingest rate, error rate and chunk behaviour all populate.
-    loki-operational:
-      url: https://raw.githubusercontent.com/grafana/loki/v3.7.1/production/loki-mixin-compiled/dashboards/loki-operational.json
+    # The lesson: counting which METRICS exist is not the same as counting which PANELS work.
+    # 19 of 38 metrics present sounded acceptable and produced an ~90% empty dashboard, because
+    # the live metrics were concentrated in a handful of panels and the job matchers killed the
+    # rest independently. Screen by panel, not by metric.
+    #
+    # The metrics themselves are worth a dashboard, just not this one. Available and useful:
+    # loki_request_duration_seconds_bucket (390 series), loki_distributor_{bytes,lines}_
+    # received_total, loki_ingester_{memory_streams,memory_chunks,chunks_flushed_total,
+    # chunk_utilization_bucket,flush_queue_length}, loki_panic_total,
+    # loki_index_request_duration_seconds_*, loki_compactor_*. Hand-build alongside item 3.2.
 
   gitops:
     # argoproj/argo-cd at the tag matching the deployed chart's appVersion (chart 9.5.2).
