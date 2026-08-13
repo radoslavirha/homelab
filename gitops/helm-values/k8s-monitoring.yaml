@@ -156,6 +156,40 @@ clusterMetrics:
     metricsTuning:
       excludeMetrics:
         - prober_probe_duration_seconds.*
+  # Restores what item 0.2 removed, this time on all three clusters and with a cluster label.
+  # Feeds the dotdc "Kubernetes / System / API Server" dashboard (grafana.com 15761), whose
+  # 12 queries all filter on cluster="$cluster".
+  #
+  # >>> THE ALLOW-LIST IS MANDATORY HERE, NOT AN OPTIMISATION. <<<
+  # Unlike kube-state-metrics and cadvisor above, the chart ships NO default allow-list for
+  # the API server, and `includeMetrics: []` means keep everything. Measured against the live
+  # endpoint (`kubectl get --raw /metrics`): ~56,000 series and ~400 metric names PER CLUSTER.
+  # Enabling this bare would add ~168,000 series across the three, against a Prometheus head
+  # of ~70,900 — a 3.4x blow-up that would almost certainly OOM it.
+  #
+  # Measured cost of each option, server1 / server3:
+  #   apiserver_request_duration_seconds_bucket    12672 / 12816   <- excluded, ~38k across 3
+  #   apiserver_request_total                        673 /   650
+  #   apiserver_request_duration_seconds_count       528 /   534
+  #   apiserver_request_duration_seconds_sum         528 /   534
+  #   apiserver_requested_deprecated_apis              2 /     2
+  #   process_cpu_seconds_total                        1 /     1
+  #   process_resident_memory_bytes                    1 /     1
+  #
+  # This list is exactly the six the dashboard queries and nothing else: ~1,730 series per
+  # cluster, ~5,200 across all three, +7.3% on the head. The histogram is deliberately out —
+  # it is 7x everything else combined and no adopted dashboard reads it. If a latency
+  # distribution is ever wanted, add the _bucket back knowingly and re-check the head count.
+  apiServer:
+    enabled: true
+    metricsTuning:
+      includeMetrics:
+        - apiserver_request_total
+        - apiserver_request_duration_seconds_count
+        - apiserver_request_duration_seconds_sum
+        - apiserver_requested_deprecated_apis
+        - process_cpu_seconds_total
+        - process_resident_memory_bytes
 hostMetrics:
   enabled: true
   collector: alloy-receiver

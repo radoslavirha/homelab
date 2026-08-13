@@ -114,10 +114,8 @@ dashboardProviders:
 # indented deeper and are untouched.
 #
 # Deliberately omitted from the upstream set:
-#   k8s-system-api-server     needs clusterMetrics.apiServer, which is off — item 0.2 disabled
-#                             the Prometheus chart's apiserver job and nothing replaced it, so
-#                             apiserver_request_total does not exist and every panel is empty.
 #   k8s-addons-trivy-operator no Trivy in this cluster.
+#   k8s-addons-prometheus     not evaluated.
 dashboards:
   kubernetes:
     # grafana.com id 15757. Sourced from the repo rather than the mirror — see above.
@@ -142,6 +140,13 @@ dashboards:
     k8s-system-coredns:
       title: CoreDNS
       url: https://raw.githubusercontent.com/dotdc/grafana-dashboards-kubernetes/v3.0.6/dashboards/k8s-system-coredns.json
+    # grafana.com id 15761. Needs clusterMetrics.apiServer, enabled in k8s-monitoring.yaml with
+    # a six-name allow-list — read the cardinality note there before touching either side.
+    # This dashboard reads only _count and _sum, never _bucket, which is what makes the tight
+    # allow-list sufficient.
+    k8s-system-api-server:
+      title: API Server
+      url: https://raw.githubusercontent.com/dotdc/grafana-dashboards-kubernetes/v3.0.6/dashboards/k8s-system-api-server.json
 
   # No `title` overrides below, unlike the dotdc set above. Those needed shortening because
   # "Kubernetes / Views / Global" inside a folder named Kubernetes is redundant; these are
@@ -180,6 +185,22 @@ dashboards:
     # three clusters. Fixing it means vendoring the JSON, so it is accepted as-is for now.
     alloy-opentelemetry:
       url: https://raw.githubusercontent.com/grafana/alloy/v1.18.0/operations/alloy-mixin/rendered/dashboards/alloy-opentelemetry.json
+    # grafana/loki mixin, tag matches the running Loki. 106/106 queries cluster-filtered.
+    #
+    # EXPECT DEAD PANELS, by design rather than by mistake. The mixin targets a microservices
+    # Loki (distributor / ingester / querier / ruler as separate deployments); this is a
+    # single-binary install, so every panel scoped to a component job is empty —
+    # loki_request_duration_seconds_count here carries job="monitoring/single-binary".
+    # Roughly 19 of 38 referenced metrics are absent, all of them object-store and KV families
+    # this deployment does not use: loki_s3_*, loki_gcs_*, loki_dynamo_*, loki_azure_blob_*,
+    # loki_bigtable_*, loki_consul_*, loki_boltdb_shipper_*.
+    #
+    # What does work is the part worth having: loki_request_duration_seconds_bucket (390
+    # series), loki_distributor_{bytes,lines}_received_total, and the loki_ingester_* set
+    # (memory_streams, streams_created_total, chunks_flushed_total, chunk_utilization_bucket).
+    # Ingest rate, error rate and chunk behaviour all populate.
+    loki-operational:
+      url: https://raw.githubusercontent.com/grafana/loki/v3.7.1/production/loki-mixin-compiled/dashboards/loki-operational.json
 
   gitops:
     # argoproj/argo-cd at the tag matching the deployed chart's appVersion (chart 9.5.2).
