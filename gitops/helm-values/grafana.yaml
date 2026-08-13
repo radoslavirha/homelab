@@ -85,6 +85,30 @@ dashboardProviders:
         editable: false
         options:
           path: /var/lib/grafana/dashboards/kubernetes
+      - name: observability
+        orgId: 1
+        folder: Observability
+        type: file
+        disableDeletion: false
+        editable: false
+        options:
+          path: /var/lib/grafana/dashboards/observability
+      - name: gitops
+        orgId: 1
+        folder: GitOps
+        type: file
+        disableDeletion: false
+        editable: false
+        options:
+          path: /var/lib/grafana/dashboards/gitops
+      - name: cilium
+        orgId: 1
+        folder: Cilium
+        type: file
+        disableDeletion: false
+        editable: false
+        options:
+          path: /var/lib/grafana/dashboards/cilium
 
 # dotdc/grafana-dashboards-kubernetes, all pinned to the same tag so the set stays coherent —
 # they share template variables and cross-link by uid, so mixing versions is asking for trouble.
@@ -126,3 +150,67 @@ dashboards:
     k8s-system-coredns:
       title: CoreDNS
       url: https://raw.githubusercontent.com/dotdc/grafana-dashboards-kubernetes/v3.0.6/dashboards/k8s-system-coredns.json
+
+  # No `title` overrides below, unlike the dotdc set above. Those needed shortening because
+  # "Kubernetes / Views / Global" inside a folder named Kubernetes is redundant; these are
+  # already namespaced sensibly by upstream, and every override is a sed that can silently
+  # mis-fire on a version bump. Leave them alone.
+  #
+  # All five were screened against rule 7 of docs/grafana-dashboards-plan.md before adoption:
+  # each declares a `cluster` template variable, none carries a ${DS_*} placeholder in a panel,
+  # and none hardcodes a foreign datasource uid. Metric coverage verified by instant query.
+  observability:
+    # grafana/alloy alloy-mixin, tag matches the running Alloy exactly.
+    #
+    # NOTE the path is rendered/dashboards/, NOT dashboards/ — the latter holds .libsonnet
+    # sources. download_dashboards.sh runs `set -euf` with `curl -skf`, so pointing at a
+    # .libsonnet fails the initContainer and Grafana does not start at all.
+    #
+    # 8/8 metrics live, 7/7 queries cluster-filtered. Cleanest of the mixin set.
+    alloy-resources:
+      url: https://raw.githubusercontent.com/grafana/alloy/v1.18.0/operations/alloy-mixin/rendered/dashboards/alloy-resources.json
+    # 6/8 metrics. alloy_component_evaluation_slow_seconds and
+    # alloy_component_dependencies_wait_seconds are absent (the _bucket variant of the latter
+    # is live, 546 series), so two panels stay thin. Everything else resolves.
+    alloy-controller:
+      url: https://raw.githubusercontent.com/grafana/alloy/v1.18.0/operations/alloy-mixin/rendered/dashboards/alloy-controller.json
+    # THE dashboard that answers "is server1/server2 exporting anything at all". Their entire
+    # egress is otelcol.exporter.otlp, so the remote-write mixin dashboard cannot see them —
+    # prometheus_remote_storage_* only exists on server3.
+    #
+    # Needs item 0.10: before that allow-list widening this was 6/15 otelcol metrics, now 12/15.
+    # The 3 still missing are otelcol_exporter_send_failed_{spans,metric_points,log_records}_total,
+    # which OTel only creates on first increment — those panels are blank because nothing has
+    # failed, and will fill the moment something does. That is the intended behaviour.
+    #
+    # Known gap: ~4 http/rpc panels query *_duration_milliseconds_bucket. The live series are
+    # *_request_duration_seconds_bucket (OTel semantic-convention rename) and are present on all
+    # three clusters. Fixing it means vendoring the JSON, so it is accepted as-is for now.
+    alloy-opentelemetry:
+      url: https://raw.githubusercontent.com/grafana/alloy/v1.18.0/operations/alloy-mixin/rendered/dashboards/alloy-opentelemetry.json
+
+  gitops:
+    # argoproj/argo-cd at the tag matching the deployed chart's appVersion (chart 9.5.2).
+    # Deliberately NOT grafana.com 14584: that is still on revision 1 dated 2021-06-14, and its
+    # Prometheus panels carry datasource "-- Grafana --", which is simply wrong. 20/20 metrics.
+    #
+    # Its `cluster` variable is label_values(argocd_cluster_info, server) — ArgoCD's DESTINATION
+    # server, not the Prometheus cluster label, so only 12 of 42 queries filter on it. That is
+    # correct here rather than a gap: ArgoCD runs on server3 only (argocd_app_info is 67 series,
+    # all cluster="server3"), so there is nothing to sum across, and the variable still gives the
+    # three-way split because ArgoCD manages all three clusters from one place.
+    argocd:
+      url: https://raw.githubusercontent.com/argoproj/argo-cd/v3.3.7/examples/dashboard.json
+
+  cilium:
+    # Only ONE of the four Hubble dashboards is worth having. Note the -namespace suffix; plain
+    # hubble-network-overview.json does not exist.
+    #   hubble-dashboard.json              no cluster variable, 4/11 metrics
+    #   hubble-dns-namespace.json          0/2 metrics
+    #   hubble-l7-http-metrics-by-workload not evaluated, same L7 dependency
+    # The DNS and HTTP families are empty because L7 visibility is never engaged — the handlers
+    # are enabled in cilium-config but emit nothing without a CiliumNetworkPolicy carrying L7
+    # rules. Verified by scraping hubble-metrics:9965 directly. This one needs none of that:
+    # 4/4 metrics live, 8/8 queries cluster-filtered.
+    hubble-network-overview-namespace:
+      url: https://raw.githubusercontent.com/cilium/cilium/v1.19.2/install/kubernetes/cilium/files/hubble/dashboards/hubble-network-overview-namespace.json
