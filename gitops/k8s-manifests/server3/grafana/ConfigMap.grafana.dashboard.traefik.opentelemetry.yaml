@@ -2136,6 +2136,485 @@ data:
           ],
           "title": "Requests per Entrypoint",
           "type": "timeseries"
+        },
+        {
+          "collapsed": false,
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 76
+          },
+          "id": 23,
+          "panels": [],
+          "title": "Service level",
+          "type": "row"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "max": 1,
+              "min": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": 0
+                  },
+                  {
+                    "color": "orange",
+                    "value": 0.7
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 0.85
+                  },
+                  {
+                    "color": "green",
+                    "value": 0.94
+                  }
+                ]
+              },
+              "unit": "none",
+              "decimals": 3
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 5,
+            "w": 4,
+            "x": 0,
+            "y": 77
+          },
+          "id": 24,
+          "options": {
+            "minVizHeight": 75,
+            "minVizWidth": 75,
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "showThresholdLabels": false,
+            "showThresholdMarkers": true,
+            "sizing": "auto"
+          },
+          "pluginVersion": "12.3.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "(\n  sum(rate(traefik_service_request_duration_seconds_bucket{le=\"0.25\", k8s_cluster_name=~\"$cluster\"}[$__rate_interval]))\n  +\n  sum(rate(traefik_service_request_duration_seconds_bucket{le=\"1\", k8s_cluster_name=~\"$cluster\"}[$__rate_interval]))\n) / 2\n/ sum(rate(traefik_service_request_duration_seconds_count{k8s_cluster_name=~\"$cluster\"}[$__rate_interval]))",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Apdex score",
+          "type": "gauge",
+          "description": "Apdex with T=0.25s, so tolerating=1s. Those two `le` values are used because they exist: metrics arrive over OTLP, whose default explicit bucket boundaries are 0.005 .. 0.5, 0.75, 1, 2.5, 5, 7.5, 10. Traefik's own native buckets (0.3/1.2) that published Traefik dashboards assume are NOT present here. Verify with label_values(traefik_service_request_duration_seconds_bucket, le) before changing T."
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "max": 1,
+              "min": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": 0
+                  },
+                  {
+                    "color": "orange",
+                    "value": 0.99
+                  },
+                  {
+                    "color": "green",
+                    "value": 0.995
+                  }
+                ]
+              },
+              "unit": "percentunit",
+              "decimals": 4
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 5,
+            "w": 4,
+            "x": 4,
+            "y": 77
+          },
+          "id": 25,
+          "options": {
+            "minVizHeight": 75,
+            "minVizWidth": 75,
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "showThresholdLabels": false,
+            "showThresholdMarkers": true,
+            "sizing": "auto"
+          },
+          "pluginVersion": "12.3.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "sum(rate(traefik_service_requests_total{code!~\"5..\", k8s_cluster_name=~\"$cluster\"}[$__rate_interval]))\n/\nsum(rate(traefik_service_requests_total{k8s_cluster_name=~\"$cluster\"}[$__rate_interval]))",
+              "range": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Success rate",
+          "type": "gauge",
+          "description": "Share of requests Traefik did not answer with 5xx. 4xx counts as success on purpose - a 404 is the client's problem, not the platform's."
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": 0
+                  }
+                ]
+              },
+              "decimals": 0
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 5,
+            "w": 3,
+            "x": 8,
+            "y": 77
+          },
+          "id": 26,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "percentChangeColorMode": "standard",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "showPercentChange": false,
+            "textMode": "auto",
+            "wideLayout": true
+          },
+          "pluginVersion": "12.3.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "count(traefik_config_last_reload_success_milliseconds{k8s_cluster_name=~\"$cluster\"})",
+              "range": false,
+              "refId": "A",
+              "instant": true,
+              "format": "time_series"
+            }
+          ],
+          "title": "Traefik instances",
+          "type": "stat",
+          "description": "One series per running Traefik. Expect 1 per cluster, so 3 with the cluster variable set to All. A drop here means an instance stopped reporting, which the per-service panels cannot show because they aggregate."
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": 0
+                  }
+                ]
+              },
+              "decimals": 0
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 5,
+            "w": 13,
+            "x": 11,
+            "y": 77
+          },
+          "id": 27,
+          "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "percentChangeColorMode": "standard",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "showPercentChange": false,
+            "textMode": "auto",
+            "wideLayout": true
+          },
+          "pluginVersion": "12.3.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "sum(increase(traefik_service_requests_total{code=~\"2..\", k8s_cluster_name=~\"$cluster\"}[$__range]))",
+              "range": false,
+              "refId": "A",
+              "instant": true,
+              "format": "time_series",
+              "legendFormat": "2xx"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "sum(increase(traefik_service_requests_total{code=~\"3..\", k8s_cluster_name=~\"$cluster\"}[$__range]))",
+              "range": false,
+              "refId": "B",
+              "instant": true,
+              "format": "time_series",
+              "legendFormat": "3xx"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "sum(increase(traefik_service_requests_total{code=~\"4..\", k8s_cluster_name=~\"$cluster\"}[$__range]))",
+              "range": false,
+              "refId": "C",
+              "instant": true,
+              "format": "time_series",
+              "legendFormat": "4xx"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "sum(increase(traefik_service_requests_total{code=~\"5..\", k8s_cluster_name=~\"$cluster\"}[$__range]))",
+              "range": false,
+              "refId": "D",
+              "instant": true,
+              "format": "time_series",
+              "legendFormat": "5xx"
+            }
+          ],
+          "title": "Responses by class (range)",
+          "type": "stat",
+          "description": "Totals over the dashboard's selected time range, so the numbers move with the time picker."
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "continuous-GrYlRd"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": 0
+                  }
+                ]
+              },
+              "unit": "reqps",
+              "decimals": 2
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 9,
+            "w": 12,
+            "x": 0,
+            "y": 82
+          },
+          "id": 28,
+          "options": {
+            "displayMode": "gradient",
+            "maxVizHeight": 300,
+            "minVizHeight": 16,
+            "minVizWidth": 8,
+            "namePlacement": "auto",
+            "orientation": "horizontal",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "showUnfilled": true,
+            "sizing": "auto",
+            "valueMode": "color"
+          },
+          "pluginVersion": "12.3.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "topk(10, sum by (service) (rate(traefik_service_requests_total{k8s_cluster_name=~\"$cluster\"}[$__rate_interval])))",
+              "range": false,
+              "refId": "A",
+              "instant": true,
+              "format": "time_series",
+              "legendFormat": "{{service}}"
+            }
+          ],
+          "title": "Most requested services",
+          "type": "bargauge",
+          "description": "Top 10 backends by request rate."
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "continuous-GrYlRd"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": 0
+                  }
+                ]
+              },
+              "unit": "s",
+              "decimals": 3
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 9,
+            "w": 12,
+            "x": 12,
+            "y": 82
+          },
+          "id": 29,
+          "options": {
+            "displayMode": "gradient",
+            "maxVizHeight": 300,
+            "minVizHeight": 16,
+            "minVizWidth": 8,
+            "namePlacement": "auto",
+            "orientation": "horizontal",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "showUnfilled": true,
+            "sizing": "auto",
+            "valueMode": "color"
+          },
+          "pluginVersion": "12.3.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "topk(10,\n  histogram_quantile(0.95,\n    sum by (service, le) (rate(traefik_service_request_duration_seconds_bucket{k8s_cluster_name=~\"$cluster\"}[$__rate_interval]))\n  )\n  and\n  sum by (service) (rate(traefik_service_request_duration_seconds_count{k8s_cluster_name=~\"$cluster\"}[$__rate_interval])) > 0\n)",
+              "range": false,
+              "refId": "A",
+              "instant": true,
+              "format": "time_series",
+              "legendFormat": "{{service}}"
+            }
+          ],
+          "title": "Top slow services (p95)",
+          "type": "bargauge",
+          "description": "95th percentile latency per backend, top 10. Resolution is limited by the OTLP bucket boundaries listed on the Apdex panel - with a 0.5s and a 0.75s bucket and nothing between, p95 in that band is interpolated, not measured. The `and ... count > 0` guard is load-bearing: histogram_quantile returns NaN for a service with no requests in the window, and topk ranks that NaN, so without the guard an idle backend displaces a real one from the top 10."
         }
       ],
       "preload": false,
@@ -2176,5 +2655,6 @@ data:
       "title": "Traefik Opentelemetry",
       "uid": "adbp9s4",
       "version": 1,
-      "weekStart": ""
+      "weekStart": "",
+      "description": "Traefik logs, traces and metrics, correlated. Filters on k8s_cluster_name, NOT cluster. Traefik exports over OTLP, so its series carry the OTLP resource label k8s_cluster_name; the `cluster` label that Alloy stamps on scraped targets is also present with identical values, but k8s_cluster_name is what the Loki side uses, so both halves of this dashboard share one variable. Do not 'fix' these queries to cluster=. Also note traefik_open_connections arrives as traefik_open_connections_ratio here: the OTLP-to-Prometheus translation suffixes dimensionless gauges. That naming is why the official Traefik dashboard (grafana.com 17347) does not work against this stack."
     }
