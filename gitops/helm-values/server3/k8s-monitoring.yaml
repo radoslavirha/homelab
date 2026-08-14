@@ -133,3 +133,24 @@ destinations:
       enabled: false
     traces:
       enabled: true
+    # MUST be empty, for exactly the reason spelled out on the loki destination above —
+    # this one was missed when that was fixed. The default [cluster, k8s.cluster.name]
+    # renders an UNCONDITIONAL `set(attributes["cluster"], "server3")` into this
+    # destination's trace transform, and every span from every cluster passes through it.
+    # server1 and server2 stamp their own spans correctly on the way out (their
+    # alloy-receiver config, trace_statements/resource), and server3 was overwriting it.
+    #
+    # Symptom, found 2026-08-14: miot-bridge-api runs ONLY on server1 and server2, and
+    # every one of its spans in Tempo carried k8s.cluster.name=server3. A 24h tag query
+    # returned exactly one value for both attributes. So traces_spanmetrics_* had no
+    # usable cluster dimension, and a trace opened from a server1 log claimed to be a
+    # server3 trace.
+    clusterLabels: []
+    processors:
+      transform:
+        traces:
+          resource:
+            # Guarded. server1/server2 arrive already stamped; only server3's own spans
+            # reach here without a cluster attribute.
+            - 'set(attributes["cluster"], "server3") where attributes["cluster"] == nil'
+            - 'set(attributes["k8s.cluster.name"], "server3") where attributes["k8s.cluster.name"] == nil'
