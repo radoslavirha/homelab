@@ -5,6 +5,19 @@ defaultSettings:
   defaultDataLocality: best-effort
   backupTarget: ""
 
+# defaultSettings above is NOT what the `longhorn` StorageClass uses. The chart renders
+# the StorageClass from a ConfigMap (longhorn-storageclass) built out of persistence.*,
+# and a parameter set there wins over the global default setting. Without these two the
+# StorageClass ships numberOfReplicas: "3" and dataLocality: "disabled" — so on these
+# single-node clusters every volume asks for three replicas, exactly one is schedulable,
+# and all of them sit at robustness: degraded permanently. That is not a cosmetic status:
+# it destroys the signal, because a genuinely degraded volume looks identical to the
+# eleven that are fine. Found 2026-08-14 via the Platform dashboard's Healthy volumes
+# panel reading 0 on all three clusters.
+persistence:
+  defaultClassReplicaCount: 1
+  defaultDataLocality: best-effort
+
 longhornManager:
   tolerations: []
   # Manager metrics live on the longhorn-backend Service, port 9500 (port name "manager").
