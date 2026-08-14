@@ -1,0 +1,2975 @@
+---
+# Platform — Storage, Network & Telemetry (hand-built)
+#
+# Longhorn, Cilium/Hubble, Tempo and Loki in one cluster-scoped view. Hand-built
+# rather than adopted from upstream, because every published dashboard for these
+# five is either cluster-blind or written against a metric shape this stack does
+# not produce — see docs/observability.md, "Dashboards".
+#
+# Every metric, label and label VALUE below was verified with an instant query
+# against live Prometheus before the panel was written. Two of those checks
+# changed the design:
+#
+#   longhorn_volume_state / longhorn_volume_robustness are 0/1 flags carried on a
+#   `state` label, not the old numeric encoding (1=healthy, 2=degraded...).
+#   grafana.com 16888 ORs both forms but spells the label `robustness`, which
+#   does not exist here — so it reports every degraded volume as healthy.
+#
+#   Hubble counters carry verdict / type / protocol / subtype / reason but NOT
+#   source_namespace / destination_namespace, so nothing here filters on those.
+#
+# The `cluster` variable is multi-select with All. Every query aggregates
+# `by (cluster, ...)`, so All splits per cluster instead of silently summing
+# three clusters into one line.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-platform
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+  annotations:
+    argocd.argoproj.io/sync-wave: "-50"
+    grafana_folder: "Platform"
+data:
+  platform.json: |
+    {
+      "annotations": {
+        "list": []
+      },
+      "editable": true,
+      "graphTooltip": 1,
+      "links": [],
+      "panels": [
+        {
+          "type": "row",
+          "title": "Storage — Longhorn",
+          "id": 42,
+          "collapsed": false,
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 0
+          },
+          "panels": []
+        },
+        {
+          "type": "stat",
+          "title": "Attached volumes",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "id": 1,
+          "gridPos": {
+            "h": 4,
+            "w": 4,
+            "x": 0,
+            "y": 1
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "sum by (cluster) (longhorn_volume_state{state=\"attached\",cluster=~\"$cluster\"})",
+              "refId": "A",
+              "range": true,
+              "instant": false,
+              "legendFormat": "{{cluster}}"
+            }
+          ],
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "description": "longhorn_volume_state is a 0/1 flag per state label, NOT the old numeric encoding. Summing the state=\"attached\" series is the count."
+        },
+        {
+          "type": "stat",
+          "title": "Healthy volumes",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "id": 2,
+          "gridPos": {
+            "h": 4,
+            "w": 4,
+            "x": 4,
+            "y": 1
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "sum by (cluster) (longhorn_volume_robustness{state=\"healthy\",cluster=~\"$cluster\"})",
+              "refId": "A",
+              "range": true,
+              "instant": false,
+              "legendFormat": "{{cluster}}"
+            }
+          ],
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": 1
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "type": "stat",
+          "title": "Degraded volumes",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "id": 3,
+          "gridPos": {
+            "h": 4,
+            "w": 4,
+            "x": 8,
+            "y": 1
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "sum by (cluster) (longhorn_volume_robustness{state=\"degraded\",cluster=~\"$cluster\"})",
+              "refId": "A",
+              "range": true,
+              "instant": false,
+              "legendFormat": "{{cluster}}"
+            }
+          ],
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 1
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "description": "Permanently non-zero while the longhorn StorageClass asks for 3 replicas on single-node clusters. See docs/observability.md."
+        },
+        {
+          "type": "stat",
+          "title": "Faulted volumes",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "id": 4,
+          "gridPos": {
+            "h": 4,
+            "w": 4,
+            "x": 12,
+            "y": 1
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "sum by (cluster) (longhorn_volume_robustness{state=\"faulted\",cluster=~\"$cluster\"})",
+              "refId": "A",
+              "range": true,
+              "instant": false,
+              "legendFormat": "{{cluster}}"
+            }
+          ],
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 1
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "type": "stat",
+          "title": "Nodes ready",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "id": 5,
+          "gridPos": {
+            "h": 4,
+            "w": 4,
+            "x": 16,
+            "y": 1
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "sum by (cluster) (longhorn_node_status{condition=\"ready\",cluster=~\"$cluster\"})",
+              "refId": "A",
+              "range": true,
+              "instant": false,
+              "legendFormat": "{{cluster}}"
+            }
+          ],
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": 1
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "type": "stat",
+          "title": "Volumes with no backup",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "id": 6,
+          "gridPos": {
+            "h": 4,
+            "w": 4,
+            "x": 20,
+            "y": 1
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "sum by (cluster) (longhorn_volume_last_backup_at{pvc!=\"\",cluster=~\"$cluster\"} == bool 0)",
+              "refId": "A",
+              "range": true,
+              "instant": false,
+              "legendFormat": "{{cluster}}"
+            }
+          ],
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 1
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "description": "No backupTarget is configured, so this is every volume. It becomes a real signal the moment backups are turned on."
+        },
+        {
+          "type": "timeseries",
+          "title": "Node storage used",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "id": 7,
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 5
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "100 * sum by (cluster, node) (longhorn_node_storage_usage_bytes{cluster=~\"$cluster\"}) / sum by (cluster, node) (longhorn_node_storage_capacity_bytes{cluster=~\"$cluster\"})",
+              "refId": "A",
+              "range": true,
+              "instant": false,
+              "legendFormat": "{{cluster}} {{node}}"
+            }
+          ],
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "percent",
+              "min": 0,
+              "max": 100
+            },
+            "overrides": []
+          }
+        },
+        {
+          "type": "timeseries",
+          "title": "Disk used",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "id": 8,
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 5
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "100 * longhorn_disk_usage_bytes{cluster=~\"$cluster\"} / longhorn_disk_capacity_bytes{cluster=~\"$cluster\"}",
+              "refId": "A",
+              "range": true,
+              "instant": false,
+              "legendFormat": "{{cluster}} {{node}} {{disk}}"
+            }
+          ],
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "percent",
+              "min": 0,
+              "max": 100
+            },
+            "overrides": []
+          }
+        },
+        {
+          "type": "bargauge",
+          "title": "Volume used vs capacity",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "id": 9,
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 0,
+            "y": 13
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "100 * longhorn_volume_actual_size_bytes{cluster=~\"$cluster\"} / longhorn_volume_capacity_bytes{cluster=~\"$cluster\"}",
+              "refId": "A",
+              "range": false,
+              "instant": true,
+              "legendFormat": "{{cluster}} {{pvc_namespace}}/{{pvc}}"
+            }
+          ],
+          "description": "Longhorn-reported actual size, i.e. blocks allocated — not filesystem usage. kubelet_volume_stats_* is the filesystem view.",
+          "options": {
+            "displayMode": "gradient",
+            "orientation": "horizontal",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "showUnfilled": true,
+            "valueMode": "color"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "max": 100,
+              "min": 0,
+              "unit": "percent",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 75
+                  },
+                  {
+                    "color": "red",
+                    "value": 90
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "type": "timeseries",
+          "title": "Volume IOPS",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "id": 10,
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 8,
+            "y": 13
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "sum by (cluster, pvc) (longhorn_volume_read_iops{cluster=~\"$cluster\"})",
+              "refId": "A",
+              "range": true,
+              "instant": false,
+              "legendFormat": "{{cluster}} {{pvc}} read"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "sum by (cluster, pvc) (longhorn_volume_write_iops{cluster=~\"$cluster\"})",
+              "refId": "B",
+              "range": true,
+              "instant": false,
+              "legendFormat": "{{cluster}} {{pvc}} write"
+            }
+          ],
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "iops"
+            },
+            "overrides": []
+          }
+        },
+        {
+          "type": "timeseries",
+          "title": "Volume throughput",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "id": 11,
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 16,
+            "y": 13
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "sum by (cluster, pvc) (longhorn_volume_read_throughput{cluster=~\"$cluster\"})",
+              "refId": "A",
+              "range": true,
+              "instant": false,
+              "legendFormat": "{{cluster}} {{pvc}} read"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "sum by (cluster, pvc) (longhorn_volume_write_throughput{cluster=~\"$cluster\"})",
+              "refId": "B",
+              "range": true,
+              "instant": false,
+              "legendFormat": "{{cluster}} {{pvc}} write"
+            }
+          ],
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "Bps"
+            },
+            "overrides": []
+          }
+        },
+        {
+          "type": "timeseries",
+          "title": "Volume latency",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "id": 12,
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 21
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "max by (cluster, pvc) (longhorn_volume_read_latency{cluster=~\"$cluster\"})",
+              "refId": "A",
+              "range": true,
+              "instant": false,
+              "legendFormat": "{{cluster}} {{pvc}} read"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "max by (cluster, pvc) (longhorn_volume_write_latency{cluster=~\"$cluster\"})",
+              "refId": "B",
+              "range": true,
+              "instant": false,
+              "legendFormat": "{{cluster}} {{pvc}} write"
+            }
+          ],
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "ns"
+            },
+            "overrides": []
+          },
+          "description": "Longhorn reports volume latency in nanoseconds (per its own HELP text)."
+        },
+        {
+          "type": "timeseries",
+          "title": "Replicas by state",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "id": 13,
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 21
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "sum by (cluster, state) (longhorn_replica_state{cluster=~\"$cluster\"})",
+              "refId": "A",
+              "range": true,
+              "instant": false,
+              "legendFormat": "{{cluster}} {{state}}"
+            }
+          ],
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "stacking": {
+                  "group": "A",
+                  "mode": "normal"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "description": "Same 0/1-per-state-label shape as volume state. running is the only healthy value."
+        },
+        {
+          "type": "row",
+          "title": "Network — Cilium & Hubble",
+          "id": 43,
+          "collapsed": true,
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 29
+          },
+          "panels": [
+            {
+              "type": "stat",
+              "title": "Agent errors",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "id": 14,
+              "gridPos": {
+                "h": 4,
+                "w": 4,
+                "x": 0,
+                "y": 30
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "prometheus"
+                  },
+                  "editorMode": "code",
+                  "expr": "sum by (cluster) (rate(cilium_errors_warnings_total{level=\"ERROR\",cluster=~\"$cluster\"}[$__rate_interval]))",
+                  "refId": "A",
+                  "range": true,
+                  "instant": false,
+                  "legendFormat": "{{cluster}}"
+                }
+              ],
+              "options": {
+                "colorMode": "value",
+                "graphMode": "area",
+                "justifyMode": "auto",
+                "orientation": "auto",
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ],
+                  "fields": "",
+                  "values": false
+                },
+                "textMode": "auto"
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "thresholds"
+                  },
+                  "mappings": [],
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      },
+                      {
+                        "color": "red",
+                        "value": 0.01
+                      }
+                    ]
+                  },
+                  "unit": "/s",
+                  "decimals": 3
+                },
+                "overrides": []
+              }
+            },
+            {
+              "type": "stat",
+              "title": "Failing controllers",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "id": 15,
+              "gridPos": {
+                "h": 4,
+                "w": 4,
+                "x": 4,
+                "y": 30
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "prometheus"
+                  },
+                  "editorMode": "code",
+                  "expr": "sum by (cluster) (cilium_controllers_failing{cluster=~\"$cluster\"})",
+                  "refId": "A",
+                  "range": true,
+                  "instant": false,
+                  "legendFormat": "{{cluster}}"
+                }
+              ],
+              "options": {
+                "colorMode": "value",
+                "graphMode": "area",
+                "justifyMode": "auto",
+                "orientation": "auto",
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ],
+                  "fields": "",
+                  "values": false
+                },
+                "textMode": "auto"
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "thresholds"
+                  },
+                  "mappings": [],
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      },
+                      {
+                        "color": "red",
+                        "value": 1
+                      }
+                    ]
+                  }
+                },
+                "overrides": []
+              }
+            },
+            {
+              "type": "stat",
+              "title": "Unreachable nodes",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "id": 16,
+              "gridPos": {
+                "h": 4,
+                "w": 4,
+                "x": 8,
+                "y": 30
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "prometheus"
+                  },
+                  "editorMode": "code",
+                  "expr": "sum by (cluster) (cilium_unreachable_nodes{cluster=~\"$cluster\"})",
+                  "refId": "A",
+                  "range": true,
+                  "instant": false,
+                  "legendFormat": "{{cluster}}"
+                }
+              ],
+              "options": {
+                "colorMode": "value",
+                "graphMode": "area",
+                "justifyMode": "auto",
+                "orientation": "auto",
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ],
+                  "fields": "",
+                  "values": false
+                },
+                "textMode": "auto"
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "thresholds"
+                  },
+                  "mappings": [],
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      },
+                      {
+                        "color": "red",
+                        "value": 1
+                      }
+                    ]
+                  }
+                },
+                "overrides": []
+              }
+            },
+            {
+              "type": "stat",
+              "title": "Unreachable health endpoints",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "id": 17,
+              "gridPos": {
+                "h": 4,
+                "w": 4,
+                "x": 12,
+                "y": 30
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "prometheus"
+                  },
+                  "editorMode": "code",
+                  "expr": "sum by (cluster) (cilium_unreachable_health_endpoints{cluster=~\"$cluster\"})",
+                  "refId": "A",
+                  "range": true,
+                  "instant": false,
+                  "legendFormat": "{{cluster}}"
+                }
+              ],
+              "options": {
+                "colorMode": "value",
+                "graphMode": "area",
+                "justifyMode": "auto",
+                "orientation": "auto",
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ],
+                  "fields": "",
+                  "values": false
+                },
+                "textMode": "auto"
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "thresholds"
+                  },
+                  "mappings": [],
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      },
+                      {
+                        "color": "red",
+                        "value": 1
+                      }
+                    ]
+                  }
+                },
+                "overrides": []
+              }
+            },
+            {
+              "type": "stat",
+              "title": "Identities",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "id": 18,
+              "gridPos": {
+                "h": 4,
+                "w": 4,
+                "x": 16,
+                "y": 30
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "prometheus"
+                  },
+                  "editorMode": "code",
+                  "expr": "sum by (cluster) (cilium_identity{cluster=~\"$cluster\"})",
+                  "refId": "A",
+                  "range": true,
+                  "instant": false,
+                  "legendFormat": "{{cluster}}"
+                }
+              ],
+              "options": {
+                "colorMode": "value",
+                "graphMode": "area",
+                "justifyMode": "auto",
+                "orientation": "auto",
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ],
+                  "fields": "",
+                  "values": false
+                },
+                "textMode": "auto"
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "thresholds"
+                  },
+                  "mappings": [],
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      }
+                    ]
+                  }
+                },
+                "overrides": []
+              }
+            },
+            {
+              "type": "stat",
+              "title": "IPv4 addresses allocated",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "id": 19,
+              "gridPos": {
+                "h": 4,
+                "w": 4,
+                "x": 20,
+                "y": 30
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "prometheus"
+                  },
+                  "editorMode": "code",
+                  "expr": "sum by (cluster) (cilium_ip_addresses{family=\"ipv4\",cluster=~\"$cluster\"})",
+                  "refId": "A",
+                  "range": true,
+                  "instant": false,
+                  "legendFormat": "{{cluster}}"
+                }
+              ],
+              "options": {
+                "colorMode": "value",
+                "graphMode": "area",
+                "justifyMode": "auto",
+                "orientation": "auto",
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ],
+                  "fields": "",
+                  "values": false
+                },
+                "textMode": "auto"
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "thresholds"
+                  },
+                  "mappings": [],
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      }
+                    ]
+                  }
+                },
+                "overrides": []
+              }
+            },
+            {
+              "type": "timeseries",
+              "title": "Endpoints by state",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "id": 20,
+              "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 34
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "prometheus"
+                  },
+                  "editorMode": "code",
+                  "expr": "sum by (cluster, endpoint_state) (cilium_endpoint_state{cluster=~\"$cluster\"})",
+                  "refId": "A",
+                  "range": true,
+                  "instant": false,
+                  "legendFormat": "{{cluster}} {{endpoint_state}}"
+                }
+              ],
+              "options": {
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "drawStyle": "line",
+                    "fillOpacity": 10,
+                    "lineWidth": 1,
+                    "showPoints": "never",
+                    "stacking": {
+                      "group": "A",
+                      "mode": "normal"
+                    }
+                  },
+                  "mappings": [],
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      }
+                    ]
+                  }
+                },
+                "overrides": []
+              },
+              "description": "Anything parked outside ready — waiting-for-identity, waiting-to-regenerate — is a datapath problem."
+            },
+            {
+              "type": "timeseries",
+              "title": "Policy enforcement by endpoint",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "id": 21,
+              "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 34
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "prometheus"
+                  },
+                  "editorMode": "code",
+                  "expr": "sum by (cluster, enforcement) (cilium_policy_endpoint_enforcement_status{cluster=~\"$cluster\"})",
+                  "refId": "A",
+                  "range": true,
+                  "instant": false,
+                  "legendFormat": "{{cluster}} {{enforcement}}"
+                }
+              ],
+              "options": {
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "drawStyle": "line",
+                    "fillOpacity": 10,
+                    "lineWidth": 1,
+                    "showPoints": "never",
+                    "stacking": {
+                      "group": "A",
+                      "mode": "normal"
+                    }
+                  },
+                  "mappings": [],
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      }
+                    ]
+                  }
+                },
+                "overrides": []
+              }
+            },
+            {
+              "type": "timeseries",
+              "title": "Datapath drops",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "id": 22,
+              "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 42
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "prometheus"
+                  },
+                  "editorMode": "code",
+                  "expr": "sum by (cluster, reason, direction) (rate(cilium_drop_count_total{cluster=~\"$cluster\"}[$__rate_interval]))",
+                  "refId": "A",
+                  "range": true,
+                  "instant": false,
+                  "legendFormat": "{{cluster}} {{direction}} {{reason}}"
+                }
+              ],
+              "options": {
+                "legend": {
+                  "calcs": [
+                    "lastNotNull",
+                    "max"
+                  ],
+                  "displayMode": "table",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "drawStyle": "line",
+                    "fillOpacity": 10,
+                    "lineWidth": 1,
+                    "showPoints": "never",
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    }
+                  },
+                  "mappings": [],
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      }
+                    ]
+                  },
+                  "unit": "pps"
+                },
+                "overrides": []
+              }
+            },
+            {
+              "type": "timeseries",
+              "title": "Datapath forwarded",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "id": 23,
+              "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 42
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "prometheus"
+                  },
+                  "editorMode": "code",
+                  "expr": "sum by (cluster, direction) (rate(cilium_forward_count_total{cluster=~\"$cluster\"}[$__rate_interval]))",
+                  "refId": "A",
+                  "range": true,
+                  "instant": false,
+                  "legendFormat": "{{cluster}} {{direction}}"
+                }
+              ],
+              "options": {
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "drawStyle": "line",
+                    "fillOpacity": 10,
+                    "lineWidth": 1,
+                    "showPoints": "never",
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    }
+                  },
+                  "mappings": [],
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      }
+                    ]
+                  },
+                  "unit": "pps"
+                },
+                "overrides": []
+              }
+            },
+            {
+              "type": "timeseries",
+              "title": "BPF map pressure",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "id": 24,
+              "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 50
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "prometheus"
+                  },
+                  "editorMode": "code",
+                  "expr": "max by (cluster, map_name) (cilium_bpf_map_pressure{cluster=~\"$cluster\"})",
+                  "refId": "A",
+                  "range": true,
+                  "instant": false,
+                  "legendFormat": "{{cluster}} {{map_name}}"
+                }
+              ],
+              "options": {
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "drawStyle": "line",
+                    "fillOpacity": 10,
+                    "lineWidth": 1,
+                    "showPoints": "never",
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    }
+                  },
+                  "mappings": [],
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      }
+                    ]
+                  },
+                  "unit": "percentunit",
+                  "min": 0,
+                  "max": 1
+                },
+                "overrides": []
+              },
+              "description": "Fraction of each BPF map in use. Sustained >0.8 on ct4_global means conntrack is about to start evicting."
+            },
+            {
+              "type": "timeseries",
+              "title": "Conntrack entries (alive)",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "id": 25,
+              "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 50
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "prometheus"
+                  },
+                  "editorMode": "code",
+                  "expr": "sum by (cluster, family, protocol) (cilium_datapath_conntrack_gc_entries{status=\"alive\",cluster=~\"$cluster\"})",
+                  "refId": "A",
+                  "range": true,
+                  "instant": false,
+                  "legendFormat": "{{cluster}} {{family}} {{protocol}}"
+                }
+              ],
+              "options": {
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "drawStyle": "line",
+                    "fillOpacity": 10,
+                    "lineWidth": 1,
+                    "showPoints": "never",
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    }
+                  },
+                  "mappings": [],
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      }
+                    ]
+                  }
+                },
+                "overrides": []
+              }
+            },
+            {
+              "type": "timeseries",
+              "title": "Hubble flows by verdict",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "id": 26,
+              "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 58
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "prometheus"
+                  },
+                  "editorMode": "code",
+                  "expr": "sum by (cluster, verdict) (rate(hubble_flows_processed_total{cluster=~\"$cluster\"}[$__rate_interval]))",
+                  "refId": "A",
+                  "range": true,
+                  "instant": false,
+                  "legendFormat": "{{cluster}} {{verdict}}"
+                }
+              ],
+              "options": {
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "drawStyle": "line",
+                    "fillOpacity": 10,
+                    "lineWidth": 1,
+                    "showPoints": "never",
+                    "stacking": {
+                      "group": "A",
+                      "mode": "normal"
+                    }
+                  },
+                  "mappings": [],
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      }
+                    ]
+                  },
+                  "unit": "flows/s"
+                },
+                "overrides": []
+              }
+            },
+            {
+              "type": "timeseries",
+              "title": "Hubble drops by reason",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "id": 27,
+              "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 58
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "prometheus"
+                  },
+                  "editorMode": "code",
+                  "expr": "sum by (cluster, reason, protocol) (rate(hubble_drop_total{cluster=~\"$cluster\"}[$__rate_interval]))",
+                  "refId": "A",
+                  "range": true,
+                  "instant": false,
+                  "legendFormat": "{{cluster}} {{protocol}} {{reason}}"
+                }
+              ],
+              "options": {
+                "legend": {
+                  "calcs": [
+                    "lastNotNull",
+                    "max"
+                  ],
+                  "displayMode": "table",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "drawStyle": "line",
+                    "fillOpacity": 10,
+                    "lineWidth": 1,
+                    "showPoints": "never",
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    }
+                  },
+                  "mappings": [],
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      }
+                    ]
+                  },
+                  "unit": "flows/s"
+                },
+                "overrides": []
+              }
+            },
+            {
+              "type": "timeseries",
+              "title": "TCP flags observed",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "id": 28,
+              "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 66
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "prometheus"
+                  },
+                  "editorMode": "code",
+                  "expr": "sum by (cluster, flag) (rate(hubble_tcp_flags_total{cluster=~\"$cluster\"}[$__rate_interval]))",
+                  "refId": "A",
+                  "range": true,
+                  "instant": false,
+                  "legendFormat": "{{cluster}} {{flag}}"
+                }
+              ],
+              "options": {
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "drawStyle": "line",
+                    "fillOpacity": 10,
+                    "lineWidth": 1,
+                    "showPoints": "never",
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    }
+                  },
+                  "mappings": [],
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      }
+                    ]
+                  },
+                  "unit": "pps"
+                },
+                "overrides": []
+              },
+              "description": "A rising RST share against a flat SYN share is the usual first sign of a backend refusing connections."
+            },
+            {
+              "type": "timeseries",
+              "title": "Hubble events lost",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "id": 29,
+              "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 66
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "prometheus"
+                  },
+                  "editorMode": "code",
+                  "expr": "sum by (cluster, source) (rate(hubble_lost_events_total{cluster=~\"$cluster\"}[$__rate_interval]))",
+                  "refId": "A",
+                  "range": true,
+                  "instant": false,
+                  "legendFormat": "{{cluster}} {{source}}"
+                }
+              ],
+              "options": {
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "drawStyle": "line",
+                    "fillOpacity": 10,
+                    "lineWidth": 1,
+                    "showPoints": "never",
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    }
+                  },
+                  "mappings": [],
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      }
+                    ]
+                  },
+                  "unit": "/s"
+                },
+                "overrides": []
+              },
+              "description": "Observer ring-buffer overflow. Non-zero means the flow counters above are undercounting."
+            }
+          ]
+        },
+        {
+          "type": "row",
+          "title": "Telemetry — Tempo & Loki (server3)",
+          "id": 44,
+          "collapsed": true,
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 30
+          },
+          "panels": [
+            {
+              "type": "stat",
+              "title": "Spans received",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "id": 30,
+              "gridPos": {
+                "h": 4,
+                "w": 4,
+                "x": 0,
+                "y": 31
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "prometheus"
+                  },
+                  "editorMode": "code",
+                  "expr": "sum by (cluster) (rate(tempo_distributor_spans_received_total{cluster=~\"$cluster\"}[$__rate_interval]))",
+                  "refId": "A",
+                  "range": true,
+                  "instant": false,
+                  "legendFormat": "{{cluster}}"
+                }
+              ],
+              "options": {
+                "colorMode": "value",
+                "graphMode": "area",
+                "justifyMode": "auto",
+                "orientation": "auto",
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ],
+                  "fields": "",
+                  "values": false
+                },
+                "textMode": "auto"
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "thresholds"
+                  },
+                  "mappings": [],
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      }
+                    ]
+                  },
+                  "unit": "/s",
+                  "decimals": 1
+                },
+                "overrides": []
+              }
+            },
+            {
+              "type": "stat",
+              "title": "Spans discarded",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "id": 31,
+              "gridPos": {
+                "h": 4,
+                "w": 4,
+                "x": 4,
+                "y": 31
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "prometheus"
+                  },
+                  "editorMode": "code",
+                  "expr": "sum by (cluster) (rate(tempo_discarded_spans_total{cluster=~\"$cluster\"}[$__rate_interval]))",
+                  "refId": "A",
+                  "range": true,
+                  "instant": false,
+                  "legendFormat": "{{cluster}}"
+                }
+              ],
+              "options": {
+                "colorMode": "value",
+                "graphMode": "area",
+                "justifyMode": "auto",
+                "orientation": "auto",
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ],
+                  "fields": "",
+                  "values": false
+                },
+                "textMode": "auto"
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "thresholds"
+                  },
+                  "mappings": [],
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      },
+                      {
+                        "color": "red",
+                        "value": 0.01
+                      }
+                    ]
+                  },
+                  "unit": "/s",
+                  "decimals": 3
+                },
+                "overrides": []
+              }
+            },
+            {
+              "type": "stat",
+              "title": "Generator active series",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "id": 32,
+              "gridPos": {
+                "h": 4,
+                "w": 4,
+                "x": 8,
+                "y": 31
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "prometheus"
+                  },
+                  "editorMode": "code",
+                  "expr": "sum by (cluster) (tempo_metrics_generator_registry_active_series{cluster=~\"$cluster\"})",
+                  "refId": "A",
+                  "range": true,
+                  "instant": false,
+                  "legendFormat": "{{cluster}}"
+                }
+              ],
+              "options": {
+                "colorMode": "value",
+                "graphMode": "area",
+                "justifyMode": "auto",
+                "orientation": "auto",
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ],
+                  "fields": "",
+                  "values": false
+                },
+                "textMode": "auto"
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "thresholds"
+                  },
+                  "mappings": [],
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      }
+                    ]
+                  }
+                },
+                "overrides": []
+              },
+              "description": "Series the span-metrics/service-graph processors are remote-writing into Prometheus (item 0.1)."
+            },
+            {
+              "type": "stat",
+              "title": "Blocklist length",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "id": 33,
+              "gridPos": {
+                "h": 4,
+                "w": 4,
+                "x": 12,
+                "y": 31
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "prometheus"
+                  },
+                  "editorMode": "code",
+                  "expr": "sum by (cluster) (tempodb_blocklist_length{cluster=~\"$cluster\"})",
+                  "refId": "A",
+                  "range": true,
+                  "instant": false,
+                  "legendFormat": "{{cluster}}"
+                }
+              ],
+              "options": {
+                "colorMode": "value",
+                "graphMode": "area",
+                "justifyMode": "auto",
+                "orientation": "auto",
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ],
+                  "fields": "",
+                  "values": false
+                },
+                "textMode": "auto"
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "thresholds"
+                  },
+                  "mappings": [],
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      }
+                    ]
+                  }
+                },
+                "overrides": []
+              }
+            },
+            {
+              "type": "stat",
+              "title": "Log lines received",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "id": 34,
+              "gridPos": {
+                "h": 4,
+                "w": 4,
+                "x": 16,
+                "y": 31
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "prometheus"
+                  },
+                  "editorMode": "code",
+                  "expr": "sum by (cluster) (rate(loki_distributor_lines_received_total{cluster=~\"$cluster\"}[$__rate_interval]))",
+                  "refId": "A",
+                  "range": true,
+                  "instant": false,
+                  "legendFormat": "{{cluster}}"
+                }
+              ],
+              "options": {
+                "colorMode": "value",
+                "graphMode": "area",
+                "justifyMode": "auto",
+                "orientation": "auto",
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ],
+                  "fields": "",
+                  "values": false
+                },
+                "textMode": "auto"
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "thresholds"
+                  },
+                  "mappings": [],
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      }
+                    ]
+                  },
+                  "unit": "/s",
+                  "decimals": 1
+                },
+                "overrides": []
+              }
+            },
+            {
+              "type": "stat",
+              "title": "Loki panics",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "id": 35,
+              "gridPos": {
+                "h": 4,
+                "w": 4,
+                "x": 20,
+                "y": 31
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "prometheus"
+                  },
+                  "editorMode": "code",
+                  "expr": "sum by (cluster) (loki_panic_total{cluster=~\"$cluster\"})",
+                  "refId": "A",
+                  "range": true,
+                  "instant": false,
+                  "legendFormat": "{{cluster}}"
+                }
+              ],
+              "options": {
+                "colorMode": "value",
+                "graphMode": "area",
+                "justifyMode": "auto",
+                "orientation": "auto",
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ],
+                  "fields": "",
+                  "values": false
+                },
+                "textMode": "auto"
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "thresholds"
+                  },
+                  "mappings": [],
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      },
+                      {
+                        "color": "red",
+                        "value": 1
+                      }
+                    ]
+                  }
+                },
+                "overrides": []
+              }
+            },
+            {
+              "type": "timeseries",
+              "title": "Tempo request rate by route",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "id": 36,
+              "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 35
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "prometheus"
+                  },
+                  "editorMode": "code",
+                  "expr": "sum by (cluster, route) (rate(tempo_request_duration_seconds_count{cluster=~\"$cluster\"}[$__rate_interval]))",
+                  "refId": "A",
+                  "range": true,
+                  "instant": false,
+                  "legendFormat": "{{cluster}} {{route}}"
+                }
+              ],
+              "options": {
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "drawStyle": "line",
+                    "fillOpacity": 10,
+                    "lineWidth": 1,
+                    "showPoints": "never",
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    }
+                  },
+                  "mappings": [],
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      }
+                    ]
+                  },
+                  "unit": "reqps"
+                },
+                "overrides": []
+              }
+            },
+            {
+              "type": "timeseries",
+              "title": "Tempo spans discarded by reason",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "id": 37,
+              "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 35
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "prometheus"
+                  },
+                  "editorMode": "code",
+                  "expr": "sum by (cluster, reason) (rate(tempo_discarded_spans_total{cluster=~\"$cluster\"}[$__rate_interval]))",
+                  "refId": "A",
+                  "range": true,
+                  "instant": false,
+                  "legendFormat": "{{cluster}} {{reason}}"
+                }
+              ],
+              "options": {
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "drawStyle": "line",
+                    "fillOpacity": 10,
+                    "lineWidth": 1,
+                    "showPoints": "never",
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    }
+                  },
+                  "mappings": [],
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      }
+                    ]
+                  },
+                  "unit": "/s"
+                },
+                "overrides": []
+              },
+              "description": "live_traces_exceeded and trace_too_large are per-tenant limits, not transport errors — raise the limit, do not chase the client."
+            },
+            {
+              "type": "timeseries",
+              "title": "Loki ingest",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "id": 38,
+              "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 43
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "prometheus"
+                  },
+                  "editorMode": "code",
+                  "expr": "sum by (cluster) (rate(loki_distributor_lines_received_total{cluster=~\"$cluster\"}[$__rate_interval]))",
+                  "refId": "A",
+                  "range": true,
+                  "instant": false,
+                  "legendFormat": "{{cluster}} lines/s"
+                },
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "prometheus"
+                  },
+                  "editorMode": "code",
+                  "expr": "sum by (cluster) (rate(loki_distributor_bytes_received_total{cluster=~\"$cluster\"}[$__rate_interval]))",
+                  "refId": "B",
+                  "range": true,
+                  "instant": false,
+                  "legendFormat": "{{cluster}} bytes/s"
+                }
+              ],
+              "options": {
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "drawStyle": "line",
+                    "fillOpacity": 10,
+                    "lineWidth": 1,
+                    "showPoints": "never",
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    }
+                  },
+                  "mappings": [],
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      }
+                    ]
+                  }
+                },
+                "overrides": []
+              }
+            },
+            {
+              "type": "timeseries",
+              "title": "Loki non-2xx responses by route",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "id": 39,
+              "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 43
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "prometheus"
+                  },
+                  "editorMode": "code",
+                  "expr": "sum by (cluster, route, status_code) (rate(loki_request_duration_seconds_count{status_code!~\"2..|success\",cluster=~\"$cluster\"}[$__rate_interval]))",
+                  "refId": "A",
+                  "range": true,
+                  "instant": false,
+                  "legendFormat": "{{cluster}} {{route}} {{status_code}}"
+                }
+              ],
+              "options": {
+                "legend": {
+                  "calcs": [
+                    "lastNotNull",
+                    "max"
+                  ],
+                  "displayMode": "table",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "drawStyle": "line",
+                    "fillOpacity": 10,
+                    "lineWidth": 1,
+                    "showPoints": "never",
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    }
+                  },
+                  "mappings": [],
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      }
+                    ]
+                  },
+                  "unit": "reqps"
+                },
+                "overrides": []
+              },
+              "description": "status_code carries both HTTP codes and the gRPC words success/cancel, hence the compound negative matcher."
+            },
+            {
+              "type": "timeseries",
+              "title": "Loki in-memory streams and chunks",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "id": 40,
+              "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 51
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "prometheus"
+                  },
+                  "editorMode": "code",
+                  "expr": "sum by (cluster) (loki_ingester_memory_streams{cluster=~\"$cluster\"})",
+                  "refId": "A",
+                  "range": true,
+                  "instant": false,
+                  "legendFormat": "{{cluster}} streams"
+                },
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "prometheus"
+                  },
+                  "editorMode": "code",
+                  "expr": "sum by (cluster) (loki_ingester_memory_chunks{cluster=~\"$cluster\"})",
+                  "refId": "B",
+                  "range": true,
+                  "instant": false,
+                  "legendFormat": "{{cluster}} chunks"
+                }
+              ],
+              "options": {
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "drawStyle": "line",
+                    "fillOpacity": 10,
+                    "lineWidth": 1,
+                    "showPoints": "never",
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    }
+                  },
+                  "mappings": [],
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      }
+                    ]
+                  }
+                },
+                "overrides": []
+              }
+            },
+            {
+              "type": "timeseries",
+              "title": "Loki flush queue length",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "id": 41,
+              "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 51
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "prometheus"
+                  },
+                  "editorMode": "code",
+                  "expr": "sum by (cluster) (loki_ingester_flush_queue_length{cluster=~\"$cluster\"})",
+                  "refId": "A",
+                  "range": true,
+                  "instant": false,
+                  "legendFormat": "{{cluster}}"
+                }
+              ],
+              "options": {
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "drawStyle": "line",
+                    "fillOpacity": 10,
+                    "lineWidth": 1,
+                    "showPoints": "never",
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    }
+                  },
+                  "mappings": [],
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      }
+                    ]
+                  }
+                },
+                "overrides": []
+              },
+              "description": "Sustained growth means chunk flushing cannot keep up with ingest."
+            }
+          ]
+        }
+      ],
+      "preload": false,
+      "refresh": "1m",
+      "schemaVersion": 42,
+      "tags": [
+        "platform",
+        "longhorn",
+        "cilium",
+        "hubble",
+        "tempo",
+        "loki"
+      ],
+      "templating": {
+        "list": [
+          {
+            "current": {},
+            "datasource": {
+              "type": "prometheus",
+              "uid": "prometheus"
+            },
+            "definition": "label_values(cilium_version, cluster)",
+            "hide": 0,
+            "includeAll": true,
+            "label": "Cluster",
+            "multi": true,
+            "name": "cluster",
+            "options": [],
+            "query": {
+              "query": "label_values(cilium_version, cluster)",
+              "refId": "StandardVariableQuery"
+            },
+            "refresh": 2,
+            "regex": "",
+            "sort": 1,
+            "type": "query"
+          }
+        ]
+      },
+      "time": {
+        "from": "now-6h",
+        "to": "now"
+      },
+      "timepicker": {},
+      "timezone": "browser",
+      "title": "Platform — Storage, Network & Telemetry",
+      "uid": "platform-snt",
+      "weekStart": ""
+    }

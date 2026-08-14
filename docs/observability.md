@@ -207,7 +207,7 @@ Tempo stores traces locally at `/var/tempo/traces` with a 20 Gi Longhorn PVC and
 
 ## Grafana datasources and correlations
 
-Datasources are provisioned automatically via ConfigMaps watched by the Grafana sidecar (label `grafana_datasource: "1"`). All ConfigMaps live in [gitops/k8s-manifests/server3/grafana/](../gitops/k8s-manifests/server3/grafana/). Pre-shipped dashboards (label `grafana_dashboard: "1"`) are also loaded from the same directory — currently [`ConfigMap.grafana.dashboard.traefik-opentelemetry.yaml`](../gitops/k8s-manifests/server3/grafana/ConfigMap.grafana.dashboard.traefik-opentelemetry.yaml).
+Datasources are provisioned automatically via ConfigMaps watched by the Grafana sidecar (label `grafana_datasource: "1"`). All ConfigMaps live in [gitops/k8s-manifests/server3/grafana/](../gitops/k8s-manifests/server3/grafana/). Hand-built dashboards (label `grafana_dashboard: "1"`) load from the same directory — see [Dashboards](#dashboards) below.
 
 | Datasource | UID | URL |
 |------------|-----|-----|
@@ -224,6 +224,63 @@ Datasources are provisioned automatically via ConfigMaps watched by the Grafana 
 - **Node graph**: enabled on Tempo datasource.
 
 > Both directions depend on `trace_id` being structured metadata. Anything that puts logs back on the Loki push API breaks both.
+
+## Dashboards
+
+Two delivery paths, both active at once, both provisioned — nothing is clicked into Grafana by hand.
+
+| Path | Where it is declared | How it reaches Grafana | Folder comes from |
+| --- | --- | --- | --- |
+| **Declared** (upstream, third-party) | `dashboards:` in [gitops/helm-values/grafana.yaml](../gitops/helm-values/grafana.yaml) | the chart's `download-dashboards` initContainer curls the JSON at pod start | the `dashboardProviders` entry — one provider per folder |
+| **Hand-built** (ours) | a ConfigMap in [gitops/k8s-manifests/server3/grafana/](../gitops/k8s-manifests/server3/grafana/) labelled `grafana_dashboard: "1"` | the sidecar writes it to the dashboards path and Grafana's file provisioner picks it up | the `grafana_folder` annotation on the ConfigMap |
+
+Declaring costs three lines and stays current with upstream; the trade is that `download_dashboards.sh` runs `set -euf` with `curl -skf`, so an unreachable source fails the initContainer and **Grafana will not start** until it is back. Hand-building costs a JSON blob in git and never tracks upstream again.
+
+### Current inventory
+
+| Dashboard | Path | Folder | Covers |
+| --- | --- | --- | --- |
+| dotdc Kubernetes set (Global, Namespaces, Nodes, Pods, CoreDNS, API Server) | declared, pinned `v3.0.6` | `Kubernetes` | nodes, namespaces, pods, CoreDNS, control plane |
+| Alloy mixin (resources, controller, opentelemetry) | declared, pinned `v1.18.0` | `Observability` | collector health and OTLP egress |
+| ArgoCD | declared, pinned `v3.3.7` | `GitOps` | app sync/health, reconcile latency |
+| [Traefik Opentelemetry](../gitops/k8s-manifests/server3/grafana/ConfigMap.grafana.dashboard.traefik.opentelemetry.yaml) | hand-built | `Traefik` | ingress RED metrics + access/error logs |
+| [Platform — Storage, Network & Telemetry](../gitops/k8s-manifests/server3/grafana/ConfigMap.grafana.dashboard.platform.yaml) | hand-built | `Platform` | Longhorn, Cilium/Hubble, Tempo/Loki |
+| [Loxone valves](../gitops/k8s-manifests/server3/grafana/ConfigMap.grafana.dashboard.loxone.valves_temperature_humidity.yaml) | hand-built | `Loxone` | InfluxDB2 home telemetry |
+
+### Screen an upstream dashboard before adopting it
+
+Four checks, all answerable from the JSON and a handful of instant queries, in about a minute. Skipping any of them has already shipped a broken dashboard here at least once.
+
+1. **Cluster variable — and panels that actually use it.** Three clusters remote-write into one Prometheus. A dashboard with no `cluster` variable sums server1 + server2 + server3 into a single series and renders it confidently. That is worse than an empty panel. Declaring the variable is not sufficient; walk the parsed panels (recursing into rows) and confirm the queries filter on it. Do not grep the raw JSON — the quotes are backslash-escaped and a naive grep returns 0 for dashboards that are filtering correctly.
+2. **Metric names, by instant query.** Never by the metric-name index: the index still lists series that stopped being collected but are inside the 30-day retention, so a name can be listed and return nothing.
+3. **The labels the queries filter on.** A dashboard can reference only metrics that exist and still be entirely blank. Cilium's `hubble-network-overview-namespace.json` referenced 4 live metrics with 8/8 queries cluster-filtered, and every panel was empty, because all of them filter on `source_namespace` / `destination_namespace` — labels Hubble does not emit unless its handlers are given context options.
+4. **The value encoding, not just the label names.** grafana.com 16888 (Longhorn) passes checks 1–3 and still reports every degraded volume as healthy: it expects `longhorn_volume_robustness` to be numerically encoded (`== 1` healthy, `== 2` degraded), while this Longhorn emits a 0/1 flag on a `state` label. Its compatibility arm spells that label `robustness`, which does not exist, so the fallback `== 1` matches whichever state is currently true and counts it as healthy.
+
+Anything OTLP-exported needs one more check: the OTLP→Prometheus translation appends unit suffixes to dimensionless instruments (`traefik_open_connections` arrives as `traefik_open_connections_ratio`) and **replaces histogram bucket boundaries with the OTel defaults**, so any query pinned to an `le` value copied from upstream silently returns nothing.
+
+### Why Longhorn, Cilium, Hubble, Tempo and Loki are hand-built
+
+Every published dashboard for these five failed one of the checks above, and patching them all would have meant vendoring five upstream JSONs that could then never be bumped. One hand-built dashboard covers them instead, cluster-scoped throughout, with a multi-select `cluster` variable whose All option is safe because every query aggregates `by (cluster, ...)`.
+
+| Upstream candidate | Why not |
+|---|---|
+| Longhorn grafana.com 16888 | no `cluster` variable at all, and the robustness/state encoding above |
+| Cilium `cilium-dashboard.json` | no `cluster` variable; its only scoping var is `pod` with `allValue: "cilium.*"`, which straddles all three clusters |
+| Cilium operator dashboard | 9 of 11 metrics are AWS ENI/EC2 IPAM series that bare-metal Talos never emits |
+| Hubble `hubble-*.json` | filter on `source_namespace` / `destination_namespace`, which do not exist here |
+| `tempo-operational.json` | 4 hardcoded Grafana Labs datasource UIDs kill 22 of 71 panels; the rest is microservices-mode Tempo |
+| `loki-operational.json` | 27 panels filter `job=~"…/(distributor\|ingester\|querier…)"`; this Loki is monolithic with `job="monitoring/single-binary"` |
+
+### Conditions that are permanent, not incidents
+
+Four panels read alarming and are reporting the truth about a deliberate (or at least known) configuration. Documented so nobody debugs them twice:
+
+- **Degraded volumes is non-zero on every cluster.** The `longhorn` StorageClass requests `numberOfReplicas: "3"` while each cluster is a single node, so exactly one replica can ever be scheduled and every volume sits at `robustness: degraded` forever. `defaultSettings.defaultReplicaCount: 1` in [iac/clusters/helm-values/longhorn.yaml](../iac/clusters/helm-values/longhorn.yaml) does **not** fix this — the StorageClass parameters come from the chart's `persistence.*` keys, so it needs `persistence.defaultClassReplicaCount: 1`, plus a patch of the `numberOfReplicas` field on volumes that already exist.
+- **Volumes with no backup equals the volume count.** `backupTarget` is empty, so `longhorn_backup_*` does not exist at all. The panel starts telling the truth the moment a backup target is configured.
+- **Hubble flow panels have no namespace dimension.** The counters are aggregate-only by design; adding `sourceContext=namespace;destinationContext=namespace` would cost roughly namespace × namespace series per handler per cluster.
+- **The Telemetry row is blank for server1 and server2.** Loki and Tempo run on server3 only. The panels are still cluster-filtered so they stay correct if that ever changes.
+
+The `longhorn_*_usage_millicpu` / `_memory_usage_bytes` families are absent for a different reason: Longhorn derives them from the Kubernetes metrics API, and no metrics-server is deployed on any cluster (`v1beta1.metrics.k8s.io` does not resolve). Container CPU and memory for those same pods are already available from cadvisor via the Kubernetes dashboards, so no panel here depends on them.
 
 ## Grafana admin credentials
 
