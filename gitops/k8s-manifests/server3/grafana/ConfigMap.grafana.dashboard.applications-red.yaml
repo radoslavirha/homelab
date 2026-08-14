@@ -1,0 +1,1327 @@
+---
+# Applications — RED (hand-built)
+#
+# Rate, errors and duration per service and per operation, from Tempo's span-metrics
+# generator. grafana.com 19419 ("OpenTelemetry APM") was rejected: it queries
+# traces_span_metrics_duration_milliseconds_*, the OTel Collector spanmetrics CONNECTOR
+# naming, while this stack derives span metrics in Tempo's metrics generator, which emits
+# traces_spanmetrics_*. Both are current; the vocabularies differ. It also carries 25
+# ${DS_PROMETHEUS} placeholders and two variables (service_name, http_route) whose labels
+# do not exist here.
+#
+# Four things verified against live Prometheus before any panel was written, each of
+# which would have produced a confidently wrong panel:
+#
+#   span_kind — SPAN_KIND_INTERNAL is Express middleware and accounts for 21 of 39
+#   series on its own; SPAN_KIND_CLIENT is outbound. Every RED panel filters to
+#   SPAN_KIND_SERVER, or "requests" is inflated several-fold.
+#
+#   status_code — the values are STATUS_CODE_ERROR and STATUS_CODE_UNSET. There is no
+#   STATUS_CODE_OK; OTel only sets ERROR explicitly.
+#
+#   units — traces_spanmetrics_latency_* is in SECONDS, not the milliseconds published
+#   OTel dashboards assume.
+#
+#   buckets — base-2 seconds, 0.002 … 16.384. The conventional Apdex thresholds of
+#   0.3 / 1.2 are not bucket boundaries here and would silently return nothing, so the
+#   Apdex panel uses 0.256 / 1.024.
+#
+# Probe traffic is absent by construction: /health and /healthz are dropped at the SDK
+# (packages/otel ignoredPaths.ts) and by nginx access_log off, so these numbers are real
+# traffic without any dashboard-side filtering.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-applications-red
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+  annotations:
+    argocd.argoproj.io/sync-wave: "-50"
+    grafana_folder: "Applications"
+data:
+  applications-red.json: |
+    {
+      "annotations": {
+        "list": []
+      },
+      "editable": true,
+      "graphTooltip": 1,
+      "links": [],
+      "panels": [
+        {
+          "type": "row",
+          "title": "Overview",
+          "id": 18,
+          "collapsed": false,
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 0
+          },
+          "panels": []
+        },
+        {
+          "type": "stat",
+          "title": "Request rate",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "id": 1,
+          "gridPos": {
+            "h": 5,
+            "w": 4,
+            "x": 0,
+            "y": 1
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "sum(rate(traces_spanmetrics_calls_total{span_kind=\"SPAN_KIND_SERVER\", k8s_cluster_name=~\"$cluster\", service=~\"$service\"}[$__rate_interval]))",
+              "refId": "A",
+              "range": true,
+              "instant": false
+            }
+          ],
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "textMode": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "reqps",
+              "decimals": 2
+            },
+            "overrides": []
+          },
+          "description": "Server spans only. Kubernetes probe traffic never appears here — /health and /healthz are dropped at the SDK by ignoreIncomingRequestHook, so these numbers are real traffic by construction."
+        },
+        {
+          "type": "stat",
+          "title": "Error rate",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "id": 2,
+          "gridPos": {
+            "h": 5,
+            "w": 4,
+            "x": 4,
+            "y": 1
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "100 * sum(rate(traces_spanmetrics_calls_total{span_kind=\"SPAN_KIND_SERVER\", k8s_cluster_name=~\"$cluster\", service=~\"$service\", status_code=\"STATUS_CODE_ERROR\"}[$__rate_interval])) / sum(rate(traces_spanmetrics_calls_total{span_kind=\"SPAN_KIND_SERVER\", k8s_cluster_name=~\"$cluster\", service=~\"$service\"}[$__rate_interval]))",
+              "refId": "A",
+              "range": true,
+              "instant": false
+            }
+          ],
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "textMode": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 1
+                  },
+                  {
+                    "color": "red",
+                    "value": 5
+                  }
+                ]
+              },
+              "unit": "percent",
+              "decimals": 2
+            },
+            "overrides": []
+          },
+          "description": "status_code is STATUS_CODE_ERROR or STATUS_CODE_UNSET here — OTel only sets ERROR explicitly, UNSET is the normal case. There is no STATUS_CODE_OK to match on."
+        },
+        {
+          "type": "stat",
+          "title": "p95 latency",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "id": 3,
+          "gridPos": {
+            "h": 5,
+            "w": 4,
+            "x": 8,
+            "y": 1
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "histogram_quantile(0.95, sum by (le) (rate(traces_spanmetrics_latency_bucket{span_kind=\"SPAN_KIND_SERVER\", k8s_cluster_name=~\"$cluster\", service=~\"$service\"}[$__rate_interval])))",
+              "refId": "A",
+              "range": true,
+              "instant": false
+            }
+          ],
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "textMode": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 0.5
+                  },
+                  {
+                    "color": "red",
+                    "value": 2
+                  }
+                ]
+              },
+              "unit": "s",
+              "decimals": 3
+            },
+            "overrides": []
+          },
+          "description": "traces_spanmetrics_latency_* is in SECONDS. Published OTel APM dashboards assume _duration_milliseconds; any threshold copied from them is off by 1000x."
+        },
+        {
+          "type": "stat",
+          "title": "Apdex",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "id": 4,
+          "gridPos": {
+            "h": 5,
+            "w": 4,
+            "x": 12,
+            "y": 1
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "(sum(rate(traces_spanmetrics_latency_bucket{span_kind=\"SPAN_KIND_SERVER\", k8s_cluster_name=~\"$cluster\", service=~\"$service\", le=\"0.256\"}[$__rate_interval])) + sum(rate(traces_spanmetrics_latency_bucket{span_kind=\"SPAN_KIND_SERVER\", k8s_cluster_name=~\"$cluster\", service=~\"$service\", le=\"1.024\"}[$__rate_interval]))) / 2 / sum(rate(traces_spanmetrics_latency_count{span_kind=\"SPAN_KIND_SERVER\", k8s_cluster_name=~\"$cluster\", service=~\"$service\"}[$__rate_interval]))",
+              "refId": "A",
+              "range": true,
+              "instant": false
+            }
+          ],
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "textMode": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": null
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 0.7
+                  },
+                  {
+                    "color": "green",
+                    "value": 0.9
+                  }
+                ]
+              },
+              "unit": "percentunit",
+              "decimals": 3
+            },
+            "overrides": []
+          },
+          "description": "T=0.256s, 4T=1.024s — chosen because they are ACTUAL bucket boundaries. Tempo's buckets are base-2 seconds (0.002 … 16.384); the conventional 0.3/1.2 Apdex thresholds do not exist and would return nothing."
+        },
+        {
+          "type": "stat",
+          "title": "Services reporting",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "id": 5,
+          "gridPos": {
+            "h": 5,
+            "w": 4,
+            "x": 16,
+            "y": 1
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "count(count by (service) (traces_spanmetrics_calls_total{span_kind=\"SPAN_KIND_SERVER\", k8s_cluster_name=~\"$cluster\", service=~\"$service\"}))",
+              "refId": "A",
+              "range": true,
+              "instant": false
+            }
+          ],
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "textMode": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "description": "A service appears only once it has served a request. Silence here means no traffic, not necessarily no instrumentation — qr-manager-ui is nginx serving a static SPA and can never appear."
+        },
+        {
+          "type": "stat",
+          "title": "Operations",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "id": 6,
+          "gridPos": {
+            "h": 5,
+            "w": 4,
+            "x": 20,
+            "y": 1
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "count(count by (service, span_name) (traces_spanmetrics_calls_total{span_kind=\"SPAN_KIND_SERVER\", k8s_cluster_name=~\"$cluster\", service=~\"$service\"}))",
+              "refId": "A",
+              "range": true,
+              "instant": false
+            }
+          ],
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "textMode": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "description": "Distinct service × span_name pairs. Traefik names its spans by HTTP method only, the Ts.ED APIs by route (`GET /`)."
+        },
+        {
+          "type": "row",
+          "title": "Rate & errors",
+          "id": 19,
+          "collapsed": true,
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 6
+          },
+          "panels": [
+            {
+              "type": "timeseries",
+              "title": "Request rate by service",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "id": 7,
+              "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 7
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "prometheus"
+                  },
+                  "editorMode": "code",
+                  "expr": "sum by (k8s_cluster_name, service) (rate(traces_spanmetrics_calls_total{span_kind=\"SPAN_KIND_SERVER\", k8s_cluster_name=~\"$cluster\", service=~\"$service\"}[$__rate_interval]))",
+                  "refId": "A",
+                  "range": true,
+                  "instant": false,
+                  "legendFormat": "{{k8s_cluster_name}} {{service}}"
+                }
+              ],
+              "options": {
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "drawStyle": "line",
+                    "fillOpacity": 10,
+                    "lineWidth": 1,
+                    "showPoints": "never",
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    }
+                  },
+                  "mappings": [],
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      }
+                    ]
+                  },
+                  "unit": "reqps"
+                },
+                "overrides": []
+              }
+            },
+            {
+              "type": "timeseries",
+              "title": "Error rate by service",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "id": 8,
+              "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 7
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "prometheus"
+                  },
+                  "editorMode": "code",
+                  "expr": "sum by (k8s_cluster_name, service) (rate(traces_spanmetrics_calls_total{span_kind=\"SPAN_KIND_SERVER\", k8s_cluster_name=~\"$cluster\", service=~\"$service\", status_code=\"STATUS_CODE_ERROR\"}[$__rate_interval]))",
+                  "refId": "A",
+                  "range": true,
+                  "instant": false,
+                  "legendFormat": "{{k8s_cluster_name}} {{service}}"
+                }
+              ],
+              "options": {
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "drawStyle": "line",
+                    "fillOpacity": 10,
+                    "lineWidth": 1,
+                    "showPoints": "never",
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    }
+                  },
+                  "mappings": [],
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      }
+                    ]
+                  },
+                  "unit": "reqps"
+                },
+                "overrides": []
+              },
+              "description": "Absolute error rate, not a ratio — a ratio hides a service that is failing every request at low volume behind one that is healthy at high volume."
+            },
+            {
+              "type": "timeseries",
+              "title": "Requests by status",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "id": 9,
+              "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 15
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "prometheus"
+                  },
+                  "editorMode": "code",
+                  "expr": "sum by (status_code) (rate(traces_spanmetrics_calls_total{span_kind=\"SPAN_KIND_SERVER\", k8s_cluster_name=~\"$cluster\", service=~\"$service\"}[$__rate_interval]))",
+                  "refId": "A",
+                  "range": true,
+                  "instant": false,
+                  "legendFormat": "{{status_code}}"
+                }
+              ],
+              "options": {
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "drawStyle": "line",
+                    "fillOpacity": 10,
+                    "lineWidth": 1,
+                    "showPoints": "never",
+                    "stacking": {
+                      "group": "A",
+                      "mode": "normal"
+                    }
+                  },
+                  "mappings": [],
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      }
+                    ]
+                  },
+                  "unit": "reqps"
+                },
+                "overrides": []
+              }
+            },
+            {
+              "type": "bargauge",
+              "title": "Busiest operations",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "id": 10,
+              "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 15
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "prometheus"
+                  },
+                  "editorMode": "code",
+                  "expr": "topk(10, sum by (service, span_name) (rate(traces_spanmetrics_calls_total{span_kind=\"SPAN_KIND_SERVER\", k8s_cluster_name=~\"$cluster\", service=~\"$service\"}[$__rate_interval])))",
+                  "refId": "A",
+                  "range": false,
+                  "instant": true,
+                  "legendFormat": "{{service}} {{span_name}}"
+                }
+              ],
+              "description": "Top 10 by request rate.",
+              "options": {
+                "displayMode": "gradient",
+                "orientation": "horizontal",
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ],
+                  "fields": "",
+                  "values": false
+                },
+                "showUnfilled": true,
+                "valueMode": "color"
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "continuous-GrYlRd"
+                  },
+                  "mappings": [],
+                  "min": 0,
+                  "unit": "reqps",
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      }
+                    ]
+                  }
+                },
+                "overrides": []
+              }
+            }
+          ]
+        },
+        {
+          "type": "row",
+          "title": "Duration",
+          "id": 20,
+          "collapsed": true,
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 7
+          },
+          "panels": [
+            {
+              "type": "timeseries",
+              "title": "Latency quantiles",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "id": 11,
+              "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 8
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "prometheus"
+                  },
+                  "editorMode": "code",
+                  "expr": "histogram_quantile(0.50, sum by (le) (rate(traces_spanmetrics_latency_bucket{span_kind=\"SPAN_KIND_SERVER\", k8s_cluster_name=~\"$cluster\", service=~\"$service\"}[$__rate_interval])))",
+                  "refId": "A",
+                  "range": true,
+                  "instant": false,
+                  "legendFormat": "p50"
+                },
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "prometheus"
+                  },
+                  "editorMode": "code",
+                  "expr": "histogram_quantile(0.95, sum by (le) (rate(traces_spanmetrics_latency_bucket{span_kind=\"SPAN_KIND_SERVER\", k8s_cluster_name=~\"$cluster\", service=~\"$service\"}[$__rate_interval])))",
+                  "refId": "B",
+                  "range": true,
+                  "instant": false,
+                  "legendFormat": "p95"
+                },
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "prometheus"
+                  },
+                  "editorMode": "code",
+                  "expr": "histogram_quantile(0.99, sum by (le) (rate(traces_spanmetrics_latency_bucket{span_kind=\"SPAN_KIND_SERVER\", k8s_cluster_name=~\"$cluster\", service=~\"$service\"}[$__rate_interval])))",
+                  "refId": "C",
+                  "range": true,
+                  "instant": false,
+                  "legendFormat": "p99"
+                }
+              ],
+              "options": {
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "drawStyle": "line",
+                    "fillOpacity": 0,
+                    "lineWidth": 1,
+                    "showPoints": "never",
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    }
+                  },
+                  "mappings": [],
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      }
+                    ]
+                  },
+                  "unit": "s"
+                },
+                "overrides": []
+              }
+            },
+            {
+              "type": "timeseries",
+              "title": "p95 latency by service",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "id": 12,
+              "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 8
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "prometheus"
+                  },
+                  "editorMode": "code",
+                  "expr": "histogram_quantile(0.95, sum by (le, k8s_cluster_name, service) (rate(traces_spanmetrics_latency_bucket{span_kind=\"SPAN_KIND_SERVER\", k8s_cluster_name=~\"$cluster\", service=~\"$service\"}[$__rate_interval])))",
+                  "refId": "A",
+                  "range": true,
+                  "instant": false,
+                  "legendFormat": "{{k8s_cluster_name}} {{service}}"
+                }
+              ],
+              "options": {
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "drawStyle": "line",
+                    "fillOpacity": 0,
+                    "lineWidth": 1,
+                    "showPoints": "never",
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    }
+                  },
+                  "mappings": [],
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      }
+                    ]
+                  },
+                  "unit": "s"
+                },
+                "overrides": []
+              }
+            },
+            {
+              "type": "bargauge",
+              "title": "Slowest operations (p95)",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "id": 13,
+              "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 16
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "prometheus"
+                  },
+                  "editorMode": "code",
+                  "expr": "topk(10, histogram_quantile(0.95, sum by (le, service, span_name) (rate(traces_spanmetrics_latency_bucket{span_kind=\"SPAN_KIND_SERVER\", k8s_cluster_name=~\"$cluster\", service=~\"$service\"}[$__rate_interval]))) and on (service, span_name) (sum by (service, span_name) (rate(traces_spanmetrics_latency_count{span_kind=\"SPAN_KIND_SERVER\", k8s_cluster_name=~\"$cluster\", service=~\"$service\"}[$__rate_interval])) > 0))",
+                  "refId": "A",
+                  "range": false,
+                  "instant": true,
+                  "legendFormat": "{{service}} {{span_name}}"
+                }
+              ],
+              "description": "The `and on(...) rate(...) > 0` guard is load-bearing: an idle operation yields NaN from histogram_quantile, topk ranks the NaN, and it displaces a real result. Learned the hard way on the Traefik dashboard.",
+              "options": {
+                "displayMode": "gradient",
+                "orientation": "horizontal",
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ],
+                  "fields": "",
+                  "values": false
+                },
+                "showUnfilled": true,
+                "valueMode": "color"
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "continuous-GrYlRd"
+                  },
+                  "mappings": [],
+                  "min": 0,
+                  "unit": "s",
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      }
+                    ]
+                  }
+                },
+                "overrides": []
+              }
+            },
+            {
+              "type": "timeseries",
+              "title": "Request size",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "id": 14,
+              "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 16
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "prometheus"
+                  },
+                  "editorMode": "code",
+                  "expr": "sum by (service) (rate(traces_spanmetrics_size_total{span_kind=\"SPAN_KIND_SERVER\", k8s_cluster_name=~\"$cluster\", service=~\"$service\"}[$__rate_interval]))",
+                  "refId": "A",
+                  "range": true,
+                  "instant": false,
+                  "legendFormat": "{{service}}"
+                }
+              ],
+              "options": {
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "drawStyle": "line",
+                    "fillOpacity": 10,
+                    "lineWidth": 1,
+                    "showPoints": "never",
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    }
+                  },
+                  "mappings": [],
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      }
+                    ]
+                  },
+                  "unit": "Bps"
+                },
+                "overrides": []
+              },
+              "description": "traces_spanmetrics_size_total is span payload size, not HTTP body size."
+            }
+          ]
+        },
+        {
+          "type": "row",
+          "title": "Dependencies",
+          "id": 21,
+          "collapsed": true,
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 8
+          },
+          "panels": [
+            {
+              "type": "timeseries",
+              "title": "Outbound calls by edge",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "id": 15,
+              "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 9
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "prometheus"
+                  },
+                  "editorMode": "code",
+                  "expr": "sum by (k8s_cluster_name, client, server) (rate(traces_service_graph_request_total{k8s_cluster_name=~\"$cluster\"}[$__rate_interval]))",
+                  "refId": "A",
+                  "range": true,
+                  "instant": false,
+                  "legendFormat": "{{k8s_cluster_name}} {{client}} → {{server}}"
+                }
+              ],
+              "options": {
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "drawStyle": "line",
+                    "fillOpacity": 10,
+                    "lineWidth": 1,
+                    "showPoints": "never",
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    }
+                  },
+                  "mappings": [],
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      }
+                    ]
+                  },
+                  "unit": "reqps"
+                },
+                "overrides": []
+              },
+              "description": "From the service-graph processor, not span metrics — so it includes dependencies that emit no spans of their own. The mongodb edge appears here because the Node driver is instrumented client-side; MongoDB itself emits nothing."
+            },
+            {
+              "type": "timeseries",
+              "title": "Client span errors",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "id": 16,
+              "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 9
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "prometheus"
+                  },
+                  "editorMode": "code",
+                  "expr": "sum by (k8s_cluster_name, service) (rate(traces_spanmetrics_calls_total{span_kind=\"SPAN_KIND_CLIENT\", status_code=\"STATUS_CODE_ERROR\", k8s_cluster_name=~\"$cluster\", service=~\"$service\"}[$__rate_interval]))",
+                  "refId": "A",
+                  "range": true,
+                  "instant": false,
+                  "legendFormat": "{{k8s_cluster_name}} {{service}}"
+                }
+              ],
+              "options": {
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "drawStyle": "line",
+                    "fillOpacity": 10,
+                    "lineWidth": 1,
+                    "showPoints": "never",
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    }
+                  },
+                  "mappings": [],
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      }
+                    ]
+                  },
+                  "unit": "reqps"
+                },
+                "overrides": []
+              },
+              "description": "Outbound failures — a dependency breaking usually shows here before the inbound error rate moves."
+            },
+            {
+              "type": "table",
+              "title": "Recent error traces",
+              "datasource": {
+                "type": "tempo",
+                "uid": "tempo"
+              },
+              "id": 17,
+              "gridPos": {
+                "h": 9,
+                "w": 24,
+                "x": 0,
+                "y": 17
+              },
+              "description": "TraceQL against Tempo. Click a trace ID to open it — the Tempo datasource is wired to Loki and Prometheus for correlation.",
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "tempo",
+                    "uid": "tempo"
+                  },
+                  "refId": "A",
+                  "queryType": "traceql",
+                  "limit": 20,
+                  "query": "{status = error && resource.k8s.cluster.name =~ \"$cluster\" && resource.service.name =~ \"$service\"}"
+                }
+              ],
+              "options": {
+                "showHeader": true
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "custom": {
+                    "align": "auto"
+                  }
+                },
+                "overrides": []
+              }
+            }
+          ]
+        }
+      ],
+      "preload": false,
+      "refresh": "1m",
+      "schemaVersion": 42,
+      "tags": [
+        "applications",
+        "red",
+        "traces",
+        "apm"
+      ],
+      "templating": {
+        "list": [
+          {
+            "current": {},
+            "datasource": {
+              "type": "prometheus",
+              "uid": "prometheus"
+            },
+            "definition": "label_values(traces_spanmetrics_calls_total, k8s_cluster_name)",
+            "hide": 0,
+            "includeAll": true,
+            "allValue": ".+",
+            "label": "Cluster",
+            "multi": true,
+            "name": "cluster",
+            "options": [],
+            "query": {
+              "query": "label_values(traces_spanmetrics_calls_total, k8s_cluster_name)",
+              "refId": "StandardVariableQuery"
+            },
+            "refresh": 2,
+            "regex": "",
+            "sort": 1,
+            "type": "query"
+          },
+          {
+            "current": {},
+            "datasource": {
+              "type": "prometheus",
+              "uid": "prometheus"
+            },
+            "definition": "label_values(traces_spanmetrics_calls_total{k8s_cluster_name=~\"$cluster\"}, service)",
+            "hide": 0,
+            "includeAll": true,
+            "allValue": ".+",
+            "label": "Service",
+            "multi": true,
+            "name": "service",
+            "options": [],
+            "query": {
+              "query": "label_values(traces_spanmetrics_calls_total{k8s_cluster_name=~\"$cluster\"}, service)",
+              "refId": "StandardVariableQuery"
+            },
+            "refresh": 2,
+            "regex": "",
+            "sort": 1,
+            "type": "query"
+          }
+        ]
+      },
+      "time": {
+        "from": "now-6h",
+        "to": "now"
+      },
+      "timepicker": {},
+      "timezone": "browser",
+      "title": "Applications — RED",
+      "uid": "apps-red",
+      "weekStart": ""
+    }
