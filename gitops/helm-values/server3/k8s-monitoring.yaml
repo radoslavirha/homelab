@@ -45,6 +45,24 @@ integrations:
           enabled: false
 
 destinations:
+  # NO clusterLabels/transform guard here, and none is needed — but the reason is a
+  # property of `type: prometheus`, not of this file, so do not copy that conclusion to a
+  # new destination without re-deriving it.
+  #
+  # This renders prometheus.remote_write with
+  #   external_labels = { "cluster" = "server3", "k8s_cluster_name" = "server3" }
+  # and remote-write external labels only FILL IN a label that is absent; a label already
+  # on the series wins. server1/server2 metrics arrive over OTLP already carrying
+  # cluster=server1 / server2 (stamped by their own destination transform) and keep it.
+  # Verified: count by (cluster, k8s_cluster_name) (longhorn_volume_state) returns
+  # server1=18, server2=18, server3=30, with both labels agreeing on every row.
+  #
+  # The otlp destinations below are the opposite: their cluster labels render as OTTL
+  # `set(...)`, which overwrites unconditionally. That silently relabelled every forwarded
+  # log as server3 (fixed on the loki destination) and then every forwarded span (fixed on
+  # the tempo destination, 2026-08-14). **If this destination is ever switched to
+  # `type: otlp` — a Mimir OTLP endpoint, say — it inherits that behaviour and every
+  # metric from server1 and server2 becomes server3.** Add the guarded transform first.
   prometheus:
     type: prometheus
     url: http://prometheus.monitoring.svc.cluster.local:80/api/v1/write
