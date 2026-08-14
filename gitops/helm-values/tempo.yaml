@@ -33,13 +33,31 @@ tempo:
   # verbatim into the config's `overrides.defaults` (configmap-tempo.yaml).
   # These two feed Grafana's Tempo datasource `tracesToMetrics` (traces_spanmetrics_*)
   # and `serviceMap` (traces_service_graph_*), both dead links until now.
-  # Dimensions stay at the defaults — set metricsGenerator.processor to extend them.
   overrides:
     defaults:
       metrics_generator:
         processors:
           - service-graphs
           - span-metrics
+        # The generator runs on server3 and derives these centrally from spans arriving
+        # from all three clusters, so without an explicit dimension the output has no
+        # cluster label at all and Phase 3 can never be per-cluster.
+        #
+        # Ordering matters: this is only meaningful once the spans themselves are
+        # attributed correctly. Until 0d13e1c, server3's tempo destination overwrote every
+        # forwarded span's cluster with "server3", so adding this dimension first would
+        # have produced a label that was present, plausible and wrong on every series.
+        #
+        # Intrinsic dimensions (service, span_name, span_kind, status_code) stay on.
+        # Attribute names become labels with dots replaced by underscores, so this lands
+        # as `k8s_cluster_name` — matching the label the Traefik dashboard already uses.
+        processor:
+          span_metrics:
+            dimensions:
+              - k8s.cluster.name
+          service_graphs:
+            dimensions:
+              - k8s.cluster.name
 
   retention: 336h  # 14 days
 
