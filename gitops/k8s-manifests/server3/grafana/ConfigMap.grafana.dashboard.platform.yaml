@@ -589,15 +589,15 @@ data:
         },
         {
           "type": "bargauge",
-          "title": "Volume used vs capacity",
+          "title": "Filesystem used",
           "datasource": {
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "id": 9,
+          "id": 45,
           "gridPos": {
             "h": 8,
-            "w": 8,
+            "w": 12,
             "x": 0,
             "y": 13
           },
@@ -608,14 +608,14 @@ data:
                 "uid": "prometheus"
               },
               "editorMode": "code",
-              "expr": "100 * longhorn_volume_actual_size_bytes{cluster=~\"$cluster\"} / longhorn_volume_capacity_bytes{cluster=~\"$cluster\"}",
+              "expr": "100 * kubelet_volume_stats_used_bytes{cluster=~\"$cluster\"}\n    / kubelet_volume_stats_capacity_bytes{cluster=~\"$cluster\"}",
               "refId": "A",
               "range": false,
               "instant": true,
-              "legendFormat": "{{cluster}} {{pvc_namespace}}/{{pvc}}"
+              "legendFormat": "{{cluster}} {{namespace}}/{{persistentvolumeclaim}}"
             }
           ],
-          "description": "Longhorn-reported actual size, i.e. blocks allocated — not filesystem usage. kubelet_volume_stats_* is the filesystem view.",
+          "description": "Actual filesystem utilisation reported by the kubelet. This is the panel that says whether a volume is running out of space.",
           "options": {
             "displayMode": "gradient",
             "orientation": "horizontal",
@@ -660,6 +660,70 @@ data:
           }
         },
         {
+          "type": "bargauge",
+          "title": "Disk space allocated (never shrinks)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "id": 9,
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 13
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "100 * longhorn_volume_actual_size_bytes{cluster=~\"$cluster\"} / longhorn_volume_capacity_bytes{cluster=~\"$cluster\"}",
+              "refId": "A",
+              "range": false,
+              "instant": true,
+              "legendFormat": "{{cluster}} {{pvc_namespace}}/{{pvc}}"
+            }
+          ],
+          "description": "Blocks Longhorn has allocated on disk, as a share of the volume size — NOT how full the filesystem is. Longhorn thin-provisions and never releases a block once written unless a filesystem-trim job runs, and snapshots count toward it, so any write-churning volume ratchets to ~100% and stays there. It can exceed 100% because snapshot and metadata overhead sits outside the nominal capacity. For \"is this volume about to fill up\", read the Filesystem used panel instead. This one answers \"how much node disk is this volume consuming\".",
+          "options": {
+            "displayMode": "gradient",
+            "orientation": "horizontal",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "showUnfilled": true,
+            "valueMode": "color"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "max": 110,
+              "min": 0,
+              "unit": "percent",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "blue",
+                    "value": null
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
           "type": "timeseries",
           "title": "Volume IOPS",
           "datasource": {
@@ -670,8 +734,8 @@ data:
           "gridPos": {
             "h": 8,
             "w": 8,
-            "x": 8,
-            "y": 13
+            "x": 0,
+            "y": 21
           },
           "targets": [
             {
@@ -752,8 +816,8 @@ data:
           "gridPos": {
             "h": 8,
             "w": 8,
-            "x": 16,
-            "y": 13
+            "x": 8,
+            "y": 21
           },
           "targets": [
             {
@@ -833,8 +897,8 @@ data:
           "id": 12,
           "gridPos": {
             "h": 8,
-            "w": 12,
-            "x": 0,
+            "w": 8,
+            "x": 16,
             "y": 21
           },
           "targets": [
@@ -916,9 +980,9 @@ data:
           "id": 13,
           "gridPos": {
             "h": 8,
-            "w": 12,
-            "x": 12,
-            "y": 21
+            "w": 24,
+            "x": 0,
+            "y": 29
           },
           "targets": [
             {
@@ -985,7 +1049,7 @@ data:
             "h": 1,
             "w": 24,
             "x": 0,
-            "y": 29
+            "y": 37
           },
           "panels": [
             {
@@ -2092,7 +2156,7 @@ data:
             "h": 1,
             "w": 24,
             "x": 0,
-            "y": 30
+            "y": 38
           },
           "panels": [
             {
