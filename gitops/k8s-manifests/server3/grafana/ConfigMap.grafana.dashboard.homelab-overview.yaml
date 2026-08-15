@@ -944,7 +944,7 @@ data:
           },
           "panels": [
             {
-              "type": "bargauge",
+              "type": "table",
               "title": "Requests by endpoint",
               "datasource": {
                 "type": "loki",
@@ -975,46 +975,41 @@ data:
               "transformations": [
                 {
                   "id": "labelsToFields",
-                  "options": {}
+                  "options": {
+                    "mode": "rows"
+                  }
+                },
+                {
+                  "id": "organize",
+                  "options": {
+                    "excludeByName": {
+                      "Time": true
+                    }
+                  }
                 }
               ],
-              "description": "RequestPath from Traefik's own access log (json | ServiceName), not a Prometheus metric — Traefik only exposes duration per Service/Router, never per path. Verified live: 7 distinct endpoints across the four apps, no query-string noise, so grouping on the raw path is safe here. Loki's instant-query response comes back as one frame per series tagged 'numeric-multi', which this panel type doesn't split into separate bars on its own — labelsToFields reshapes it into the wide format BarGauge expects. The equivalent Prometheus query elsewhere in this repo doesn't need this: its frames carry no type tag and BarGauge's default multi-frame handling already covers that case.",
+              "description": "RequestPath from Traefik's own access log (json | ServiceName), not a Prometheus metric — Traefik only exposes duration per Service/Router, never per path. Verified live: 7 distinct endpoints across the four apps, no query-string noise, so grouping on the raw path is safe here. Started as a bargauge, but Loki's instant-query response tags each series as a separate 'numeric-multi' frame and BarGauge never split that into individual bars, even with labelsToFields in columns mode — stayed a single merged bar regardless. Table + labelsToFields in rows mode does the same reshape correctly: one row per endpoint.",
               "options": {
-                "displayMode": "gradient",
-                "orientation": "horizontal",
-                "reduceOptions": {
-                  "calcs": [
-                    "lastNotNull"
-                  ],
-                  "fields": "",
-                  "values": false
-                },
-                "showUnfilled": true,
-                "valueMode": "color"
+                "showHeader": true,
+                "sortBy": [
+                  {
+                    "displayName": "Value",
+                    "desc": true
+                  }
+                ]
               },
               "fieldConfig": {
                 "defaults": {
-                  "color": {
-                    "mode": "continuous-GrYlRd"
+                  "custom": {
+                    "align": "auto"
                   },
-                  "mappings": [],
-                  "min": 0,
-                  "unit": "short",
-                  "thresholds": {
-                    "mode": "absolute",
-                    "steps": [
-                      {
-                        "color": "green",
-                        "value": null
-                      }
-                    ]
-                  }
+                  "unit": "short"
                 },
                 "overrides": []
               }
             },
             {
-              "type": "bargauge",
+              "type": "table",
               "title": "Avg duration by endpoint",
               "datasource": {
                 "type": "loki",
@@ -1045,46 +1040,42 @@ data:
               "transformations": [
                 {
                   "id": "labelsToFields",
-                  "options": {}
+                  "options": {
+                    "mode": "rows"
+                  }
+                },
+                {
+                  "id": "organize",
+                  "options": {
+                    "excludeByName": {
+                      "Time": true
+                    }
+                  }
                 }
               ],
-              "description": "Traefik's access-log Duration field is nanoseconds — confirmed against a live sample (71823043 ≈ 71.8ms), hence / 1e9 for seconds. This is the same number the top-of-dashboard Avg duration stat shows, broken down by endpoint instead of collapsed to one figure per app. labelsToFields — see Requests by endpoint's description for why Loki's frame shape needs it here and Prometheus panels elsewhere in this repo don't.",
+              "description": "Traefik's access-log Duration field is nanoseconds — confirmed against a live sample (71823043 ≈ 71.8ms), hence / 1e9 for seconds. This is the same number the top-of-dashboard Avg duration stat shows, broken down by endpoint instead of collapsed to one figure per app. Table + labelsToFields(rows) — see Requests by endpoint's description; BarGauge would not split Loki's per-series frames into separate bars.",
               "options": {
-                "displayMode": "gradient",
-                "orientation": "horizontal",
-                "reduceOptions": {
-                  "calcs": [
-                    "lastNotNull"
-                  ],
-                  "fields": "",
-                  "values": false
-                },
-                "showUnfilled": true,
-                "valueMode": "color"
+                "showHeader": true,
+                "sortBy": [
+                  {
+                    "displayName": "Value",
+                    "desc": true
+                  }
+                ]
               },
               "fieldConfig": {
                 "defaults": {
-                  "color": {
-                    "mode": "continuous-GrYlRd"
+                  "custom": {
+                    "align": "auto"
                   },
-                  "mappings": [],
-                  "min": 0,
                   "unit": "s",
-                  "thresholds": {
-                    "mode": "absolute",
-                    "steps": [
-                      {
-                        "color": "green",
-                        "value": null
-                      }
-                    ]
-                  }
+                  "decimals": 3
                 },
                 "overrides": []
               }
             },
             {
-              "type": "bargauge",
+              "type": "table",
               "title": "p95 duration by endpoint",
               "datasource": {
                 "type": "loki",
@@ -1115,40 +1106,36 @@ data:
               "transformations": [
                 {
                   "id": "labelsToFields",
-                  "options": {}
+                  "options": {
+                    "mode": "rows"
+                  }
+                },
+                {
+                  "id": "organize",
+                  "options": {
+                    "excludeByName": {
+                      "Time": true
+                    }
+                  }
                 }
               ],
-              "description": "quantile_over_time's `by (...)` sits after the range vector, not inside it like avg_over_time — different LogQL syntax for the same idea, matched to what the Traefik Opentelemetry dashboard already uses. labelsToFields — see Requests by endpoint's description for why Loki's frame shape needs it here and Prometheus panels elsewhere in this repo don't.",
+              "description": "quantile_over_time's `by (...)` sits after the range vector, not inside it like avg_over_time — different LogQL syntax for the same idea, matched to what the Traefik Opentelemetry dashboard already uses. Table + labelsToFields(rows) — see Requests by endpoint's description; BarGauge would not split Loki's per-series frames into separate bars.",
               "options": {
-                "displayMode": "gradient",
-                "orientation": "horizontal",
-                "reduceOptions": {
-                  "calcs": [
-                    "lastNotNull"
-                  ],
-                  "fields": "",
-                  "values": false
-                },
-                "showUnfilled": true,
-                "valueMode": "color"
+                "showHeader": true,
+                "sortBy": [
+                  {
+                    "displayName": "Value",
+                    "desc": true
+                  }
+                ]
               },
               "fieldConfig": {
                 "defaults": {
-                  "color": {
-                    "mode": "continuous-GrYlRd"
+                  "custom": {
+                    "align": "auto"
                   },
-                  "mappings": [],
-                  "min": 0,
                   "unit": "s",
-                  "thresholds": {
-                    "mode": "absolute",
-                    "steps": [
-                      {
-                        "color": "green",
-                        "value": null
-                      }
-                    ]
-                  }
+                  "decimals": 3
                 },
                 "overrides": []
               }
