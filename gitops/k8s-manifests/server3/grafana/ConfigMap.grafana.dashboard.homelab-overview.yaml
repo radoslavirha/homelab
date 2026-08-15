@@ -1,0 +1,971 @@
+---
+# Homelab Overview — IoT Apps (hand-built)
+#
+# Front door for the four custom apps only (miot-bridge-api, interactive-map-feeder-api,
+# qr-manager-api, qr-manager-ui) — not a whole-cluster health screen. That is already
+# covered by Kubernetes/Global, Kubernetes/Namespaces, Platform — Storage, Network &
+# Telemetry, and ArgoCD. This dashboard answers "are the apps themselves OK" in one screen.
+#
+# Duration comes from Traefik, not span metrics. 3.1's Applications — RED (Tempo span
+# metrics) only covers miot-bridge-api and traefik itself — interactive-map-feeder-api,
+# qr-manager-api and qr-manager-ui emit no spans at all (see grafana-dashboards-plan.md,
+# "Findings that outlive the dashboards"). Traefik sees all four uniformly at the edge,
+# so it is the only source that covers every app the same way. This is proxy-hop
+# duration, not app-internal timing — expect it to run higher than an in-process
+# histogram would for the same request.
+#
+# Two label families, verified live rather than assumed (rule 7c):
+#   - Traefik metrics (OTLP-exported) carry k8s_cluster_name.
+#   - kube-state-metrics metrics (pod readiness, restarts) carry cluster.
+#   Both use the same values (server1/server2/server3), so one $cluster variable drives
+#   both, but each query must filter on the label its own metric family actually has.
+#
+# Traefik's "service" label is the Gateway API's generated name, not the app name —
+# e.g. "production-api-iot-miot-bridge-api-http-http-80@kubernetesgateway". Every
+# per-app panel runs it through label_replace to recover a clean app name:
+#   ^(production|sandbox)-[a-z]+-iot-(.+)-http-http-[0-9]+@kubernetesgateway$
+# Pod names follow a different scheme again — "<stage>-iot-<app>-<rs-hash>-<pod-hash>"
+# (e.g. "api-iot-miot-bridge-api-...", "apps-iot-qr-manager-ui-...") — so the pod-side
+# label_replace is a separate regex:
+#   ^.*-iot-(interactive-map-feeder-api|miot-bridge-api|qr-manager-api|qr-manager-ui)-[a-z0-9]+-[a-z0-9]+$
+#
+# kube_pod_status_ready{condition="false"} on its own is not "pod broken now" — verified
+# live 2026-08-15: it also carries stale Completed pods from old ReplicaSets that were
+# never garbage-collected (one is 100 days old), giving a permanent non-zero baseline
+# that looks like an incident and isn't. Every readiness query here is intersected with
+# `kube_pod_status_phase{phase="Running"} == 1` to exclude them — the `== 1` matters,
+# because kube-state-metrics emits one series per phase value and a bare `and on(...)
+# kube_pod_status_phase{phase="Running"}` matches the label set regardless of its value,
+# same trap as the Longhorn `robustness` encoding in rule 7(e).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-homelab-overview
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+  annotations:
+    argocd.argoproj.io/sync-wave: "-50"
+    grafana_folder: "Homelab"
+data:
+  homelab-overview.json: |
+    {
+      "annotations": {
+        "list": []
+      },
+      "editable": true,
+      "graphTooltip": 1,
+      "links": [],
+      "panels": [
+        {
+          "type": "row",
+          "title": "Overview",
+          "id": 100,
+          "collapsed": false,
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 0
+          },
+          "panels": []
+        },
+        {
+          "type": "stat",
+          "title": "Request rate",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "id": 1,
+          "gridPos": {
+            "h": 5,
+            "w": 4,
+            "x": 0,
+            "y": 1
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "sum(rate(traefik_service_requests_total{k8s_cluster_name=~\"$cluster\", service=~\".*(miot-bridge-api|interactive-map-feeder-api|qr-manager-api|qr-manager-ui).*\"}[$__rate_interval]))",
+              "refId": "A",
+              "range": true,
+              "instant": false
+            }
+          ],
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "textMode": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "reqps",
+              "decimals": 2
+            },
+            "overrides": []
+          },
+          "description": "All four apps combined, at the Traefik edge."
+        },
+        {
+          "type": "stat",
+          "title": "Error rate",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "id": 2,
+          "gridPos": {
+            "h": 5,
+            "w": 4,
+            "x": 4,
+            "y": 1
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "100 * sum(rate(traefik_service_requests_total{code=~\"5..\", k8s_cluster_name=~\"$cluster\", service=~\".*(miot-bridge-api|interactive-map-feeder-api|qr-manager-api|qr-manager-ui).*\"}[$__rate_interval])) / sum(rate(traefik_service_requests_total{k8s_cluster_name=~\"$cluster\", service=~\".*(miot-bridge-api|interactive-map-feeder-api|qr-manager-api|qr-manager-ui).*\"}[$__rate_interval]))",
+              "refId": "A",
+              "range": true,
+              "instant": false
+            }
+          ],
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "textMode": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 1
+                  },
+                  {
+                    "color": "red",
+                    "value": 5
+                  }
+                ]
+              },
+              "unit": "percent",
+              "decimals": 2
+            },
+            "overrides": []
+          },
+          "description": "code=~\"5..\" share of all requests. Traefik-observed, so a 502/504 from a dead backend counts here even if the app itself never logged anything."
+        },
+        {
+          "type": "stat",
+          "title": "Avg duration",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "id": 3,
+          "gridPos": {
+            "h": 5,
+            "w": 4,
+            "x": 8,
+            "y": 1
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "sum(rate(traefik_service_request_duration_seconds_sum{k8s_cluster_name=~\"$cluster\", service=~\".*(miot-bridge-api|interactive-map-feeder-api|qr-manager-api|qr-manager-ui).*\"}[$__rate_interval])) / sum(rate(traefik_service_request_duration_seconds_count{k8s_cluster_name=~\"$cluster\", service=~\".*(miot-bridge-api|interactive-map-feeder-api|qr-manager-api|qr-manager-ui).*\"}[$__rate_interval]))",
+              "refId": "A",
+              "range": true,
+              "instant": false
+            }
+          ],
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "textMode": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "s",
+              "decimals": 3
+            },
+            "overrides": []
+          },
+          "description": "sum(rate(..._sum)) / sum(rate(..._count)) across all four apps — Traefik-side, so this is proxy hop time, not in-process app time. No thresholds set: no SLO exists yet to color against, and interactive-map-feeder-api runs several seconds by design (see per-app panel below)."
+        },
+        {
+          "type": "stat",
+          "title": "p95 duration",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "id": 4,
+          "gridPos": {
+            "h": 5,
+            "w": 4,
+            "x": 12,
+            "y": 1
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "histogram_quantile(0.95, sum by (le) (rate(traefik_service_request_duration_seconds_bucket{k8s_cluster_name=~\"$cluster\", service=~\".*(miot-bridge-api|interactive-map-feeder-api|qr-manager-api|qr-manager-ui).*\"}[$__rate_interval])))",
+              "refId": "A",
+              "range": true,
+              "instant": false
+            }
+          ],
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "textMode": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "s",
+              "decimals": 3
+            },
+            "overrides": []
+          },
+          "description": "OTel default buckets (0.005 … 10s) — Traefik exports over OTLP, which replaces the documented 0.3/1.2 bucket boundaries. See item 4.4."
+        },
+        {
+          "type": "stat",
+          "title": "Pods not ready",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "id": 5,
+          "gridPos": {
+            "h": 5,
+            "w": 4,
+            "x": 16,
+            "y": 1
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "sum(kube_pod_status_ready{condition=\"false\", cluster=~\"$cluster\", pod=~\".*(miot-bridge-api|interactive-map-feeder-api|qr-manager-api|qr-manager-ui).*\"} and on (namespace, pod, cluster) (kube_pod_status_phase{phase=\"Running\"} == 1))",
+              "refId": "A",
+              "range": true,
+              "instant": false
+            }
+          ],
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "textMode": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 1
+                  }
+                ]
+              },
+              "unit": "short",
+              "decimals": 0
+            },
+            "overrides": []
+          },
+          "description": "Restricted to phase=Running pods — kube_pod_status_ready{condition=\"false\"} alone also matches stale Completed pods from old ReplicaSets that were never garbage-collected, which would otherwise show as a permanent false baseline."
+        },
+        {
+          "type": "stat",
+          "title": "Restarts (1h)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "id": 6,
+          "gridPos": {
+            "h": 5,
+            "w": 4,
+            "x": 20,
+            "y": 1
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "editorMode": "code",
+              "expr": "sum(increase(kube_pod_container_status_restarts_total{cluster=~\"$cluster\", pod=~\".*(miot-bridge-api|interactive-map-feeder-api|qr-manager-api|qr-manager-ui).*\"}[1h]))",
+              "refId": "A",
+              "range": true,
+              "instant": false
+            }
+          ],
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "textMode": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 1
+                  },
+                  {
+                    "color": "red",
+                    "value": 3
+                  }
+                ]
+              },
+              "unit": "short",
+              "decimals": 0
+            },
+            "overrides": []
+          }
+        },
+        {
+          "type": "row",
+          "title": "Requests & duration, by app",
+          "id": 101,
+          "collapsed": true,
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 6
+          },
+          "panels": [
+            {
+              "type": "timeseries",
+              "title": "Request rate by app",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "id": 7,
+              "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 7
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "prometheus"
+                  },
+                  "editorMode": "code",
+                  "expr": "label_replace(sum by (k8s_cluster_name, service) (rate(traefik_service_requests_total{k8s_cluster_name=~\"$cluster\", service=~\".*(miot-bridge-api|interactive-map-feeder-api|qr-manager-api|qr-manager-ui).*\"}[$__rate_interval])), \"app\", \"$2\", \"service\", \"^(production|sandbox)-[a-z]+-iot-(.+)-http-http-[0-9]+@kubernetesgateway$\")",
+                  "refId": "A",
+                  "range": true,
+                  "instant": false,
+                  "legendFormat": "{{k8s_cluster_name}} {{app}}"
+                }
+              ],
+              "options": {
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "drawStyle": "line",
+                    "fillOpacity": 10,
+                    "lineWidth": 1,
+                    "showPoints": "never",
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    }
+                  },
+                  "mappings": [],
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      }
+                    ]
+                  },
+                  "unit": "reqps"
+                },
+                "overrides": []
+              }
+            },
+            {
+              "type": "timeseries",
+              "title": "Avg duration by app",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "id": 8,
+              "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 7
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "prometheus"
+                  },
+                  "editorMode": "code",
+                  "expr": "label_replace(sum by (service) (rate(traefik_service_request_duration_seconds_sum{k8s_cluster_name=~\"$cluster\", service=~\".*(miot-bridge-api|interactive-map-feeder-api|qr-manager-api|qr-manager-ui).*\"}[$__rate_interval])) / sum by (service) (rate(traefik_service_request_duration_seconds_count{k8s_cluster_name=~\"$cluster\", service=~\".*(miot-bridge-api|interactive-map-feeder-api|qr-manager-api|qr-manager-ui).*\"}[$__rate_interval])), \"app\", \"$2\", \"service\", \"^(production|sandbox)-[a-z]+-iot-(.+)-http-http-[0-9]+@kubernetesgateway$\")",
+                  "refId": "A",
+                  "range": true,
+                  "instant": false,
+                  "legendFormat": "{{app}}"
+                }
+              ],
+              "description": "Gaps mean zero requests in that window (0/0), not zero duration — expected for the sandbox routes and for qr-manager-ui/miot-bridge-api at low traffic.",
+              "options": {
+                "legend": {
+                  "calcs": [
+                    "mean",
+                    "max"
+                  ],
+                  "displayMode": "table",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "drawStyle": "line",
+                    "fillOpacity": 10,
+                    "lineWidth": 1,
+                    "showPoints": "never",
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    }
+                  },
+                  "mappings": [],
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      }
+                    ]
+                  },
+                  "unit": "s"
+                },
+                "overrides": []
+              }
+            },
+            {
+              "type": "timeseries",
+              "title": "p95 duration by app",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "id": 9,
+              "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 15
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "prometheus"
+                  },
+                  "editorMode": "code",
+                  "expr": "label_replace(histogram_quantile(0.95, sum by (le, service) (rate(traefik_service_request_duration_seconds_bucket{k8s_cluster_name=~\"$cluster\", service=~\".*(miot-bridge-api|interactive-map-feeder-api|qr-manager-api|qr-manager-ui).*\"}[$__rate_interval]))), \"app\", \"$2\", \"service\", \"^(production|sandbox)-[a-z]+-iot-(.+)-http-http-[0-9]+@kubernetesgateway$\")",
+                  "refId": "A",
+                  "range": true,
+                  "instant": false,
+                  "legendFormat": "{{app}}"
+                }
+              ],
+              "options": {
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "drawStyle": "line",
+                    "fillOpacity": 0,
+                    "lineWidth": 1,
+                    "showPoints": "never",
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    }
+                  },
+                  "mappings": [],
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      }
+                    ]
+                  },
+                  "unit": "s"
+                },
+                "overrides": []
+              }
+            },
+            {
+              "type": "timeseries",
+              "title": "Requests by status code",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "id": 10,
+              "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 15
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "prometheus"
+                  },
+                  "editorMode": "code",
+                  "expr": "sum by (code) (rate(traefik_service_requests_total{k8s_cluster_name=~\"$cluster\", service=~\".*(miot-bridge-api|interactive-map-feeder-api|qr-manager-api|qr-manager-ui).*\"}[$__rate_interval]))",
+                  "refId": "A",
+                  "range": true,
+                  "instant": false,
+                  "legendFormat": "{{code}}"
+                }
+              ],
+              "options": {
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "drawStyle": "line",
+                    "fillOpacity": 10,
+                    "lineWidth": 1,
+                    "showPoints": "never",
+                    "stacking": {
+                      "group": "A",
+                      "mode": "normal"
+                    }
+                  },
+                  "mappings": [],
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      }
+                    ]
+                  },
+                  "unit": "reqps"
+                },
+                "overrides": []
+              }
+            }
+          ]
+        },
+        {
+          "type": "row",
+          "title": "Errors & health",
+          "id": 102,
+          "collapsed": true,
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 7
+          },
+          "panels": [
+            {
+              "type": "timeseries",
+              "title": "Error log rate by app",
+              "datasource": {
+                "type": "loki",
+                "uid": "loki"
+              },
+              "id": 11,
+              "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 8
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "loki",
+                    "uid": "loki"
+                  },
+                  "editorMode": "code",
+                  "expr": "sum by (service_name) (rate({service_name=~\"miot-bridge-api|interactive-map-feeder-api|qr-manager-api|qr-manager-ui\"} | k8s_cluster_name=~\"$cluster\" | detected_level=\"error\" [$__interval]))",
+                  "refId": "A",
+                  "range": true,
+                  "instant": false,
+                  "legendFormat": "{{service_name}}"
+                }
+              ],
+              "description": "detected_level is Loki's own parse of the log line, not an app-emitted field.",
+              "options": {
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "drawStyle": "line",
+                    "fillOpacity": 10,
+                    "lineWidth": 1,
+                    "showPoints": "never",
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    }
+                  },
+                  "mappings": [],
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      }
+                    ]
+                  },
+                  "unit": "short"
+                },
+                "overrides": []
+              }
+            },
+            {
+              "type": "timeseries",
+              "title": "Pods not ready by app",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "id": 12,
+              "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 8
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "prometheus"
+                  },
+                  "editorMode": "code",
+                  "expr": "sum by (app) (label_replace(kube_pod_status_ready{condition=\"false\", cluster=~\"$cluster\", pod=~\".*(miot-bridge-api|interactive-map-feeder-api|qr-manager-api|qr-manager-ui).*\"} and on (namespace, pod, cluster) (kube_pod_status_phase{phase=\"Running\"} == 1), \"app\", \"$1\", \"pod\", \"^.*-iot-(interactive-map-feeder-api|miot-bridge-api|qr-manager-api|qr-manager-ui)-[a-z0-9]+-[a-z0-9]+$\"))",
+                  "refId": "A",
+                  "range": true,
+                  "instant": false,
+                  "legendFormat": "{{app}}"
+                }
+              ],
+              "description": "Same phase=Running guard as the overview stat — see the file header.",
+              "options": {
+                "legend": {
+                  "calcs": [],
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "tooltip": {
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "drawStyle": "line",
+                    "fillOpacity": 10,
+                    "lineWidth": 1,
+                    "showPoints": "never",
+                    "stacking": {
+                      "group": "A",
+                      "mode": "none"
+                    }
+                  },
+                  "mappings": [],
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      }
+                    ]
+                  },
+                  "unit": "short"
+                },
+                "overrides": []
+              }
+            }
+          ]
+        }
+      ],
+      "preload": false,
+      "refresh": "1m",
+      "schemaVersion": 42,
+      "tags": [
+        "homelab",
+        "overview",
+        "iot",
+        "apps",
+        "traefik"
+      ],
+      "templating": {
+        "list": [
+          {
+            "current": {},
+            "datasource": {
+              "type": "prometheus",
+              "uid": "prometheus"
+            },
+            "definition": "label_values(cilium_version, cluster)",
+            "hide": 0,
+            "includeAll": true,
+            "allValue": ".+",
+            "label": "Cluster",
+            "multi": true,
+            "name": "cluster",
+            "options": [],
+            "query": {
+              "query": "label_values(cilium_version, cluster)",
+              "refId": "StandardVariableQuery"
+            },
+            "refresh": 2,
+            "regex": "",
+            "sort": 1,
+            "type": "query"
+          }
+        ]
+      },
+      "time": {
+        "from": "now-6h",
+        "to": "now"
+      },
+      "timepicker": {},
+      "timezone": "browser",
+      "title": "Homelab Overview — IoT Apps",
+      "uid": "homelab-overview",
+      "weekStart": ""
+    }
