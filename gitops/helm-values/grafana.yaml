@@ -243,3 +243,22 @@ dashboards:
   #
   # Weigh the cardinality first: context labels turn a handful of aggregate series into
   # roughly namespace x namespace per handler. See item 2.2 of docs/grafana-dashboards-plan.md.
+
+# Separate Deployment+Service running headless Chromium, used by dashboard/panel PNG
+# export and the get_panel_image MCP tool. The chart auto-wires GF_RENDERING_SERVER_URL,
+# GF_RENDERING_CALLBACK_URL and a bearer token onto the main Grafana container — enabling
+# this key is the only change needed on that side.
+imageRenderer:
+  enabled: true
+  replicas: 1
+  image:
+    tag: v5.12.1
+  # Chart ships `resources: {}` by default; headless Chromium needs more than the 100Mi
+  # the values.yaml comment example suggests. Single-node cluster, occasional use only.
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 300m
+      memory: 384Mi
