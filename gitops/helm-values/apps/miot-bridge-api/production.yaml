@@ -4,7 +4,7 @@
 apps:
   miot-bridge-api:
     image:
-      tag: "0.19.3"
+      tag: "0.19.4"
     udpIngress:
       entrypoint: udp-miot-prod
     templates:

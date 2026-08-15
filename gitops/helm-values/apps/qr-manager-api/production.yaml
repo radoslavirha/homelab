@@ -3,7 +3,7 @@
 apps:
   qr-manager-api:
     image:
-      tag: "0.5.1"
+      tag: "0.5.2"
     templates:
       config:
         content: |
