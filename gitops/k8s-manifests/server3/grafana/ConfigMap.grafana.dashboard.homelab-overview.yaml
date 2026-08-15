@@ -972,22 +972,6 @@ data:
                   "legendFormat": "{{RequestMethod}} {{RequestPath}}"
                 }
               ],
-              "transformations": [
-                {
-                  "id": "labelsToFields",
-                  "options": {
-                    "mode": "rows"
-                  }
-                },
-                {
-                  "id": "organize",
-                  "options": {
-                    "excludeByName": {
-                      "Time": true
-                    }
-                  }
-                }
-              ],
               "description": "RequestPath from Traefik's own access log (json | ServiceName), not a Prometheus metric — Traefik only exposes duration per Service/Router, never per path. Verified live: 7 distinct endpoints across the four apps, no query-string noise, so grouping on the raw path is safe here. Started as a bargauge, but Loki's instant-query response tags each series as a separate 'numeric-multi' frame and BarGauge never split that into individual bars, even with labelsToFields in columns mode — stayed a single merged bar regardless. Table + labelsToFields in rows mode does the same reshape correctly: one row per endpoint.",
               "options": {
                 "showHeader": true,
