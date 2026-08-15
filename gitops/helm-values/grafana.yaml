@@ -254,11 +254,14 @@ imageRenderer:
   image:
     tag: v5.12.1
   # Chart ships `resources: {}` by default; headless Chromium needs more than the 100Mi
-  # the values.yaml comment example suggests. Single-node cluster, occasional use only.
+  # the values.yaml comment example suggests. First real render timed out at 128Mi/300m —
+  # request stays low since it's idle almost all the time, limit raised to give the
+  # Chromium cold start (browser launch + full dashboard page load, not just the metric
+  # query) room to finish inside Grafana's 60s rendering_timeout.
   resources:
     requests:
       cpu: 50m
-      memory: 128Mi
+      memory: 150Mi
     limits:
-      cpu: 300m
-      memory: 384Mi
+      cpu: 1000m
+      memory: 768Mi
