@@ -253,6 +253,17 @@ imageRenderer:
   replicas: 1
   image:
     tag: v5.12.1
+  # Chart normally generates its own token via a Helm `lookup` against the existing
+  # Secret, to keep it stable across upgrades. ArgoCD's repo-server renders Helm offline
+  # (no cluster access during templating), so `lookup` always returns nil there — every
+  # sync minted a *new* random token, and Grafana (fixed at its own pod's last restart)
+  # and the renderer (fixed at its own last restart) ended up on different values
+  # whenever they restarted on different syncs: 401 Unauthorized on every render.
+  # existingSecret points both sides at one Secret instead, created imperatively
+  # (kubectl, not committed) rather than via OpenBao/ExternalSecret like the rest of
+  # this file's secrets — it authenticates two pods already restricted to each other by
+  # a NetworkPolicy, not a credential that needs rotation or backup.
+  existingSecret: grafana-image-renderer-token
   # Chart ships `resources: {}` by default; headless Chromium needs more than the 100Mi
   # the values.yaml comment example suggests. First real render timed out at 128Mi/300m —
   # request stays low since it's idle almost all the time, limit raised to give the
