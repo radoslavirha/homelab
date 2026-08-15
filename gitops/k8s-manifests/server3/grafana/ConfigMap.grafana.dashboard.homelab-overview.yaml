@@ -47,6 +47,15 @@
 # across the four apps, no query-string suffixes, so grouping on the raw RequestPath does
 # not blow up into one series per request the way it would for a REST API with IDs in
 # the path — revisit if any app grows path parameters.
+#
+# These three are `table` panels, not `bargauge`. Loki's instant-query response comes
+# back as one frame per series ('numeric-multi' shape) and BarGauge never split that into
+# separate bars — stayed a single merged bar regardless of the query being correct
+# (confirmed via /api/ds/query directly) and regardless of a labelsToFields transform in
+# columns mode. labelsToFields in rows mode was tried next and made it worse (zero rows —
+# that mode transposes an already-wide frame, which isn't the shape here). Table with no
+# reshaping transform at all handles the raw multi-frame response correctly; screenshotted
+# via the image renderer to confirm, not just checked against the API response.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -972,12 +981,25 @@ data:
                   "legendFormat": "{{RequestMethod}} {{RequestPath}}"
                 }
               ],
-              "description": "RequestPath from Traefik's own access log (json | ServiceName), not a Prometheus metric — Traefik only exposes duration per Service/Router, never per path. Verified live: 7 distinct endpoints across the four apps, no query-string noise, so grouping on the raw path is safe here. Started as a bargauge, but Loki's instant-query response tags each series as a separate 'numeric-multi' frame and BarGauge never split that into individual bars, even with labelsToFields in columns mode — stayed a single merged bar regardless. Table + labelsToFields in rows mode does the same reshape correctly: one row per endpoint.",
+              "transformations": [
+                {
+                  "id": "organize",
+                  "options": {
+                    "excludeByName": {
+                      "Time": true
+                    },
+                    "renameByName": {
+                      "Value #A": "Requests"
+                    }
+                  }
+                }
+              ],
+              "description": "RequestPath from Traefik's own access log (json | ServiceName), not a Prometheus metric — Traefik only exposes duration per Service/Router, never per path. Started as a bargauge: Loki's instant-query response comes back as one frame per series ('numeric-multi'), and BarGauge never split that into individual bars — labelsToFields in either columns or rows mode either left it as one merged bar or dropped every row entirely (rows mode transposes a wide frame, which isn't the shape here). Table with no reshaping transform at all handles the raw multi-frame response correctly out of the box; organize here only hides the (identical, meaningless for an instant query) Time column and renames the value.",
               "options": {
                 "showHeader": true,
                 "sortBy": [
                   {
-                    "displayName": "Value",
+                    "displayName": "Requests",
                     "desc": true
                   }
                 ]
@@ -1023,26 +1045,23 @@ data:
               ],
               "transformations": [
                 {
-                  "id": "labelsToFields",
-                  "options": {
-                    "mode": "rows"
-                  }
-                },
-                {
                   "id": "organize",
                   "options": {
                     "excludeByName": {
                       "Time": true
+                    },
+                    "renameByName": {
+                      "Value #A": "Avg duration"
                     }
                   }
                 }
               ],
-              "description": "Traefik's access-log Duration field is nanoseconds — confirmed against a live sample (71823043 ≈ 71.8ms), hence / 1e9 for seconds. This is the same number the top-of-dashboard Avg duration stat shows, broken down by endpoint instead of collapsed to one figure per app. Table + labelsToFields(rows) — see Requests by endpoint's description; BarGauge would not split Loki's per-series frames into separate bars.",
+              "description": "Traefik's access-log Duration field is nanoseconds — confirmed against a live sample (71823043 ≈ 71.8ms), hence / 1e9 for seconds. This is the same number the top-of-dashboard Avg duration stat shows, broken down by endpoint instead of collapsed to one figure per app. Table with no reshaping transform — see Requests by endpoint's description for why (labelsToFields, in either mode, made this worse, not better).",
               "options": {
                 "showHeader": true,
                 "sortBy": [
                   {
-                    "displayName": "Value",
+                    "displayName": "Avg duration",
                     "desc": true
                   }
                 ]
@@ -1089,26 +1108,23 @@ data:
               ],
               "transformations": [
                 {
-                  "id": "labelsToFields",
-                  "options": {
-                    "mode": "rows"
-                  }
-                },
-                {
                   "id": "organize",
                   "options": {
                     "excludeByName": {
                       "Time": true
+                    },
+                    "renameByName": {
+                      "Value #A": "p95 duration"
                     }
                   }
                 }
               ],
-              "description": "quantile_over_time's `by (...)` sits after the range vector, not inside it like avg_over_time — different LogQL syntax for the same idea, matched to what the Traefik Opentelemetry dashboard already uses. Table + labelsToFields(rows) — see Requests by endpoint's description; BarGauge would not split Loki's per-series frames into separate bars.",
+              "description": "quantile_over_time's `by (...)` sits after the range vector, not inside it like avg_over_time — different LogQL syntax for the same idea, matched to what the Traefik Opentelemetry dashboard already uses. Table with no reshaping transform — see Requests by endpoint's description for why (labelsToFields, in either mode, made this worse, not better).",
               "options": {
                 "showHeader": true,
                 "sortBy": [
                   {
-                    "displayName": "Value",
+                    "displayName": "p95 duration",
                     "desc": true
                   }
                 ]
