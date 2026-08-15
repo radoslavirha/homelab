@@ -972,7 +972,13 @@ data:
                   "legendFormat": "{{RequestMethod}} {{RequestPath}}"
                 }
               ],
-              "description": "RequestPath from Traefik's own access log (json | ServiceName), not a Prometheus metric — Traefik only exposes duration per Service/Router, never per path. Verified live: 7 distinct endpoints across the four apps, no query-string noise, so grouping on the raw path is safe here.",
+              "transformations": [
+                {
+                  "id": "labelsToFields",
+                  "options": {}
+                }
+              ],
+              "description": "RequestPath from Traefik's own access log (json | ServiceName), not a Prometheus metric — Traefik only exposes duration per Service/Router, never per path. Verified live: 7 distinct endpoints across the four apps, no query-string noise, so grouping on the raw path is safe here. Loki's instant-query response comes back as one frame per series tagged 'numeric-multi', which this panel type doesn't split into separate bars on its own — labelsToFields reshapes it into the wide format BarGauge expects. The equivalent Prometheus query elsewhere in this repo doesn't need this: its frames carry no type tag and BarGauge's default multi-frame handling already covers that case.",
               "options": {
                 "displayMode": "gradient",
                 "orientation": "horizontal",
@@ -1036,7 +1042,13 @@ data:
                   "legendFormat": "{{RequestMethod}} {{RequestPath}}"
                 }
               ],
-              "description": "Traefik's access-log Duration field is nanoseconds — confirmed against a live sample (71823043 ≈ 71.8ms), hence / 1e9 for seconds. This is the same number the top-of-dashboard Avg duration stat shows, broken down by endpoint instead of collapsed to one figure per app.",
+              "transformations": [
+                {
+                  "id": "labelsToFields",
+                  "options": {}
+                }
+              ],
+              "description": "Traefik's access-log Duration field is nanoseconds — confirmed against a live sample (71823043 ≈ 71.8ms), hence / 1e9 for seconds. This is the same number the top-of-dashboard Avg duration stat shows, broken down by endpoint instead of collapsed to one figure per app. labelsToFields — see Requests by endpoint's description for why Loki's frame shape needs it here and Prometheus panels elsewhere in this repo don't.",
               "options": {
                 "displayMode": "gradient",
                 "orientation": "horizontal",
@@ -1100,7 +1112,13 @@ data:
                   "legendFormat": "{{RequestMethod}} {{RequestPath}}"
                 }
               ],
-              "description": "quantile_over_time's `by (...)` sits after the range vector, not inside it like avg_over_time — different LogQL syntax for the same idea, matched to what the Traefik Opentelemetry dashboard already uses.",
+              "transformations": [
+                {
+                  "id": "labelsToFields",
+                  "options": {}
+                }
+              ],
+              "description": "quantile_over_time's `by (...)` sits after the range vector, not inside it like avg_over_time — different LogQL syntax for the same idea, matched to what the Traefik Opentelemetry dashboard already uses. labelsToFields — see Requests by endpoint's description for why Loki's frame shape needs it here and Prometheus panels elsewhere in this repo don't.",
               "options": {
                 "displayMode": "gradient",
                 "orientation": "horizontal",
