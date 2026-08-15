@@ -37,6 +37,16 @@
 # because kube-state-metrics emits one series per phase value and a bare `and on(...)
 # kube_pod_status_phase{phase="Running"}` matches the label set regardless of its value,
 # same trap as the Longhorn `robustness` encoding in rule 7(e).
+#
+# Endpoints row — true per-path stats (not just per-app) come from Traefik's own access
+# log, not any metric: Traefik exposes duration per Service/Router only, never per
+# RequestPath. `{service_name="traefik"} | json | ServiceName=~...` decodes the same
+# Gateway-generated ServiceName as the metrics side, then `unwrap Duration` treats the
+# access log as a metric source. Duration is nanoseconds (verified against a live sample:
+# 71823043 ≈ 71.8ms), hence the / 1e9. Checked live before building: 7 distinct paths
+# across the four apps, no query-string suffixes, so grouping on the raw RequestPath does
+# not blow up into one series per request the way it would for a REST API with IDs in
+# the path — revisit if any app grows path parameters.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -915,6 +925,206 @@ data:
                     ]
                   },
                   "unit": "short"
+                },
+                "overrides": []
+              }
+            }
+          ]
+        },
+        {
+          "type": "row",
+          "title": "Endpoints",
+          "id": 103,
+          "collapsed": true,
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 8
+          },
+          "panels": [
+            {
+              "type": "bargauge",
+              "title": "Requests by endpoint",
+              "datasource": {
+                "type": "loki",
+                "uid": "loki"
+              },
+              "id": 13,
+              "gridPos": {
+                "h": 8,
+                "w": 8,
+                "x": 0,
+                "y": 9
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "loki",
+                    "uid": "loki"
+                  },
+                  "editorMode": "code",
+                  "expr": "topk(10, sum by (RequestMethod, RequestPath) (count_over_time({service_name=\"traefik\"} | k8s_cluster_name=~\"$cluster\" |= \"RequestProtocol\" | json | ServiceName=~\".*(miot-bridge-api|interactive-map-feeder-api|qr-manager-api|qr-manager-ui).*\" [$__range])))",
+                  "refId": "A",
+                  "queryType": "instant",
+                  "legendFormat": "{{RequestMethod}} {{RequestPath}}"
+                }
+              ],
+              "description": "RequestPath from Traefik's own access log (json | ServiceName), not a Prometheus metric — Traefik only exposes duration per Service/Router, never per path. Verified live: 7 distinct endpoints across the four apps, no query-string noise, so grouping on the raw path is safe here.",
+              "options": {
+                "displayMode": "gradient",
+                "orientation": "horizontal",
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ],
+                  "fields": "",
+                  "values": false
+                },
+                "showUnfilled": true,
+                "valueMode": "color"
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "continuous-GrYlRd"
+                  },
+                  "mappings": [],
+                  "min": 0,
+                  "unit": "short",
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      }
+                    ]
+                  }
+                },
+                "overrides": []
+              }
+            },
+            {
+              "type": "bargauge",
+              "title": "Avg duration by endpoint",
+              "datasource": {
+                "type": "loki",
+                "uid": "loki"
+              },
+              "id": 14,
+              "gridPos": {
+                "h": 8,
+                "w": 8,
+                "x": 8,
+                "y": 9
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "loki",
+                    "uid": "loki"
+                  },
+                  "editorMode": "code",
+                  "expr": "topk(10, avg by (RequestMethod, RequestPath) (avg_over_time({service_name=\"traefik\"} | k8s_cluster_name=~\"$cluster\" |= \"RequestProtocol\" | json | ServiceName=~\".*(miot-bridge-api|interactive-map-feeder-api|qr-manager-api|qr-manager-ui).*\" | unwrap Duration [$__range])) / 1e9)",
+                  "refId": "A",
+                  "queryType": "instant",
+                  "legendFormat": "{{RequestMethod}} {{RequestPath}}"
+                }
+              ],
+              "description": "Traefik's access-log Duration field is nanoseconds — confirmed against a live sample (71823043 ≈ 71.8ms), hence / 1e9 for seconds. This is the same number the top-of-dashboard Avg duration stat shows, broken down by endpoint instead of collapsed to one figure per app.",
+              "options": {
+                "displayMode": "gradient",
+                "orientation": "horizontal",
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ],
+                  "fields": "",
+                  "values": false
+                },
+                "showUnfilled": true,
+                "valueMode": "color"
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "continuous-GrYlRd"
+                  },
+                  "mappings": [],
+                  "min": 0,
+                  "unit": "s",
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      }
+                    ]
+                  }
+                },
+                "overrides": []
+              }
+            },
+            {
+              "type": "bargauge",
+              "title": "p95 duration by endpoint",
+              "datasource": {
+                "type": "loki",
+                "uid": "loki"
+              },
+              "id": 15,
+              "gridPos": {
+                "h": 8,
+                "w": 8,
+                "x": 16,
+                "y": 9
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "loki",
+                    "uid": "loki"
+                  },
+                  "editorMode": "code",
+                  "expr": "topk(10, quantile_over_time(0.95, ({service_name=\"traefik\"} | k8s_cluster_name=~\"$cluster\" |= \"RequestProtocol\" | json | ServiceName=~\".*(miot-bridge-api|interactive-map-feeder-api|qr-manager-api|qr-manager-ui).*\" | unwrap Duration)[$__range]) by (RequestMethod, RequestPath) / 1e9)",
+                  "refId": "A",
+                  "queryType": "instant",
+                  "legendFormat": "{{RequestMethod}} {{RequestPath}}"
+                }
+              ],
+              "description": "quantile_over_time's `by (...)` sits after the range vector, not inside it like avg_over_time — different LogQL syntax for the same idea, matched to what the Traefik Opentelemetry dashboard already uses.",
+              "options": {
+                "displayMode": "gradient",
+                "orientation": "horizontal",
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ],
+                  "fields": "",
+                  "values": false
+                },
+                "showUnfilled": true,
+                "valueMode": "color"
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "continuous-GrYlRd"
+                  },
+                  "mappings": [],
+                  "min": 0,
+                  "unit": "s",
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      }
+                    ]
+                  }
                 },
                 "overrides": []
               }
