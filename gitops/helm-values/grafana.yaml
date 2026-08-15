@@ -259,10 +259,11 @@ imageRenderer:
   # sync minted a *new* random token, and Grafana (fixed at its own pod's last restart)
   # and the renderer (fixed at its own last restart) ended up on different values
   # whenever they restarted on different syncs: 401 Unauthorized on every render.
-  # existingSecret points both sides at one Secret instead, created imperatively
-  # (kubectl, not committed) rather than via OpenBao/ExternalSecret like the rest of
-  # this file's secrets — it authenticates two pods already restricted to each other by
-  # a NetworkPolicy, not a credential that needs rotation or backup.
+  # existingSecret points both sides at one Secret instead — provisioned the same way
+  # as every other secret in this file, via ExternalSecret.grafana.image-renderer.yaml
+  # reading OpenBao secret/server3/grafana-image-renderer, so a cluster rebuild recreates
+  # it automatically instead of depending on a one-off imperative kubectl command nobody
+  # would remember to redo.
   existingSecret: grafana-image-renderer-token
   # Chart ships `resources: {}` by default; headless Chromium needs more than the 100Mi
   # the values.yaml comment example suggests. First real render timed out at 128Mi/300m —
