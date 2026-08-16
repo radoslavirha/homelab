@@ -34,15 +34,23 @@ persistence:
 recreatePods: true
 
 emqxConfig:
-  # OpenTelemetry end-to-end tracing (5.8.3+). Same OTLP gRPC collector Traefik
-  # uses (see gitops/helm-values/traefik.yaml), no scheme-less/insecure flag here —
-  # EMQX takes the scheme in the endpoint URL itself, plaintext via http://.
-  # trace_mode e2e propagates W3C traceparent/tracestate as MQTT v5 user
-  # properties, so it requires MQTT 5 clients end to end.
-  EMQX_opentelemetry__exporter__endpoint: "http://k8s-monitoring-alloy-receiver.monitoring.svc.cluster.local:4317"
-  EMQX_opentelemetry__traces__enable: "true"
-  EMQX_opentelemetry__traces__trace_mode: "e2e"
-
+  # Do not add EMQX_OPENTELEMETRY__* here. OpenTelemetry in EMQX is **Enterprise-only
+  # as of 5.8.3** — confirmed by an EMQX maintainer:
+  # https://github.com/emqx/emqx/issues/14395#issuecomment-2550653939
+  #
+  # 5.8.3 is also the release the docs credit with introducing end-to-end tracing, so
+  # "EMQX 5.8.3+ supports e2e tracing" is true *and* Enterprise-scoped — the same
+  # version added the feature and put it behind the licence. Every OTel page upstream
+  # lives in the EE configuration manual. This image is emqx/emqx, the open-source
+  # build, where the `opentelemetry` config root does not exist:
+  # the vars are set in the container but the broker never maps them (they are absent
+  # from the "env var -> config path" boot log), and `emqx ctl conf show opentelemetry`
+  # returns key_not_found. It fails silently — no warning, no error.
+  #
+  # MQTT tracing is instead done client-side: the shared mqtt module in the apps repo
+  # injects/extracts W3C traceparent over MQTT 5 user properties and emits the
+  # PRODUCER/CONSUMER spans. That covers app-to-app correlation through the broker;
+  # only EMQX's own internal spans are missing, and those are what the licence buys.
   EMQX_rule_engine__rules__LOXONE_MIOT_NOTIFICATION:
     enable: true
     description: "Rule to accept JSON payload from MiOT Bridge and republish each property as a separate message with deviceId in text/plain format. First line is deviceId from topic, second line is property=value from JSON payload."
