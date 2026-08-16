@@ -19,6 +19,20 @@ persistence:
   enabled: true
   storageClass: "longhorn"
 
+# emqxConfig renders to the `emqx-env` ConfigMap, consumed via envFrom — and a
+# ConfigMap edit alone never changes the pod template, so the StatefulSet does not
+# roll and the running broker keeps its boot-time env. ArgoCD still reports Synced,
+# which is how the OTel settings below sat unapplied for a full day. This adds the
+# chart's checksum/config pod annotation so any emqxConfig change rolls the pod.
+#
+# Deliberately not Reloader: its `auto` annotation would also watch the
+# emqx-credentials Secret, and emqx is excluded from Reloader on purpose because
+# that Secret only bootstraps the dashboard user into mnesia on first boot
+# (docs/superpowers/plans/2026-08-05-stakater-reloader.md). The chart checksums
+# configmap.yaml only, and the Secret is an ExternalSecret outside the chart, so
+# credential rotation still cannot trigger a restart.
+recreatePods: true
+
 emqxConfig:
   # OpenTelemetry end-to-end tracing (5.8.3+). Same OTLP gRPC collector Traefik
   # uses (see gitops/helm-values/traefik.yaml), no scheme-less/insecure flag here —
