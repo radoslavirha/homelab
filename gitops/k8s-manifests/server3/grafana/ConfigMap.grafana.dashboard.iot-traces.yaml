@@ -1,0 +1,492 @@
+---
+# IoT — Traces & Logs (hand-built)
+#
+# A trace *explorer* for the IoT apps, not an APM overview — "Applications — RED" (uid
+# apps-red) already owns rate/error/duration. This one answers "find the trace, then show me
+# everything that happened in it": search -> pick -> trace view -> the logs that trace emitted.
+#
+# Everything below was verified against live Tempo 2.10.1 / Loki / Prometheus on 2026-08-16
+# before it was written, per rule 7 of docs/grafana-dashboards-plan.md.
+#
+# WHAT IS ACTUALLY IN TEMPO (measured, not assumed)
+#
+#   resource.service.name        traefik, miot-bridge-api  -- those two, nothing else
+#   resource.k8s.cluster.name    server1 (miot-bridge-api), server3 (traefik)
+#   span names, miot-bridge-api  process iot/miot-bridge/device/{deviceId}/command
+#                                publish iot/miot-bridge/device/{deviceId}/{response,notifications}
+#                                findOne|find <db>.<collection>
+#   span names, traefik          GET, POST, PUT  -- method only. Traefik sets no http.route
+#                                (it has no route templates), so semconv falls back to the
+#                                method alone. "GET /endpoint" style names do not exist here.
+#
+#   There are NO HTTP server spans from miot-bridge-api in the retention window, and no trace
+#   contains both traefik and an app: server1/server2 traefik served 0 requests in 24h
+#   (increase(traefik_entrypoint_requests_total[24h]) == 0 on both), so the only traced HTTP is
+#   server3's own ingress. The IoT path is MQTT end to end. Nothing is broken; the HTTP panels
+#   here simply stay empty until something calls an app over HTTP.
+#
+# WHY THE APP VARIABLE HAS NO allValue
+#
+#   The obvious `allValue: ".+"` is wrong on this dashboard: traefik is a traced service, so
+#   ".+" silently pulls every server3 ingress trace into a board titled "IoT". Leaving allValue
+#   unset makes Grafana expand All to the variable's real option list, and that list is built by
+#   a query that excludes traefik -- so All and an explicit multi-select agree. Cost: the list
+#   comes from span metrics, which only carry services seen inside the dashboard time range. An
+#   app silent for the whole range drops out of the picker and its traces are hidden. Widen the
+#   time range when hunting a dead app.
+#
+# WHY ${x:pipe} AND NOT "$x"
+#
+#   Grafana only auto-formats multi-value variables for datasources it recognises as regex-based
+#   (Prometheus, Loki). Tempo is not one of them: a bare "$server" with two clusters selected
+#   interpolates to the glob form {server1,server3}, which TraceQL then reads as a regex
+#   repetition and does not match what you meant. :pipe forces server1|server3. The Prometheus
+#   and Loki panels below keep the bare "$var" form, which is correct there.
+#
+# THREE VARIABLES ARE QUERY FRAGMENTS, NOT VALUES
+#
+#   TraceQL has no conditional syntax, so an "off" filter has to be a valid no-op. The assembled
+#   query is:
+#
+#     { nestedSetParent = -1 $kind && <cluster> && <service> && <name> } $status $traceql
+#
+#   $kind splices INSIDE the root selector, because "which kind of span starts the trace" is a
+#   property of the root and appending a spanset would instead ask "does the trace contain one".
+#   Its no-op is `&& nestedSetParent >= -1` — true for the root (-1) and every child (>= 0), so
+#   it constrains nothing. `kind =~ "..."` is not an option: kind is an enum, and Tempo rejects
+#   the query outright with
+#     invalid TraceQL query: binary operations must operate on the same type: kind =~ `...`
+#
+#   $status and $traceql append a whole spanset. $status's no-op is the literal `&& {}`, a
+#   spanset matching all spans, verified to return the same traces as omitting it. An empty
+#   custom-variable value would read better but Grafana's `label : value` parser does not
+#   reliably keep one. $traceql is a textbox and CAN default to "", since a trailing empty
+#   string is already a valid query.
+#
+#   Consequence for anyone editing these: no label or value in $kind/$status may contain a comma
+#   or a colon — Grafana splits custom-variable options on both.
+#
+# ROOT-ONLY LIST, AND THE POLLER NOISE
+#
+#   `nestedSetParent = -1` is the Tempo intrinsic for "this span is the trace root". The traces
+#   table therefore lists one row per trace, and Grafana's own nested frame provides the expand
+#   arrow that reveals the matched spans with the select()ed attributes as columns.
+#
+#   At idle the list is ~all mongo. miot-bridge-api polls `find <db>.notifications` and
+#   `findOne <db>.devices` on a timer, outside any request context, so those DB spans ARE trace
+#   roots — measured at 0.177 traces/s each, against 0.002/s for real MQTT commands, i.e. two
+#   orders of magnitude of noise. That is honest data, not a dashboard bug, which is why the
+#   default stays "Any". Switch Root kind to "MQTT" to see only the work Loxone actually drives.
+#
+#   The rate charts are deliberately NOT wired to $kind. Span metrics label the same concept
+#   span_kind="SPAN_KIND_CONSUMER" while TraceQL spells it `kind = consumer`, and one variable
+#   cannot carry both spellings. The charts exist to locate a time window, where the extra
+#   series are labelled and harmless; the table exists to pick a trace, where they are not.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-iot-traces
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+  annotations:
+    argocd.argoproj.io/sync-wave: "-50"
+    grafana_folder: "Applications"
+data:
+  iot-traces.json: |
+    {
+      "annotations": {
+        "list": []
+      },
+      "editable": true,
+      "graphTooltip": 1,
+      "links": [
+        {
+          "asDropdown": false,
+          "icon": "external link",
+          "includeVars": true,
+          "keepTime": true,
+          "tags": ["applications"],
+          "targetBlank": false,
+          "title": "Applications",
+          "type": "dashboards"
+        }
+      ],
+      "panels": [
+        {
+          "type": "row",
+          "title": "Find the window",
+          "id": 1,
+          "collapsed": false,
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+          "panels": []
+        },
+        {
+          "type": "timeseries",
+          "title": "Trace rate by operation",
+          "id": 2,
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "description": "Span metrics from Tempo's generator, so it covers the full Prometheus retention rather than Tempo's 14 days. Honours the Name filter. Use it to find WHEN, then zoom the time range and read the table below.",
+          "gridPos": { "h": 7, "w": 12, "x": 0, "y": 1 },
+          "targets": [
+            {
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "refId": "A",
+              "editorMode": "code",
+              "range": true,
+              "expr": "sum by (span_name) (rate(traces_spanmetrics_calls_total{k8s_cluster_name=~\"$server\", service=~\"$app\", span_name=~\".*$filter.*\"}[$__rate_interval]))",
+              "legendFormat": "{{span_name}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqps",
+              "min": 0,
+              "custom": {
+                "drawStyle": "line",
+                "lineWidth": 1,
+                "fillOpacity": 10,
+                "showPoints": "never"
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true, "calcs": ["mean", "max"] },
+            "tooltip": { "mode": "multi", "sort": "desc" }
+          }
+        },
+        {
+          "type": "timeseries",
+          "title": "Errors by operation",
+          "id": 3,
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "description": "status_code is STATUS_CODE_ERROR or STATUS_CODE_UNSET. There is no STATUS_CODE_OK — OTel only sets ERROR explicitly, so UNSET means success. Empty here means nothing failed.",
+          "gridPos": { "h": 7, "w": 12, "x": 12, "y": 1 },
+          "targets": [
+            {
+              "datasource": { "type": "prometheus", "uid": "prometheus" },
+              "refId": "A",
+              "editorMode": "code",
+              "range": true,
+              "expr": "sum by (span_name) (rate(traces_spanmetrics_calls_total{k8s_cluster_name=~\"$server\", service=~\"$app\", span_name=~\".*$filter.*\", status_code=\"STATUS_CODE_ERROR\"}[$__rate_interval]))",
+              "legendFormat": "{{span_name}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqps",
+              "min": 0,
+              "color": { "mode": "fixed", "fixedColor": "red" },
+              "custom": {
+                "drawStyle": "bars",
+                "lineWidth": 1,
+                "fillOpacity": 60,
+                "showPoints": "never"
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true, "calcs": ["sum"] },
+            "tooltip": { "mode": "multi", "sort": "desc" }
+          }
+        },
+        {
+          "type": "row",
+          "title": "Traces",
+          "id": 4,
+          "collapsed": false,
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 8 },
+          "panels": []
+        },
+        {
+          "type": "table",
+          "title": "Root traces",
+          "id": 5,
+          "datasource": { "type": "tempo", "uid": "tempo" },
+          "description": "One row per trace (root span only); the arrow expands to the matched spans with the selected attributes as columns. Click the NAME cell to load that trace into the panels below — it sets the traceId variable. Clicking the Trace ID cell instead opens the trace in Explore.\n\nThe select() list carries the attributes worth scanning without opening anything: miot device/command/operation, the MQTT topic, and HTTP method/path/status. Attributes a span does not have render empty.\n\nAt idle this is dominated by miot-bridge-api's mongo polling, which genuinely starts its own traces. Set Root kind to MQTT to see only Loxone-driven work.",
+          "gridPos": { "h": 13, "w": 24, "x": 0, "y": 9 },
+          "targets": [
+            {
+              "datasource": { "type": "tempo", "uid": "tempo" },
+              "refId": "A",
+              "queryType": "traceql",
+              "limit": 100,
+              "tableType": "traces",
+              "query": "{ nestedSetParent = -1 $kind && resource.k8s.cluster.name =~ \"${server:pipe}\" && resource.service.name =~ \"${app:pipe}\" && name =~ \".*$filter.*\" } $status $traceql | select(span.miot.device.id, span.miot.command, span.miot.operation, span.messaging.destination.name, span.http.request.method, span.url.path, span.http.response.status_code)"
+            }
+          ],
+          "options": {
+            "showHeader": true,
+            "cellHeight": "sm",
+            "sortBy": [{ "displayName": "Start time", "desc": true }]
+          },
+          "fieldConfig": {
+            "defaults": { "custom": { "align": "auto", "filterable": false } },
+            "overrides": [
+              {
+                "matcher": { "id": "byName", "options": "traceName" },
+                "properties": [
+                  {
+                    "id": "links",
+                    "value": [
+                      {
+                        "title": "Load this trace below",
+                        "targetBlank": false,
+                        "url": "/d/iot-traces/iot-traces?${server:queryparam}&${app:queryparam}&${kind:queryparam}&${filter:queryparam}&${status:queryparam}&${traceql:queryparam}&${logSearch:queryparam}&${__url_time_range}&var-traceId=${__data.fields.traceID}"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "matcher": { "id": "byName", "options": "Name" },
+                "properties": [
+                  {
+                    "id": "links",
+                    "value": [
+                      {
+                        "title": "Load this trace below",
+                        "targetBlank": false,
+                        "url": "/d/iot-traces/iot-traces?${server:queryparam}&${app:queryparam}&${kind:queryparam}&${filter:queryparam}&${status:queryparam}&${traceql:queryparam}&${logSearch:queryparam}&${__url_time_range}&var-traceId=${__data.fields.traceID}"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "matcher": { "id": "byName", "options": "Duration" },
+                "properties": [
+                  { "id": "custom.width", "value": 110 },
+                  {
+                    "id": "custom.cellOptions",
+                    "value": { "type": "color-text" }
+                  },
+                  {
+                    "id": "thresholds",
+                    "value": {
+                      "mode": "absolute",
+                      "steps": [
+                        { "color": "text", "value": null },
+                        { "color": "orange", "value": 1000 },
+                        { "color": "red", "value": 5000 }
+                      ]
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": { "id": "byName", "options": "Start time" },
+                "properties": [{ "id": "custom.width", "value": 180 }]
+              }
+            ]
+          }
+        },
+        {
+          "type": "row",
+          "title": "Selected trace",
+          "id": 6,
+          "collapsed": false,
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 22 },
+          "panels": []
+        },
+        {
+          "type": "traces",
+          "title": "Trace $traceId",
+          "id": 7,
+          "datasource": { "type": "tempo", "uid": "tempo" },
+          "description": "Empty until traceId is set — click a trace Name above, or paste an ID into the Trace ID box. The Tempo datasource is wired to Loki and Prometheus, so each span also offers a 'Logs for this span' and a related-metrics link.",
+          "gridPos": { "h": 16, "w": 24, "x": 0, "y": 23 },
+          "targets": [
+            {
+              "datasource": { "type": "tempo", "uid": "tempo" },
+              "refId": "A",
+              "queryType": "traceql",
+              "query": "$traceId"
+            }
+          ],
+          "fieldConfig": { "defaults": {}, "overrides": [] },
+          "options": {}
+        },
+        {
+          "type": "logs",
+          "title": "Logs emitted by this trace",
+          "id": 8,
+          "datasource": { "type": "loki", "uid": "loki" },
+          "description": "trace_id is STRUCTURED METADATA here, not text in the line — Loki ingests these over native OTLP. A line filter (|= \"<id>\") would match nothing; this uses the metadata filter, the same query the Tempo datasource's tracesToLogsV2 uses. No app/cluster filter on purpose, so a trace crossing services still shows every line.",
+          "gridPos": { "h": 10, "w": 24, "x": 0, "y": 39 },
+          "targets": [
+            {
+              "datasource": { "type": "loki", "uid": "loki" },
+              "refId": "A",
+              "queryType": "range",
+              "editorMode": "code",
+              "expr": "{k8s_cluster_name=~\".+\"} | trace_id = \"$traceId\""
+            }
+          ],
+          "options": {
+            "showTime": true,
+            "showLabels": false,
+            "showCommonLabels": false,
+            "wrapLogMessage": true,
+            "prettifyLogMessage": true,
+            "enableLogDetails": true,
+            "dedupStrategy": "none",
+            "sortOrder": "Ascending"
+          }
+        },
+        {
+          "type": "row",
+          "title": "Log search — the other way in",
+          "id": 9,
+          "collapsed": false,
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 49 },
+          "panels": []
+        },
+        {
+          "type": "logs",
+          "title": "App logs",
+          "id": 10,
+          "datasource": { "type": "loki", "uid": "loki" },
+          "description": "Start from a log line instead of a trace. Put anything in the Log search box (it is a case-insensitive regex — an empty box matches everything). Expand a line: the Loki datasource's derived field turns its trace_id into a TraceID link, which opens the trace in Explore. To pull it into this dashboard instead, copy the id into the Trace ID box.",
+          "gridPos": { "h": 12, "w": 24, "x": 0, "y": 50 },
+          "targets": [
+            {
+              "datasource": { "type": "loki", "uid": "loki" },
+              "refId": "A",
+              "queryType": "range",
+              "editorMode": "code",
+              "expr": "{k8s_cluster_name=~\"$server\", service_name=~\"$app\"} |~ \"(?i)$logSearch\""
+            }
+          ],
+          "options": {
+            "showTime": true,
+            "showLabels": false,
+            "showCommonLabels": false,
+            "wrapLogMessage": true,
+            "prettifyLogMessage": true,
+            "enableLogDetails": true,
+            "dedupStrategy": "none",
+            "sortOrder": "Descending"
+          }
+        }
+      ],
+      "preload": false,
+      "refresh": "",
+      "schemaVersion": 42,
+      "tags": ["applications", "iot", "traces", "logs", "otel"],
+      "templating": {
+        "list": [
+          {
+            "type": "query",
+            "name": "server",
+            "label": "Server",
+            "datasource": { "type": "prometheus", "uid": "prometheus" },
+            "definition": "label_values(traces_spanmetrics_calls_total{service!=\"traefik\"}, k8s_cluster_name)",
+            "query": {
+              "query": "label_values(traces_spanmetrics_calls_total{service!=\"traefik\"}, k8s_cluster_name)",
+              "refId": "StandardVariableQuery"
+            },
+            "current": {},
+            "options": [],
+            "multi": true,
+            "includeAll": true,
+            "refresh": 2,
+            "sort": 1,
+            "hide": 0,
+            "regex": ""
+          },
+          {
+            "type": "query",
+            "name": "app",
+            "label": "App",
+            "description": "Traced services excluding traefik. No allValue is set on purpose — All expands to this list, so it can never widen to the gateway.",
+            "datasource": { "type": "prometheus", "uid": "prometheus" },
+            "definition": "label_values(traces_spanmetrics_calls_total{k8s_cluster_name=~\"$server\", service!=\"traefik\"}, service)",
+            "query": {
+              "query": "label_values(traces_spanmetrics_calls_total{k8s_cluster_name=~\"$server\", service!=\"traefik\"}, service)",
+              "refId": "StandardVariableQuery"
+            },
+            "current": {},
+            "options": [],
+            "multi": true,
+            "includeAll": true,
+            "refresh": 2,
+            "sort": 1,
+            "hide": 0,
+            "regex": ""
+          },
+          {
+            "type": "custom",
+            "name": "kind",
+            "label": "Root kind",
+            "description": "Constrains the span that STARTS the trace. 'Any' is the tautology nestedSetParent >= -1. Use MQTT to drop miot-bridge-api's mongo polling, which starts its own traces and otherwise floods the table.",
+            "query": "Any : && nestedSetParent >= -1,MQTT : && (kind = consumer || kind = producer),Entry points : && (kind = consumer || kind = server),Outbound / DB : && kind = client",
+            "current": { "text": "Any", "value": "&& nestedSetParent >= -1" },
+            "options": [],
+            "multi": false,
+            "includeAll": false,
+            "hide": 0
+          },
+          {
+            "type": "textbox",
+            "name": "filter",
+            "label": "Name filter",
+            "description": "Regex on the ROOT span name, substring-matched. Examples: process  |  publish|process  |  ^GET",
+            "query": "",
+            "current": { "text": "", "value": "" },
+            "options": [],
+            "hide": 0
+          },
+          {
+            "type": "custom",
+            "name": "status",
+            "label": "Status",
+            "description": "Appends a spanset to the trace query. 'Any' is the no-op spanset {}. The HTTP options only ever match traefik spans today — the IoT apps emit no HTTP server spans.",
+            "query": "Any : && {},Errors only : && {status = error},HTTP 4xx : && {span.http.response.status_code >= 400 && span.http.response.status_code < 500},HTTP 5xx : && {span.http.response.status_code >= 500}",
+            "current": { "text": "Any", "value": "&& {}" },
+            "options": [],
+            "multi": false,
+            "includeAll": false,
+            "hide": 0
+          },
+          {
+            "type": "textbox",
+            "name": "traceql",
+            "label": "Extra TraceQL",
+            "description": "Raw spanset appended to the trace query — must start with &&. Examples: && {span.miot.device.id = 1141132187}  |  && {kind = consumer}  |  && {duration > 1s}",
+            "query": "",
+            "current": { "text": "", "value": "" },
+            "options": [],
+            "hide": 0
+          },
+          {
+            "type": "textbox",
+            "name": "traceId",
+            "label": "Trace ID",
+            "description": "Set by clicking a trace Name in the table, or paste one here.",
+            "query": "",
+            "current": { "text": "", "value": "" },
+            "options": [],
+            "hide": 0
+          },
+          {
+            "type": "textbox",
+            "name": "logSearch",
+            "label": "Log search",
+            "description": "Case-insensitive regex over the App logs panel. Empty matches everything.",
+            "query": "",
+            "current": { "text": "", "value": "" },
+            "options": [],
+            "hide": 0
+          }
+        ]
+      },
+      "time": { "from": "now-6h", "to": "now" },
+      "timepicker": {},
+      "timezone": "browser",
+      "title": "IoT — Traces & Logs",
+      "uid": "iot-traces",
+      "version": 1
+    }
