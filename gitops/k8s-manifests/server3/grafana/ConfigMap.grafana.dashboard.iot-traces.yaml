@@ -48,6 +48,22 @@
 #   rootServiceName/rootTraceName per trace regardless of what matched), so a gateway-fronted
 #   trace correctly reads "traefik / GET" and expands to the app spans.
 #
+# THE POLLER FLOOD TRUNCATES THE RESULT SET, AND THE SORT HIDES IT
+#
+#   Tempo's search caps at `limit` (100 here) and does NOT return the newest N. Measured over a
+#   6h window with Contains kind = Any it returned 100 traces spanning 09:50-10:50 -- the OLDEST
+#   hour of the window -- every one a mongo poll, while a real HTTP request made at 14:35 sat in
+#   Tempo and never appeared. The poller emits ~0.35 traces/s, so a 6h window holds ~7500 traces
+#   and the budget is spent on whichever blocks get scanned first. There is no sort parameter to
+#   fix it with: Grafana's Tempo datasource exposes none, and Tempo returns results as found.
+#
+#   Worse, the table's "Start time desc" sorts only the fetched page, so the newest row looks
+#   authoritative while being hours stale. Nothing indicates truncation happened.
+#
+#   Hence Contains kind DEFAULTS to "MQTT + HTTP" rather than Any. Same 6h window, poller
+#   excluded: 17 traces, nothing dropped, both HTTP requests present. Use Any only on a short
+#   range, and treat a full 100 rows as "this is truncated" rather than "this is everything".
+#
 # MONGO SPANS REALLY ARE ROOTS -- VERIFIED, NOT A DISPLAY ARTEFACT
 #
 #   `find <db>.model-property-overrides` appearing as a trace root is not a dropped parent. Span
@@ -270,7 +286,7 @@ data:
           "title": "Traces",
           "id": 5,
           "datasource": { "type": "tempo", "uid": "tempo" },
-          "description": "One row per trace (root span only); the arrow expands to the matched spans with the selected attributes as columns. Click the NAME cell to load that trace into the panels below — it sets the traceId variable. Clicking the Trace ID cell instead opens the trace in Explore.\n\nThe select() list carries the attributes worth scanning without opening anything: miot device/command/operation, the MQTT topic, and HTTP method/path/status. Attributes a span does not have render empty.\n\nService and Name are the ROOT of the trace, so anything entering through the gateway reads \"traefik / GET\" — traefik names HTTP spans by method only. Expand the row for the app's own span, which carries the readable route.\n\nThe Name filter matches the root name OR any span name, so typing part of a route finds gateway-fronted traces too.\n\nAt idle this is dominated by miot-bridge-api's mongo polling, which genuinely starts its own traces (parentSpanID is empty — verified, not a dropped parent). Set Contains kind to MQTT or HTTP to drop them.",
+          "description": "One row per trace (root span only); the arrow expands to the matched spans with the selected attributes as columns. Click the NAME cell to load that trace into the panels below — it sets the traceId variable. Clicking the Trace ID cell instead opens the trace in Explore.\n\nThe select() list carries the attributes worth scanning without opening anything: miot device/command/operation, the MQTT topic, and HTTP method/path/status. Attributes a span does not have render empty.\n\nService and Name are the ROOT of the trace, so anything entering through the gateway reads \"traefik / GET\" — traefik names HTTP spans by method only. Expand the row for the app's own span, which carries the readable route.\n\nThe Name filter matches the root name OR any span name, so typing part of a route finds gateway-fronted traces too.\n\nTRUNCATION TRAP: Tempo caps this at limit=100 and does NOT return the newest 100. Measured over a 6h window it returned traces from 09:50-10:50 — the OLDEST hour — because the mongo poller emits ~0.35 traces/s (~7500 per 6h) and fills the budget from whichever blocks are scanned first. The table then sorts only that page, so \"Start time desc\" looks authoritative and is not. This is why Contains kind defaults to MQTT + HTTP: with the poller excluded the same window returns 17 traces and nothing is dropped.",
           "gridPos": { "h": 13, "w": 24, "x": 0, "y": 9 },
           "targets": [
             {
@@ -451,9 +467,9 @@ data:
             "type": "custom",
             "name": "kind",
             "label": "Contains kind",
-            "description": "Requires the trace to contain a span of this kind — not that its ROOT be that kind (there is no rootKind intrinsic). MQTT drops the mongo-polling traces, which hold a single client span and nothing else. HTTP finds anything that came in over the gateway.",
-            "query": "Any : && {},MQTT : && {kind = consumer || kind = producer},HTTP : && {kind = server},Outbound / DB : && {kind = client}",
-            "current": { "text": "Any", "value": "&& {}" },
+            "description": "Requires the trace to contain a span of this kind — not that its ROOT be that kind (there is no rootKind intrinsic). Defaults to MQTT + HTTP, which is what makes this dashboard usable: it excludes the mongo-polling traces, which hold a single client span and nothing else and otherwise consume the entire 100-trace result budget. Switch to Any only on a short time range.",
+            "query": "MQTT + HTTP : && {kind = consumer || kind = producer || kind = server},Any : && {},MQTT : && {kind = consumer || kind = producer},HTTP : && {kind = server},Outbound / DB : && {kind = client}",
+            "current": { "text": "MQTT + HTTP", "value": "&& {kind = consumer || kind = producer || kind = server}" },
             "options": [],
             "multi": false,
             "includeAll": false,
