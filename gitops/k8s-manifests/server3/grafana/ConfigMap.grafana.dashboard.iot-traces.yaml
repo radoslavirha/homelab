@@ -10,20 +10,52 @@
 #
 # WHAT IS ACTUALLY IN TEMPO (measured, not assumed)
 #
-#   resource.service.name        traefik, miot-bridge-api  -- those two, nothing else
-#   resource.k8s.cluster.name    server1 (miot-bridge-api), server3 (traefik)
+#   resource.service.name        traefik, miot-bridge-api, interactive-map-feeder-api
+#   resource.k8s.cluster.name    server1 (both apps), server3 (traefik)
 #   span names, miot-bridge-api  process iot/miot-bridge/device/{deviceId}/command
 #                                publish iot/miot-bridge/device/{deviceId}/{response,notifications}
 #                                findOne|find <db>.<collection>
+#                                -- MQTT and mongo only. NO HTTP server spans, ever, in the
+#                                whole retention window.
+#   span names, feeder           GET /v1/data-sources/:dataSource/image  (SPAN_KIND_SERVER)
+#                                request handler - /v1/data-sources/:dataSource/image
+#                                middleware - {jsonParser,compression,cookieParser,cors,...}
+#                                GET  (SPAN_KIND_CLIENT, outbound)
+#                                -- full Express auto-instrumentation, unlike miot-bridge-api.
 #   span names, traefik          GET, POST, PUT  -- method only. Traefik sets no http.route
 #                                (it has no route templates), so semconv falls back to the
-#                                method alone. "GET /endpoint" style names do not exist here.
+#                                method alone. "GET /endpoint" style names do not exist for
+#                                traefik; they DO exist one level down, on the app's own span.
 #
-#   There are NO HTTP server spans from miot-bridge-api in the retention window, and no trace
-#   contains both traefik and an app: server1/server2 traefik served 0 requests in 24h
-#   (increase(traefik_entrypoint_requests_total[24h]) == 0 on both), so the only traced HTTP is
-#   server3's own ingress. The IoT path is MQTT end to end. Nothing is broken; the HTTP panels
-#   here simply stay empty until something calls an app over HTTP.
+# TRACES CAN BE ROOTED IN TRAEFIK, WHICH BROKE THE FIRST VERSION OF THIS DASHBOARD
+#
+#   The original table selector was `{ nestedSetParent = -1 && resource.service.name =~ "$app" }`
+#   -- root-only AND from a selected app. Those two are MUTUALLY EXCLUSIVE for anything entering
+#   through the gateway, because the root span belongs to traefik and traefik is excluded from
+#   the $app list by design. A live GET to the feeder produced trace
+#   e936ffa3b635edc6af3a2f7c038f5988: rootServiceName traefik, rootTraceName "GET", 3814ms, with
+#   the feeder's server span and its whole middleware chain nested underneath. It was in Tempo
+#   and invisible in the table. Zero rows, no error, nothing to indicate a filter had eaten it.
+#
+#   Fixed by dropping nestedSetParent entirely and filtering on the `rootName` INTRINSIC, which
+#   describes the trace's root while letting any span be the one that matches:
+#
+#     { <cluster> && <service> && (rootName =~ ".*$filter.*" || name =~ ".*$filter.*") } ...
+#
+#   Both halves of that OR are needed here. Filtering rootName alone for "image" returns nothing
+#   on a traefik-fronted trace, because the root is called "GET"; the readable name lives on the
+#   app span one level down. The Service and Name columns still show the ROOT (Tempo returns
+#   rootServiceName/rootTraceName per trace regardless of what matched), so a gateway-fronted
+#   trace correctly reads "traefik / GET" and expands to the app spans.
+#
+# MONGO SPANS REALLY ARE ROOTS -- VERIFIED, NOT A DISPLAY ARTEFACT
+#
+#   `find <db>.model-property-overrides` appearing as a trace root is not a dropped parent. Span
+#   34860b350eeb439b in trace 09fc9667f79027e1477edb72fc0aa699 has parentSpanID = "" (empty),
+#   kind client, instrumentation @opentelemetry/instrumentation-mongoose 0.67.0. There is no
+#   parent to lose: whatever schedules that query runs on a timer with no enclosing span, so
+#   mongoose's auto-instrumentation starts a fresh trace each time. An app-side fix (wrap the
+#   scheduled work in a span) is the only thing that would give those a meaningful root.
 #
 # TRACE -> LOG CORRELATION IS AN APP-SIDE GAP, NOT A PANEL BUG
 #
@@ -69,35 +101,36 @@
 #   TraceQL has no conditional syntax, so an "off" filter has to be a valid no-op. The assembled
 #   query is:
 #
-#     { nestedSetParent = -1 $kind && <cluster> && <service> && <name> } $status $traceql
+#     { <cluster> && <service> && (rootName =~ <name> || name =~ <name>) } $kind $status $traceql
 #
-#   $kind splices INSIDE the root selector, because "which kind of span starts the trace" is a
-#   property of the root and appending a spanset would instead ask "does the trace contain one".
-#   Its no-op is `&& nestedSetParent >= -1` — true for the root (-1) and every child (>= 0), so
-#   it constrains nothing. `kind =~ "..."` is not an option: kind is an enum, and Tempo rejects
-#   the query outright with
-#     invalid TraceQL query: binary operations must operate on the same type: kind =~ `...`
-#
-#   $status and $traceql append a whole spanset. $status's no-op is the literal `&& {}`, a
-#   spanset matching all spans, verified to return the same traces as omitting it. An empty
+#   All three append a whole spanset, and each one's no-op is the literal `&& {}` -- a spanset
+#   matching all spans, verified to return the same traces as omitting it. An empty
 #   custom-variable value would read better but Grafana's `label : value` parser does not
 #   reliably keep one. $traceql is a textbox and CAN default to "", since a trailing empty
 #   string is already a valid query.
 #
+#   $kind therefore means "the trace CONTAINS a span of this kind", not "the root is this kind".
+#   That is deliberate and it is the more useful question — MQTT selects traces with a
+#   consumer/producer span, HTTP selects traces with a server span — and it still suppresses the
+#   mongo-poller traces, which contain nothing but a single client span. There is no `rootKind`
+#   intrinsic to do the other thing with, and `kind =~ "..."` is not an option either: kind is an
+#   enum, and Tempo rejects the query outright with
+#     invalid TraceQL query: binary operations must operate on the same type: kind =~ `...`
+#
 #   Consequence for anyone editing these: no label or value in $kind/$status may contain a comma
 #   or a colon — Grafana splits custom-variable options on both.
 #
-# ROOT-ONLY LIST, AND THE POLLER NOISE
+# THE POLLER NOISE
 #
-#   `nestedSetParent = -1` is the Tempo intrinsic for "this span is the trace root". The traces
-#   table therefore lists one row per trace, and Grafana's own nested frame provides the expand
-#   arrow that reveals the matched spans with the select()ed attributes as columns.
+#   Tempo returns one entry per trace, and Grafana's nested frame provides the expand arrow that
+#   reveals the matched spans with the select()ed attributes as columns — so the table is
+#   trace-level without needing a root-only selector.
 #
 #   At idle the list is ~all mongo. miot-bridge-api polls `find <db>.notifications` and
-#   `findOne <db>.devices` on a timer, outside any request context, so those DB spans ARE trace
+#   `findOne <db>.devices` on a timer, outside any span context, so those DB spans ARE trace
 #   roots — measured at 0.177 traces/s each, against 0.002/s for real MQTT commands, i.e. two
 #   orders of magnitude of noise. That is honest data, not a dashboard bug, which is why the
-#   default stays "Any". Switch Root kind to "MQTT" to see only the work Loxone actually drives.
+#   default stays "Any". Switch Contains kind to MQTT or HTTP to drop them.
 #
 #   The rate charts are deliberately NOT wired to $kind. Span metrics label the same concept
 #   span_kind="SPAN_KIND_CONSUMER" while TraceQL spells it `kind = consumer`, and one variable
@@ -223,10 +256,10 @@ data:
         },
         {
           "type": "table",
-          "title": "Root traces",
+          "title": "Traces",
           "id": 5,
           "datasource": { "type": "tempo", "uid": "tempo" },
-          "description": "One row per trace (root span only); the arrow expands to the matched spans with the selected attributes as columns. Click the NAME cell to load that trace into the panels below — it sets the traceId variable. Clicking the Trace ID cell instead opens the trace in Explore.\n\nThe select() list carries the attributes worth scanning without opening anything: miot device/command/operation, the MQTT topic, and HTTP method/path/status. Attributes a span does not have render empty.\n\nAt idle this is dominated by miot-bridge-api's mongo polling, which genuinely starts its own traces. Set Root kind to MQTT to see only Loxone-driven work.",
+          "description": "One row per trace (root span only); the arrow expands to the matched spans with the selected attributes as columns. Click the NAME cell to load that trace into the panels below — it sets the traceId variable. Clicking the Trace ID cell instead opens the trace in Explore.\n\nThe select() list carries the attributes worth scanning without opening anything: miot device/command/operation, the MQTT topic, and HTTP method/path/status. Attributes a span does not have render empty.\n\nService and Name are the ROOT of the trace, so anything entering through the gateway reads \"traefik / GET\" — traefik names HTTP spans by method only. Expand the row for the app's own span, which carries the readable route.\n\nThe Name filter matches the root name OR any span name, so typing part of a route finds gateway-fronted traces too.\n\nAt idle this is dominated by miot-bridge-api's mongo polling, which genuinely starts its own traces (parentSpanID is empty — verified, not a dropped parent). Set Contains kind to MQTT or HTTP to drop them.",
           "gridPos": { "h": 13, "w": 24, "x": 0, "y": 9 },
           "targets": [
             {
@@ -235,7 +268,7 @@ data:
               "queryType": "traceql",
               "limit": 100,
               "tableType": "traces",
-              "query": "{ nestedSetParent = -1 $kind && resource.k8s.cluster.name =~ \"${server:pipe}\" && resource.service.name =~ \"${app:pipe}\" && name =~ \".*$filter.*\" } $status $traceql | select(span.miot.device.id, span.miot.command, span.miot.operation, span.messaging.destination.name, span.http.request.method, span.url.path, span.http.response.status_code)"
+              "query": "{ resource.k8s.cluster.name =~ \"${server:pipe}\" && resource.service.name =~ \"${app:pipe}\" && (rootName =~ \".*$filter.*\" || name =~ \".*$filter.*\") } $kind $status $traceql | select(span.miot.device.id, span.miot.command, span.miot.operation, span.messaging.destination.name, span.http.request.method, span.url.path, span.http.response.status_code)"
             }
           ],
           "options": {
@@ -406,10 +439,10 @@ data:
           {
             "type": "custom",
             "name": "kind",
-            "label": "Root kind",
-            "description": "Constrains the span that STARTS the trace. 'Any' is the tautology nestedSetParent >= -1. Use MQTT to drop miot-bridge-api's mongo polling, which starts its own traces and otherwise floods the table.",
-            "query": "Any : && nestedSetParent >= -1,MQTT : && (kind = consumer || kind = producer),Entry points : && (kind = consumer || kind = server),Outbound / DB : && kind = client",
-            "current": { "text": "Any", "value": "&& nestedSetParent >= -1" },
+            "label": "Contains kind",
+            "description": "Requires the trace to contain a span of this kind — not that its ROOT be that kind (there is no rootKind intrinsic). MQTT drops the mongo-polling traces, which hold a single client span and nothing else. HTTP finds anything that came in over the gateway.",
+            "query": "Any : && {},MQTT : && {kind = consumer || kind = producer},HTTP : && {kind = server},Outbound / DB : && {kind = client}",
+            "current": { "text": "Any", "value": "&& {}" },
             "options": [],
             "multi": false,
             "includeAll": false,
