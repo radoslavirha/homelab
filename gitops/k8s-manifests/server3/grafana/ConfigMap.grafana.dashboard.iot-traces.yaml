@@ -74,9 +74,20 @@
 #   So "I clicked an MQTT trace and got no logs" is the expected outcome for almost every trace.
 #   The query is right — verified returning the line for 229569b1a74583c3d122e8a97a1f0a18, and
 #   returning nothing for 59ff35aa31e7141196a211fdfe2abcb2, which is a 2.3ms successful
-#   producer-only trace that emitted no log at all. The fix belongs in the app: the logger has
-#   to read the active span context (trace.getActiveSpan()) and emit trace_id/span_id on every
-#   record, not only where it was wired by hand. Nothing in this repo can close it.
+#   producer-only trace that emitted no log at all.
+#
+#   The fix is NOT a logging change. @opentelemetry/instrumentation-winston already patches
+#   Logger.prototype.write and stamps trace_id/span_id from the active context on every record —
+#   the two lines that have it are ordinary logger.error calls that merely happen to sit inside
+#   MqttTracingService.consume()'s context.with(). The missing piece is SPANS: the poller, device
+#   registry and UDP transport create none, so there is no active context to stamp. Wrapping the
+#   scheduled work in a span fixes the logs as a side effect. App-side either way.
+#
+#   Also note the transport: OTLP log export is OFF (otel.logs.enabled: false in every app
+#   config). trace_id reaches Loki as structured metadata because Alloy's podLogsViaLoki
+#   extraLogProcessingStages lift it out of the Winston JSON — see gitops/helm-values/
+#   k8s-monitoring.yaml. The datasource comments in this directory still credit "Loki's native
+#   OTLP ingest", which is wrong about the mechanism though right about the outcome.
 #
 # WHY THE APP VARIABLE HAS NO allValue
 #
@@ -368,7 +379,7 @@ data:
           "title": "Logs emitted by this trace",
           "id": 8,
           "datasource": { "type": "loki", "uid": "loki" },
-          "description": "trace_id is STRUCTURED METADATA here, not text in the line — Loki ingests these over native OTLP. A line filter (|= \"<id>\") would match nothing; this uses the metadata filter, the same query the Tempo datasource's tracesToLogsV2 uses. No app/cluster filter on purpose, so a trace crossing services still shows every line.\n\nEXPECT THIS TO BE EMPTY for most traces, and blame the app, not the panel. Measured over 24h on miot-bridge-api: 1067 log lines, of which 2 carry a trace_id — both from one catch block in MQTT_LISTENER. 867 warn and 168 info lines have none. Successful commands log nothing at all. Until the app's logger injects the active span context on every call, this panel only lights up on that one error path.",
+          "description": "trace_id is STRUCTURED METADATA here, not text in the line — but NOT because of OTLP log export, which is off (otel.logs.enabled: false in every app config). The apps log Winston JSON to stdout, Alloy scrapes it via podLogsViaLoki, and the extraLogProcessingStages in gitops/helm-values/k8s-monitoring.yaml lift trace_id/span_id/level out of the JSON into structured metadata. A line filter (|= \"<id>\") would match nothing; this uses the metadata filter, the same query the Tempo datasource's tracesToLogsV2 uses. No app/cluster filter on purpose, so a trace crossing services still shows every line.\n\nEXPECT THIS TO BE EMPTY for most traces, and blame the app, not the panel. Measured over 24h on miot-bridge-api: 1067 log lines, of which 2 carry a trace_id — both from one catch block in MQTT_LISTENER. 867 warn and 168 info lines have none. Successful commands log nothing at all. The injection itself is automatic — WinstonInstrumentation stamps trace_id on every record from the active context — so the missing piece is not logging but SPANS: the poller, device registry and UDP paths create none, so there is no active context to stamp. Until those get a span, this panel only lights up on that one error path.",
           "gridPos": { "h": 10, "w": 24, "x": 0, "y": 39 },
           "targets": [
             {
