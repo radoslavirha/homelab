@@ -25,6 +25,27 @@
 #   server3's own ingress. The IoT path is MQTT end to end. Nothing is broken; the HTTP panels
 #   here simply stay empty until something calls an app over HTTP.
 #
+# TRACE -> LOG CORRELATION IS AN APP-SIDE GAP, NOT A PANEL BUG
+#
+#   Measured 2026-08-17 over 24h for service_name="miot-bridge-api":
+#
+#     level   lines   with trace_id
+#     warn      867        0
+#     info      168        0
+#     error      32        2
+#
+#   Two lines out of 1067. Both come from the same catch block (scope MQTT_LISTENER); every
+#   other line, including 867 identical `Sending command failed / Command timeout: no response
+#   from 192.168.1.85:54321` warnings for device 1141132187 on a ~90s timer, carries none.
+#   A successful MQTT command logs nothing whatsoever.
+#
+#   So "I clicked an MQTT trace and got no logs" is the expected outcome for almost every trace.
+#   The query is right — verified returning the line for 229569b1a74583c3d122e8a97a1f0a18, and
+#   returning nothing for 59ff35aa31e7141196a211fdfe2abcb2, which is a 2.3ms successful
+#   producer-only trace that emitted no log at all. The fix belongs in the app: the logger has
+#   to read the active span context (trace.getActiveSpan()) and emit trace_id/span_id on every
+#   record, not only where it was wired by hand. Nothing in this repo can close it.
+#
 # WHY THE APP VARIABLE HAS NO allValue
 #
 #   The obvious `allValue: ".+"` is wrong on this dashboard: traefik is a traced service, so
@@ -234,7 +255,7 @@ data:
                       {
                         "title": "Load this trace below",
                         "targetBlank": false,
-                        "url": "/d/iot-traces/iot-traces?${server:queryparam}&${app:queryparam}&${kind:queryparam}&${filter:queryparam}&${status:queryparam}&${traceql:queryparam}&${logSearch:queryparam}&${__url_time_range}&var-traceId=${__data.fields.traceID}"
+                        "url": "/d/iot-traces/iot-traces?${server:queryparam}&${app:queryparam}&${kind:queryparam}&${filter:queryparam}&${status:queryparam}&${traceql:queryparam}&${__url_time_range}&var-traceId=${__data.fields.traceID}"
                       }
                     ]
                   }
@@ -249,7 +270,7 @@ data:
                       {
                         "title": "Load this trace below",
                         "targetBlank": false,
-                        "url": "/d/iot-traces/iot-traces?${server:queryparam}&${app:queryparam}&${kind:queryparam}&${filter:queryparam}&${status:queryparam}&${traceql:queryparam}&${logSearch:queryparam}&${__url_time_range}&var-traceId=${__data.fields.traceID}"
+                        "url": "/d/iot-traces/iot-traces?${server:queryparam}&${app:queryparam}&${kind:queryparam}&${filter:queryparam}&${status:queryparam}&${traceql:queryparam}&${__url_time_range}&var-traceId=${__data.fields.traceID}"
                       }
                     ]
                   }
@@ -314,7 +335,7 @@ data:
           "title": "Logs emitted by this trace",
           "id": 8,
           "datasource": { "type": "loki", "uid": "loki" },
-          "description": "trace_id is STRUCTURED METADATA here, not text in the line — Loki ingests these over native OTLP. A line filter (|= \"<id>\") would match nothing; this uses the metadata filter, the same query the Tempo datasource's tracesToLogsV2 uses. No app/cluster filter on purpose, so a trace crossing services still shows every line.",
+          "description": "trace_id is STRUCTURED METADATA here, not text in the line — Loki ingests these over native OTLP. A line filter (|= \"<id>\") would match nothing; this uses the metadata filter, the same query the Tempo datasource's tracesToLogsV2 uses. No app/cluster filter on purpose, so a trace crossing services still shows every line.\n\nEXPECT THIS TO BE EMPTY for most traces, and blame the app, not the panel. Measured over 24h on miot-bridge-api: 1067 log lines, of which 2 carry a trace_id — both from one catch block in MQTT_LISTENER. 867 warn and 168 info lines have none. Successful commands log nothing at all. Until the app's logger injects the active span context on every call, this panel only lights up on that one error path.",
           "gridPos": { "h": 10, "w": 24, "x": 0, "y": 39 },
           "targets": [
             {
@@ -334,41 +355,6 @@ data:
             "enableLogDetails": true,
             "dedupStrategy": "none",
             "sortOrder": "Ascending"
-          }
-        },
-        {
-          "type": "row",
-          "title": "Log search — the other way in",
-          "id": 9,
-          "collapsed": false,
-          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 49 },
-          "panels": []
-        },
-        {
-          "type": "logs",
-          "title": "App logs",
-          "id": 10,
-          "datasource": { "type": "loki", "uid": "loki" },
-          "description": "Start from a log line instead of a trace. Put anything in the Log search box (it is a case-insensitive regex — an empty box matches everything). Expand a line: the Loki datasource's derived field turns its trace_id into a TraceID link, which opens the trace in Explore. To pull it into this dashboard instead, copy the id into the Trace ID box.",
-          "gridPos": { "h": 12, "w": 24, "x": 0, "y": 50 },
-          "targets": [
-            {
-              "datasource": { "type": "loki", "uid": "loki" },
-              "refId": "A",
-              "queryType": "range",
-              "editorMode": "code",
-              "expr": "{k8s_cluster_name=~\"$server\", service_name=~\"$app\"} |~ \"(?i)$logSearch\""
-            }
-          ],
-          "options": {
-            "showTime": true,
-            "showLabels": false,
-            "showCommonLabels": false,
-            "wrapLogMessage": true,
-            "prettifyLogMessage": true,
-            "enableLogDetails": true,
-            "dedupStrategy": "none",
-            "sortOrder": "Descending"
           }
         }
       ],
@@ -466,16 +452,6 @@ data:
             "name": "traceId",
             "label": "Trace ID",
             "description": "Set by clicking a trace Name in the table, or paste one here.",
-            "query": "",
-            "current": { "text": "", "value": "" },
-            "options": [],
-            "hide": 0
-          },
-          {
-            "type": "textbox",
-            "name": "logSearch",
-            "label": "Log search",
-            "description": "Case-insensitive regex over the App logs panel. Empty matches everything.",
             "query": "",
             "current": { "text": "", "value": "" },
             "options": [],
