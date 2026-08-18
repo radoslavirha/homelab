@@ -21,3 +21,17 @@ data:
         editable: false
         jsonData:
           httpMethod: POST
+          # Grafana derives $__rate_interval from this: max(interval + timeInterval,
+          # 4 * timeInterval). Left unset it assumes 15s, which yields ~60s on a multi-hour
+          # dashboard — exactly ONE export period for anything arriving over OTLP, so rate()
+          # sees a single sample and silently returns nothing. Panels render "No data" while
+          # an instant query on the same series returns a healthy number.
+          #
+          # 60s is the real cadence: the OTel SDK's PeriodicExportingMetricReader defaults to
+          # 60000ms, and measured on job_run_duration_seconds_count the value changes on a
+          # strict 60s period. Declaring it lifts $__rate_interval to >=240s.
+          #
+          # This is not specific to one dashboard — every panel reading app OTLP metrics was
+          # affected. Scraped targets are unaffected either way; they are faster than 60s and
+          # a larger rate window is still correct for them.
+          timeInterval: "60s"
