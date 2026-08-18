@@ -75,9 +75,18 @@
 #   where NO matched span carries the attribute, so a 5m window could look fine while 15m died.
 #   Nothing to do with the 100-trace limit, which was the first (wrong) theory.
 #
-#   span.miot.device.id and span.http.response.status_code are therefore OUT of select(). The
-#   real fix is app-side -- emit device ids as strings, since they are identifiers and nothing
-#   does arithmetic on them -- after which they can come back.
+#   span.miot.device.id and span.http.response.status_code are therefore OUT of select().
+#
+#   The app-side fix is in flight: miot-bridge-api emits miot.device.id / siid / piid / aiid as
+#   STRINGS from 0.22 onward (identifiers, not measurements -- nothing does arithmetic on them).
+#   String columns are equally sparse across spans and render fine, proven by
+#   select(span.http.request.method, span.url.path) in the bisect above. So once 0.22 is live,
+#   span.miot.device.id can be added back to select(). span.http.response.status_code cannot --
+#   semconv requires it to be an int, so it stays out permanently.
+#
+#   That change also breaks unquoted TraceQL filters: `span.miot.device.id = 1141132187` matched
+#   before and matches nothing after. Quote it. The Extra TraceQL variable's help text carries
+#   the same warning.
 #
 # MONGO SPANS REALLY ARE ROOTS -- VERIFIED, NOT A DISPLAY ARTEFACT
 #
@@ -516,7 +525,7 @@ data:
             "type": "textbox",
             "name": "traceql",
             "label": "Extra TraceQL",
-            "description": "Raw spanset appended to the trace query — must start with &&. Examples: && {span.miot.device.id = 1141132187}  |  && {kind = consumer}  |  && {duration > 1s}",
+            "description": "Raw spanset appended to the trace query — must start with &&. Examples: && {span.miot.command = \"vacuum:sweep-mode\"}  |  && {kind = consumer}  |  && {duration > 1s}\n\nmiot identifiers (device.id, siid, piid, aiid) are STRINGS — quote them: && {span.miot.device.id = \"1141132187\"}. They were integers before miot-bridge-api 0.22; an unquoted value silently matches nothing now.",
             "query": "",
             "current": { "text": "", "value": "" },
             "options": [],
