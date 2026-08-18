@@ -48,6 +48,37 @@
 #   rootServiceName/rootTraceName per trace regardless of what matched), so a gateway-fronted
 #   trace correctly reads "traefik / GET" and expands to the app spans.
 #
+# NEVER select() A NUMERIC ATTRIBUTE -- IT CRASHES THE PANEL (Grafana 13.0.1)
+#
+#   Symptom: "An unexpected error happened", no query error, Tempo returns HTTP 200 with valid
+#   JSON. Console shows
+#     TypeError: Cannot read properties of undefined (reading '0')
+#       at eval (eval at Mo (utils.ts:821), <anonymous>)   <- new Function()-compiled accessor
+#       at hooks.ts:301 / useMemo / hooks.ts:288
+#       at ql (TableNG.tsx:217)
+#
+#   Bisected against live data at a fixed 1h window, one attribute at a time:
+#
+#     sortBy removed, select kept                                     FAIL
+#     select removed, sortBy kept                                     ok
+#     select(span.http.request.method, span.url.path)  strings, on every span      ok
+#     select(span.miot.command, span.http.response.status_code)  absent everywhere ok
+#     select(span.miot.device.id)  INT, present on SOME matched spans only         FAIL
+#
+#   So it is not sortBy, not select() itself, and not missing attributes. It is a numeric
+#   attribute carried by only *some* of the matched spans: Tempo returns miot.device.id as
+#   intValue on the `poll device` span and not on the two mongoose spans, Grafana builds a
+#   sparse numeric column in the nested sub-frame, and TableNG's compiled row accessor
+#   dereferences it.
+#
+#   This is why the panel appeared to break by TIME RANGE: the crash needs at least one trace
+#   where NO matched span carries the attribute, so a 5m window could look fine while 15m died.
+#   Nothing to do with the 100-trace limit, which was the first (wrong) theory.
+#
+#   span.miot.device.id and span.http.response.status_code are therefore OUT of select(). The
+#   real fix is app-side -- emit device ids as strings, since they are identifiers and nothing
+#   does arithmetic on them -- after which they can come back.
+#
 # MONGO SPANS REALLY ARE ROOTS -- VERIFIED, NOT A DISPLAY ARTEFACT
 #
 #   `find <db>.model-property-overrides` appearing as a trace root is not a dropped parent. Span
@@ -270,7 +301,7 @@ data:
           "title": "Traces",
           "id": 5,
           "datasource": { "type": "tempo", "uid": "tempo" },
-          "description": "One row per trace (root span only); the arrow expands to the matched spans with the selected attributes as columns. Click the NAME cell to load that trace into the panels below — it sets the traceId variable. Clicking the Trace ID cell instead opens the trace in Explore.\n\nThe select() list carries the attributes worth scanning without opening anything: miot device/command/operation, the MQTT topic, and HTTP method/path/status. Attributes a span does not have render empty.\n\nService and Name are the ROOT of the trace, so anything entering through the gateway reads \"traefik / GET\" — traefik names HTTP spans by method only. Expand the row for the app's own span, which carries the readable route.\n\nThe Name filter matches the root name OR any span name, so typing part of a route finds gateway-fronted traces too.\n\nAt idle this is dominated by miot-bridge-api's mongo polling, which genuinely starts its own traces (parentSpanID is empty — verified, not a dropped parent). Set Contains kind to MQTT or HTTP to drop them.",
+          "description": "One row per trace (root span only); the arrow expands to the matched spans with the selected attributes as columns. Click the NAME cell to load that trace into the panels below — it sets the traceId variable. Clicking the Trace ID cell instead opens the trace in Explore.\n\nThe select() list carries the attributes worth scanning without opening anything: miot command/operation, the MQTT topic, and HTTP method/path. Attributes a span does not have render empty.\n\nNUMERIC ATTRIBUTES ARE DELIBERATELY ABSENT from select(). span.miot.device.id and span.http.response.status_code crash this panel — see the header.\n\nService and Name are the ROOT of the trace, so anything entering through the gateway reads \"traefik / GET\" — traefik names HTTP spans by method only. Expand the row for the app's own span, which carries the readable route.\n\nThe Name filter matches the root name OR any span name, so typing part of a route finds gateway-fronted traces too.\n\nAt idle this is dominated by miot-bridge-api's mongo polling, which genuinely starts its own traces (parentSpanID is empty — verified, not a dropped parent). Set Contains kind to MQTT or HTTP to drop them.",
           "gridPos": { "h": 13, "w": 24, "x": 0, "y": 9 },
           "targets": [
             {
@@ -279,7 +310,7 @@ data:
               "queryType": "traceql",
               "limit": 100,
               "tableType": "traces",
-              "query": "{ resource.k8s.cluster.name =~ \"${server:pipe}\" && resource.service.name =~ \"${app:pipe}\" && (rootName =~ \".*$filter.*\" || name =~ \".*$filter.*\") } $kind $status $traceql | select(span.miot.device.id, span.miot.command, span.miot.operation, span.messaging.destination.name, span.http.request.method, span.url.path, span.http.response.status_code)"
+              "query": "{ resource.k8s.cluster.name =~ \"${server:pipe}\" && resource.service.name =~ \"${app:pipe}\" && (rootName =~ \".*$filter.*\" || name =~ \".*$filter.*\") } $kind $status $traceql | select(span.miot.command, span.miot.operation, span.messaging.destination.name, span.http.request.method, span.url.path)"
             }
           ],
           "options": {
