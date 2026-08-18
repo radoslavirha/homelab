@@ -4,7 +4,7 @@
 apps:
   interactive-map-feeder-api:
     image:
-      tag: "0.11.5"
+      tag: "0.11.6"
     templates:
       config:
         content: |
