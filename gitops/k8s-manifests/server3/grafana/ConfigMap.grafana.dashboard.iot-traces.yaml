@@ -77,8 +77,13 @@
 #
 #   span.miot.device.id and span.http.response.status_code are therefore OUT of select().
 #
-#   The app-side fix shipped: miot-bridge-api emits miot.device.id / siid / piid / aiid as
-#   STRINGS from 0.22 onward (live and verified -- `span.miot.device.id = "1141132187"` matches) (identifiers, not measurements -- nothing does arithmetic on them).
+#   RETENTION KEEPS THE OLD TYPE QUERYABLE. miot-bridge-api 0.22 emits miot.device.id / siid /
+#   piid / aiid as STRINGS (verified live: `span.miot.device.id = "1141132187"` matches), but
+#   Tempo holds 336h, so int-typed spans emitted before the 2026-08-18 17:39Z rollout are still
+#   searchable. Putting span.miot.device.id back into select() was tried and REVERTED the same
+#   day: a 30m window rendered, a 2h window spanning the upgrade crashed exactly as before. The
+#   attribute type is a property of the DATA IN THE WINDOW, not of the running code. Re-add it
+#   after 2026-09-01, when the last int-typed span has aged out (identifiers, not measurements -- nothing does arithmetic on them).
 #   String columns are equally sparse across spans and render fine, proven by
 #   select(span.http.request.method, span.url.path) in the bisect above. So once 0.22 is live,
 #   span.miot.device.id can be added back to select(). span.http.response.status_code cannot --
@@ -310,7 +315,7 @@ data:
           "title": "Traces",
           "id": 5,
           "datasource": { "type": "tempo", "uid": "tempo" },
-          "description": "One row per trace (root span only); the arrow expands to the matched spans with the selected attributes as columns. Click the NAME cell to load that trace into the panels below — it sets the traceId variable. Clicking the Trace ID cell instead opens the trace in Explore.\n\nThe select() list carries the attributes worth scanning without opening anything: miot command/operation, the MQTT topic, and HTTP method/path. Attributes a span does not have render empty.\n\nEVERY attribute in select() is a STRING, deliberately. A numeric one crashes this panel — see the header. span.miot.device.id returned once miot-bridge-api 0.22 made identifiers strings; span.http.response.status_code can never come back, semconv requires it to be an int.\n\nService and Name are the ROOT of the trace, so anything entering through the gateway reads \"traefik / GET\" — traefik names HTTP spans by method only. Expand the row for the app's own span, which carries the readable route.\n\nThe Name filter matches the root name OR any span name, so typing part of a route finds gateway-fronted traces too.\n\nAt idle this is dominated by miot-bridge-api's mongo polling, which genuinely starts its own traces (parentSpanID is empty — verified, not a dropped parent). Set Contains kind to MQTT or HTTP to drop them.",
+          "description": "One row per trace (root span only); the arrow expands to the matched spans with the selected attributes as columns. Click the NAME cell to load that trace into the panels below — it sets the traceId variable. Clicking the Trace ID cell instead opens the trace in Explore.\n\nThe select() list carries the attributes worth scanning without opening anything: miot command/operation, the MQTT topic, and HTTP method/path. Attributes a span does not have render empty.\n\nEVERY attribute in select() is a STRING, deliberately. A numeric one crashes this panel — see the header. span.miot.device.id is STILL OUT despite 0.22 making it a string — Tempo retention is 336h, so int-typed spans from before the upgrade remain queryable until 2026-09-01 and poison any window reaching back past it. Re-add after that date. span.http.response.status_code can never come back, semconv requires it to be an int.\n\nService and Name are the ROOT of the trace, so anything entering through the gateway reads \"traefik / GET\" — traefik names HTTP spans by method only. Expand the row for the app's own span, which carries the readable route.\n\nThe Name filter matches the root name OR any span name, so typing part of a route finds gateway-fronted traces too.\n\nAt idle this is dominated by miot-bridge-api's mongo polling, which genuinely starts its own traces (parentSpanID is empty — verified, not a dropped parent). Set Contains kind to MQTT or HTTP to drop them.",
           "gridPos": { "h": 13, "w": 24, "x": 0, "y": 9 },
           "targets": [
             {
@@ -319,7 +324,7 @@ data:
               "queryType": "traceql",
               "limit": 100,
               "tableType": "traces",
-              "query": "{ resource.k8s.cluster.name =~ \"${server:pipe}\" && resource.service.name =~ \"${app:pipe}\" && (rootName =~ \".*$filter.*\" || name =~ \".*$filter.*\") } $kind $status $traceql | select(span.miot.device.id, span.miot.command, span.miot.operation, span.rpc.method, span.error.type, span.rpc.response.status_code, span.miot.property.source, span.messaging.destination.name, span.http.request.method, span.url.path)"
+              "query": "{ resource.k8s.cluster.name =~ \"${server:pipe}\" && resource.service.name =~ \"${app:pipe}\" && (rootName =~ \".*$filter.*\" || name =~ \".*$filter.*\") } $kind $status $traceql | select(span.miot.command, span.miot.operation, span.rpc.method, span.error.type, span.rpc.response.status_code, span.miot.property.source, span.messaging.destination.name, span.http.request.method, span.url.path)"
             }
           ],
           "options": {
