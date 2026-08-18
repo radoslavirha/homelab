@@ -7,7 +7,7 @@
 apps:
   qr-manager-api:
     image:
-      tag: "0.5.3"
+      tag: "0.5.4"
     templates:
       config:
         content: |
