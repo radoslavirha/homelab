@@ -1,0 +1,739 @@
+---
+# IoT — Jobs & Device Calls (hand-built)
+#
+# The metrics companion to "IoT — Traces & Logs" (uid iot-traces). That one finds a trace; this
+# one answers "is the background work healthy" without opening Tempo at all — which is the right
+# split for a poller, because a cron that fails identically every tick makes per-iteration trace
+# correlation nearly worthless, while a duration histogram catches the fault immediately.
+#
+# Every panel was screened against live series on 2026-08-18, after miot-bridge-api 0.22.0 was
+# deployed (pod started 17:39:16Z), per rule 7d of docs/grafana-dashboards-plan.md: count PANELS,
+# not metrics. Measured over the first ~51 minutes of that pod:
+#
+#   job_run_duration_seconds_count{poll_device_properties,success}   537
+#   job_run_items_total{success}                                     537
+#   job_run_skips_total{nothing_due}                                 present
+#   miot_client_call_duration_seconds_count{get_properties}          537, NO error_type label
+#   miot_property_rejections_total                                   ABSENT
+#
+# 11 of 12 panels return data. The twelfth is "Property rejections", and its emptiness is the
+# finding, not a defect — see below.
+#
+# WHY THE REJECTIONS PANEL IS EMPTY, AND WHY IT STAYS
+#
+#   An OTel counter is not created until its first increment, so an absent series means zero
+#   rejections rather than a broken query. Confirmed on live data: no rpc.response.status_code,
+#   no error.type and no miot.property.source values exist in Tempo either. This vacuum times
+#   out; it does not refuse. The panel is the only thing that will tell us when that changes,
+#   and when it does it answers the question that motivated the whole exercise -- whether a
+#   refused property came from the device's published rawSpec or from a row we added to
+#   model-property-overrides.
+#
+# THE 10s PANEL IS THE ONE THAT EARNS ITS KEEP TODAY
+#
+#   miot_client_call_duration_seconds shows 503 of 537 calls under 100ms and 34 between 10s and
+#   15s, with NO error_type on any of them. That is not a tail: MIOT_TIMEOUT_MS is exactly 10s,
+#   so those 34 are calls where the first UDP attempt timed out and the unconditional stamp-
+#   refresh retry then succeeded. The call is reported as success, the job is reported as
+#   success, and it still cost ten seconds plus a handshake -- roughly 6% of polls.
+#
+#   Nothing else in the stack can see this. Run outcome says success, item outcome says success,
+#   the logs say nothing. Only the histogram shows it, which is why "Calls exceeding the 10s
+#   timeout" is a panel of its own rather than a quantile someone has to squint at.
+#
+#   The retry is deliberate -- this device answers a stale stamp with an error rather than
+#   silence -- so this panel measures the cost of a behaviour we are keeping on purpose, not a
+#   bug to fix. Two separate agents have proposed narrowing that retry; both were wrong.
+#
+# CARDINALITY
+#
+#   job_name and rpc_method are bounded static sets. Device id, siid, piid and server.address are
+#   deliberately NOT metric attributes -- the app's telemetry helpers never copy span attributes
+#   onto a metric, which is what keeps this dashboard's series count in the dozens. Do not add a
+#   per-device breakdown here; use the trace explorer for that.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-iot-jobs
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+  annotations:
+    argocd.argoproj.io/sync-wave: "-50"
+    grafana_folder: "Applications"
+data:
+  iot-jobs.json: |
+    {
+      "annotations": {
+        "list": []
+      },
+      "editable": true,
+      "graphTooltip": 1,
+      "links": [
+        {
+          "asDropdown": false,
+          "icon": "external link",
+          "includeVars": true,
+          "keepTime": true,
+          "tags": [
+            "applications"
+          ],
+          "targetBlank": false,
+          "title": "Applications",
+          "type": "dashboards"
+        }
+      ],
+      "panels": [
+        {
+          "type": "row",
+          "title": "Scheduled jobs",
+          "id": 1,
+          "collapsed": false,
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 0
+          },
+          "panels": []
+        },
+        {
+          "type": "timeseries",
+          "title": "Run rate by outcome",
+          "id": 2,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "h": 7,
+            "w": 12,
+            "x": 0,
+            "y": 1
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "refId": "A",
+              "editorMode": "code",
+              "range": true,
+              "expr": "sum by (job_name, job_run_outcome) (rate(job_run_duration_seconds_count{k8s_cluster_name=~\"$server\", job_name=~\"$job\"}[$__rate_interval]))",
+              "legendFormat": "{{job_name}} {{job_run_outcome}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "min": 0,
+              "custom": {
+                "drawStyle": "line",
+                "lineWidth": 1,
+                "fillOpacity": 10,
+                "showPoints": "never",
+                "stacking": {
+                  "mode": "none"
+                }
+              },
+              "unit": "reqps"
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true,
+              "calcs": [
+                "mean",
+                "max"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "description": "A histogram's _count gives run rate and outcome breakdown for free, which is why there is no separate executions counter. job_run_outcome is success|failure; the poller swallows device faults into back-off so failure is structurally rare here \u2014 watch job.run.items instead."
+        },
+        {
+          "type": "timeseries",
+          "title": "Run duration quantiles",
+          "id": 3,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "h": 7,
+            "w": 12,
+            "x": 12,
+            "y": 1
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "refId": "A",
+              "editorMode": "code",
+              "range": true,
+              "expr": "histogram_quantile(0.95, sum by (job_name, le) (rate(job_run_duration_seconds_bucket{k8s_cluster_name=~\"$server\", job_name=~\"$job\"}[$__rate_interval])))",
+              "legendFormat": "p95 {{job_name}}"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "refId": "B",
+              "editorMode": "code",
+              "range": true,
+              "expr": "histogram_quantile(0.50, sum by (job_name, le) (rate(job_run_duration_seconds_bucket{k8s_cluster_name=~\"$server\", job_name=~\"$job\"}[$__rate_interval])))",
+              "legendFormat": "p50 {{job_name}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "min": 0,
+              "custom": {
+                "drawStyle": "line",
+                "lineWidth": 1,
+                "fillOpacity": 10,
+                "showPoints": "never",
+                "stacking": {
+                  "mode": "none"
+                }
+              },
+              "unit": "s"
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true,
+              "calcs": [
+                "mean",
+                "max"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "description": "Compare against miot.poll.interval_ms (5s in production). The poller reschedules AFTER the work, so the effective period is interval + duration \u2014 a p95 near or above the interval means the job is running late, not being skipped."
+        },
+        {
+          "type": "timeseries",
+          "title": "Skipped runs by reason",
+          "id": 4,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "h": 6,
+            "w": 12,
+            "x": 0,
+            "y": 8
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "refId": "A",
+              "editorMode": "code",
+              "range": true,
+              "expr": "sum by (job_name, job_skip_reason) (rate(job_run_skips_total{k8s_cluster_name=~\"$server\", job_name=~\"$job\"}[$__rate_interval]))",
+              "legendFormat": "{{job_name}} {{job_skip_reason}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "min": 0,
+              "custom": {
+                "drawStyle": "bars",
+                "lineWidth": 1,
+                "fillOpacity": 40,
+                "showPoints": "never",
+                "stacking": {
+                  "mode": "normal"
+                }
+              },
+              "unit": "reqps"
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true,
+              "calcs": [
+                "mean",
+                "max"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "description": "nothing_due = no subscriptions, or every device paused by back-off. overrun is defined but can never fire on the poller: it self-reschedules in a finally block, so only one tick is ever in flight and the _ticking guard is unreachable. A non-zero overrun means a NEW fixed-rate job was added."
+        },
+        {
+          "type": "timeseries",
+          "title": "Items processed by outcome",
+          "id": 5,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "h": 6,
+            "w": 12,
+            "x": 12,
+            "y": 8
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "refId": "A",
+              "editorMode": "code",
+              "range": true,
+              "expr": "sum by (job_name, job_item_outcome) (rate(job_run_items_total{k8s_cluster_name=~\"$server\", job_name=~\"$job\"}[$__rate_interval]))",
+              "legendFormat": "{{job_name}} {{job_item_outcome}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "min": 0,
+              "custom": {
+                "drawStyle": "bars",
+                "lineWidth": 1,
+                "fillOpacity": 40,
+                "showPoints": "never",
+                "stacking": {
+                  "mode": "normal"
+                }
+              },
+              "unit": "reqps"
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true,
+              "calcs": [
+                "mean",
+                "max"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "description": "THE panel that can see a broken device. The poller catches every device fault and converts it to back-off, so the run outcome is always success \u2014 a poller whose every device is dead still reports a healthy job. Item outcome is the only per-device signal."
+        },
+        {
+          "type": "row",
+          "title": "Device calls \u2014 miIO over UDP",
+          "id": 6,
+          "collapsed": false,
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 14
+          },
+          "panels": []
+        },
+        {
+          "type": "timeseries",
+          "title": "Call rate by method and error",
+          "id": 7,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "h": 7,
+            "w": 12,
+            "x": 0,
+            "y": 15
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "refId": "A",
+              "editorMode": "code",
+              "range": true,
+              "expr": "sum by (rpc_method, error_type) (rate(miot_client_call_duration_seconds_count{k8s_cluster_name=~\"$server\"}[$__rate_interval]))",
+              "legendFormat": "{{rpc_method}} {{error_type}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "min": 0,
+              "custom": {
+                "drawStyle": "line",
+                "lineWidth": 1,
+                "fillOpacity": 10,
+                "showPoints": "never",
+                "stacking": {
+                  "mode": "none"
+                }
+              },
+              "unit": "reqps"
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true,
+              "calcs": [
+                "mean",
+                "max"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "description": "error_type is empty on success (semconv: SHOULD NOT be set when the operation succeeds), so the unlabelled series IS the success series. Values: timeout, device_error, transport_error, rejected_locally, _OTHER."
+        },
+        {
+          "type": "timeseries",
+          "title": "Call duration quantiles",
+          "id": 8,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "h": 7,
+            "w": 12,
+            "x": 12,
+            "y": 15
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "refId": "A",
+              "editorMode": "code",
+              "range": true,
+              "expr": "histogram_quantile(0.95, sum by (rpc_method, le) (rate(miot_client_call_duration_seconds_bucket{k8s_cluster_name=~\"$server\"}[$__rate_interval])))",
+              "legendFormat": "p95 {{rpc_method}}"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "refId": "B",
+              "editorMode": "code",
+              "range": true,
+              "expr": "histogram_quantile(0.50, sum by (rpc_method, le) (rate(miot_client_call_duration_seconds_bucket{k8s_cluster_name=~\"$server\"}[$__rate_interval])))",
+              "legendFormat": "p50 {{rpc_method}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "min": 0,
+              "custom": {
+                "drawStyle": "line",
+                "lineWidth": 1,
+                "fillOpacity": 10,
+                "showPoints": "never",
+                "stacking": {
+                  "mode": "none"
+                }
+              },
+              "unit": "s"
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true,
+              "calcs": [
+                "mean",
+                "max"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "description": "MIOT_TIMEOUT_MS is 10s, so 10s is not a tail \u2014 it is the timeout landing exactly. A p95 at ~10s with no error_type means the first attempt timed out and the stamp-refresh retry then succeeded; the call is reported as success and costs the full 10s plus a handshake."
+        },
+        {
+          "type": "timeseries",
+          "title": "Calls exceeding the 10s timeout",
+          "id": 9,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "h": 6,
+            "w": 12,
+            "x": 0,
+            "y": 22
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "refId": "A",
+              "editorMode": "code",
+              "range": true,
+              "expr": "sum(rate(miot_client_call_duration_seconds_count{k8s_cluster_name=~\"$server\"}[$__rate_interval])) - sum(rate(miot_client_call_duration_seconds_bucket{k8s_cluster_name=~\"$server\", le=\"10\"}[$__rate_interval]))",
+              "legendFormat": "calls over 10s"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "min": 0,
+              "custom": {
+                "drawStyle": "bars",
+                "lineWidth": 1,
+                "fillOpacity": 40,
+                "showPoints": "never",
+                "stacking": {
+                  "mode": "none"
+                }
+              },
+              "unit": "reqps",
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "orange"
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true,
+              "calcs": [
+                "mean",
+                "max"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "description": "Count minus the le=10 bucket. These are calls where the first UDP attempt hit MIOT_TIMEOUT_MS and the stamp-refresh retry rescued it \u2014 invisible in the outcome, because the retry succeeded. Measured at ~6% of calls on 2026-08-18. This is the panel that shows the cost of the stale-stamp behaviour."
+        },
+        {
+          "type": "timeseries",
+          "title": "Property rejections by code and provenance",
+          "id": 10,
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "h": 6,
+            "w": 12,
+            "x": 12,
+            "y": 22
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "refId": "A",
+              "editorMode": "code",
+              "range": true,
+              "expr": "sum by (rpc_response_status_code, miot_property_source, rpc_method) (rate(miot_property_rejections_total{k8s_cluster_name=~\"$server\"}[$__rate_interval]))",
+              "legendFormat": "{{rpc_response_status_code}} {{miot_property_source}} {{rpc_method}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "min": 0,
+              "custom": {
+                "drawStyle": "bars",
+                "lineWidth": 1,
+                "fillOpacity": 40,
+                "showPoints": "never",
+                "stacking": {
+                  "mode": "normal"
+                }
+              },
+              "unit": "reqps"
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true,
+              "calcs": [
+                "mean",
+                "max"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "description": "EXPECTED TO BE EMPTY until the device refuses something \u2014 an OTel counter is not created until first increment, so an absent series means zero rejections, not a broken panel. Confirmed empty on 2026-08-18: the vacuum times out, it does not refuse.\n\nWhen it does fill, miot_property_source is the answer to 'is our spec wrong': spec = the device's published rawSpec, override = a row we added to model-property-overrides for a property the device knows but does not publish. A code clustering on override means our addition is wrong."
+        },
+        {
+          "type": "row",
+          "title": "Rejections and faults \u2014 log detail",
+          "id": 11,
+          "collapsed": false,
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 28
+          },
+          "panels": []
+        },
+        {
+          "type": "logs",
+          "title": "Device faults",
+          "id": 12,
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "gridPos": {
+            "h": 11,
+            "w": 24,
+            "x": 0,
+            "y": 29
+          },
+          "description": "Structured fields, not prose: errorType, statusCode, stampRefreshed, property, propertySource. Expand a line and follow TraceID to the trace.\n\nHalf of these carry no trace_id by design \u2014 a poll tick sampled out of tracing has no active span for the logger to stamp. shouldTrace always traces a tick touching an already-failing device, so only the FIRST failure of a previously-healthy device can land untraced.",
+          "targets": [
+            {
+              "datasource": {
+                "type": "loki",
+                "uid": "loki"
+              },
+              "refId": "A",
+              "queryType": "range",
+              "editorMode": "code",
+              "expr": "{k8s_cluster_name=~\"$server\", service_name=\"miot-bridge-api\"} | json | level=~\"warn|error\""
+            }
+          ],
+          "options": {
+            "showTime": true,
+            "showLabels": false,
+            "showCommonLabels": false,
+            "wrapLogMessage": true,
+            "prettifyLogMessage": true,
+            "enableLogDetails": true,
+            "dedupStrategy": "none",
+            "sortOrder": "Descending"
+          }
+        }
+      ],
+      "preload": false,
+      "refresh": "",
+      "schemaVersion": 42,
+      "tags": [
+        "applications",
+        "iot",
+        "jobs",
+        "miot",
+        "otel"
+      ],
+      "templating": {
+        "list": [
+          {
+            "type": "query",
+            "name": "server",
+            "label": "Server",
+            "datasource": {
+              "type": "prometheus",
+              "uid": "prometheus"
+            },
+            "definition": "label_values(job_run_duration_seconds_count, k8s_cluster_name)",
+            "query": {
+              "query": "label_values(job_run_duration_seconds_count, k8s_cluster_name)",
+              "refId": "StandardVariableQuery"
+            },
+            "current": {},
+            "options": [],
+            "multi": true,
+            "includeAll": true,
+            "refresh": 2,
+            "sort": 1,
+            "hide": 0,
+            "regex": ""
+          },
+          {
+            "type": "query",
+            "name": "job",
+            "label": "Job",
+            "description": "Bounded static set \u2014 job.name is never a device id. Currently poll_device_properties and load_poll_subscriptions.",
+            "datasource": {
+              "type": "prometheus",
+              "uid": "prometheus"
+            },
+            "definition": "label_values(job_run_duration_seconds_count{k8s_cluster_name=~\"$server\"}, job_name)",
+            "query": {
+              "query": "label_values(job_run_duration_seconds_count{k8s_cluster_name=~\"$server\"}, job_name)",
+              "refId": "StandardVariableQuery"
+            },
+            "current": {},
+            "options": [],
+            "multi": true,
+            "includeAll": true,
+            "refresh": 2,
+            "sort": 1,
+            "hide": 0,
+            "regex": ""
+          }
+        ]
+      },
+      "time": {
+        "from": "now-6h",
+        "to": "now"
+      },
+      "timepicker": {},
+      "timezone": "browser",
+      "title": "IoT \u2014 Jobs & Device Calls",
+      "uid": "iot-jobs",
+      "version": 1
+    }
