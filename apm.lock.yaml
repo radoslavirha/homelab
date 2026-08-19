@@ -1,8 +1,209 @@
 lockfile_version: '1'
-generated_at: '2026-04-24T08:00:07.576263+00:00'
+generated_at: '2026-08-19T19:21:58.885021+00:00'
 dependencies: []
+deployments:
+- kind: project-relative
+  target: agents
+  value: .agents/skills/sync-docs
+  runtime: null
+  scope: project
+  owners:
+  - .
+  active_owner: .
+  content_hash: null
+- kind: project-relative
+  target: agents
+  value: .agents/skills/sync-docs/SKILL.md
+  runtime: null
+  scope: project
+  owners:
+  - .
+  active_owner: .
+  content_hash: sha256:3276a76f0adf53f8aa39ed75e58b0f1f25263605cd30d60f4b2f49e6996388ec
+- kind: project-relative
+  target: agents
+  value: .agents/skills/sync-docs/references/doc-map.md
+  runtime: null
+  scope: project
+  owners:
+  - .
+  active_owner: .
+  content_hash: sha256:4ad83558822de790cdc61e79b51cb35d67dd8c349105a6466ecd901e175cc948
+- kind: project-relative
+  target: agents
+  value: .agents/skills/sync-obsidian
+  runtime: null
+  scope: project
+  owners:
+  - .
+  active_owner: .
+  content_hash: null
+- kind: project-relative
+  target: agents
+  value: .agents/skills/sync-obsidian/SKILL.md
+  runtime: null
+  scope: project
+  owners:
+  - .
+  active_owner: .
+  content_hash: sha256:965cd646024a84a7e766de9918a9e66e526c344f1fbf5e7f78eaf900831a5e39
+- kind: project-relative
+  target: agents
+  value: .agents/skills/sync-obsidian/references/note-template.md
+  runtime: null
+  scope: project
+  owners:
+  - .
+  active_owner: .
+  content_hash: sha256:c794975f06f7c18c3dccfc0e37b6aca65e48b853a148d140eb9f3e4b4ccf91e6
+- kind: project-relative
+  target: agents
+  value: .agents/skills/sync-obsidian/references/source-map.md
+  runtime: null
+  scope: project
+  owners:
+  - .
+  active_owner: .
+  content_hash: sha256:2080c1861bc50daa1593851f8c2aa674350966b2e885e045cd8ef817944b63e8
+- kind: project-relative
+  target: claude
+  value: .claude/skills/sync-docs
+  runtime: null
+  scope: project
+  owners:
+  - .
+  active_owner: .
+  content_hash: null
+- kind: project-relative
+  target: claude
+  value: .claude/skills/sync-docs/SKILL.md
+  runtime: null
+  scope: project
+  owners:
+  - .
+  active_owner: .
+  content_hash: sha256:3276a76f0adf53f8aa39ed75e58b0f1f25263605cd30d60f4b2f49e6996388ec
+- kind: project-relative
+  target: claude
+  value: .claude/skills/sync-docs/references/doc-map.md
+  runtime: null
+  scope: project
+  owners:
+  - .
+  active_owner: .
+  content_hash: sha256:4ad83558822de790cdc61e79b51cb35d67dd8c349105a6466ecd901e175cc948
+- kind: project-relative
+  target: claude
+  value: .claude/skills/sync-obsidian
+  runtime: null
+  scope: project
+  owners:
+  - .
+  active_owner: .
+  content_hash: null
+- kind: project-relative
+  target: claude
+  value: .claude/skills/sync-obsidian/SKILL.md
+  runtime: null
+  scope: project
+  owners:
+  - .
+  active_owner: .
+  content_hash: sha256:965cd646024a84a7e766de9918a9e66e526c344f1fbf5e7f78eaf900831a5e39
+- kind: project-relative
+  target: claude
+  value: .claude/skills/sync-obsidian/references/note-template.md
+  runtime: null
+  scope: project
+  owners:
+  - .
+  active_owner: .
+  content_hash: sha256:c794975f06f7c18c3dccfc0e37b6aca65e48b853a148d140eb9f3e4b4ccf91e6
+- kind: project-relative
+  target: claude
+  value: .claude/skills/sync-obsidian/references/source-map.md
+  runtime: null
+  scope: project
+  owners:
+  - .
+  active_owner: .
+  content_hash: sha256:2080c1861bc50daa1593851f8c2aa674350966b2e885e045cd8ef817944b63e8
+- kind: project-relative
+  target: copilot
+  value: .github/skills/sync-docs
+  runtime: null
+  scope: project
+  owners:
+  - .
+  active_owner: .
+  content_hash: null
+- kind: project-relative
+  target: copilot
+  value: .github/skills/sync-obsidian
+  runtime: null
+  scope: project
+  owners:
+  - .
+  active_owner: .
+  content_hash: null
+- kind: uri
+  target: mcp
+  value: context7
+  runtime: claude
+  scope: project
+  owners:
+  - .
+  active_owner: .
+  content_hash: null
+- kind: uri
+  target: mcp
+  value: context7
+  runtime: vscode
+  scope: project
+  owners:
+  - .
+  active_owner: .
+  content_hash: null
+mcp_servers:
+- context7
+mcp_configs:
+  context7:
+    name: context7
+    transport: http
+    registry: false
+    headers:
+      CONTEXT7_API_KEY: ${input:context7_api_key}
+    url: https://mcp.context7.com/mcp
+mcp_target_servers:
+  claude:
+  - context7
+  vscode:
+  - context7
 local_deployed_files:
+- .agents/skills/sync-docs
+- .agents/skills/sync-docs/SKILL.md
+- .agents/skills/sync-docs/references/doc-map.md
+- .agents/skills/sync-obsidian
+- .agents/skills/sync-obsidian/SKILL.md
+- .agents/skills/sync-obsidian/references/note-template.md
+- .agents/skills/sync-obsidian/references/source-map.md
 - .claude/skills/sync-docs
+- .claude/skills/sync-docs/SKILL.md
+- .claude/skills/sync-docs/references/doc-map.md
 - .claude/skills/sync-obsidian
+- .claude/skills/sync-obsidian/SKILL.md
+- .claude/skills/sync-obsidian/references/note-template.md
+- .claude/skills/sync-obsidian/references/source-map.md
 - .github/skills/sync-docs
 - .github/skills/sync-obsidian
+local_deployed_file_hashes:
+  .agents/skills/sync-docs/SKILL.md: sha256:3276a76f0adf53f8aa39ed75e58b0f1f25263605cd30d60f4b2f49e6996388ec
+  .agents/skills/sync-docs/references/doc-map.md: sha256:4ad83558822de790cdc61e79b51cb35d67dd8c349105a6466ecd901e175cc948
+  .agents/skills/sync-obsidian/SKILL.md: sha256:965cd646024a84a7e766de9918a9e66e526c344f1fbf5e7f78eaf900831a5e39
+  .agents/skills/sync-obsidian/references/note-template.md: sha256:c794975f06f7c18c3dccfc0e37b6aca65e48b853a148d140eb9f3e4b4ccf91e6
+  .agents/skills/sync-obsidian/references/source-map.md: sha256:2080c1861bc50daa1593851f8c2aa674350966b2e885e045cd8ef817944b63e8
+  .claude/skills/sync-docs/SKILL.md: sha256:3276a76f0adf53f8aa39ed75e58b0f1f25263605cd30d60f4b2f49e6996388ec
+  .claude/skills/sync-docs/references/doc-map.md: sha256:4ad83558822de790cdc61e79b51cb35d67dd8c349105a6466ecd901e175cc948
+  .claude/skills/sync-obsidian/SKILL.md: sha256:965cd646024a84a7e766de9918a9e66e526c344f1fbf5e7f78eaf900831a5e39
+  .claude/skills/sync-obsidian/references/note-template.md: sha256:c794975f06f7c18c3dccfc0e37b6aca65e48b853a148d140eb9f3e4b4ccf91e6
+  .claude/skills/sync-obsidian/references/source-map.md: sha256:2080c1861bc50daa1593851f8c2aa674350966b2e885e045cd8ef817944b63e8

@@ -20,3 +20,6 @@ iac/clusters/*/secrets/
 
 # APM dependencies
 apm_modules/
+.vscode/mcp.json
+.mcp.json
+.agents
