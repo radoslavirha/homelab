@@ -19,6 +19,7 @@ configs:
     # sign in to the UI and needs no password in argocd-secret.
     # Mint a token with:  argocd account generate-token --account claude
     accounts.claude: apiKey
+    accounts.copilot: apiKey
     # Restore health assessment for Application CRD so App-of-Apps sync waves
     # wait for each child Application to reach Healthy before the next wave.
     # Removed from ArgoCD core in v1.8 — re-enabled via Lua customization.
@@ -77,6 +78,13 @@ configs:
       p, role:claude, projects, *, *, allow
       p, role:claude, repositories, *, *, allow
       g, claude, role:claude
+      p, role:copilot, applications, *, */*, allow
+      p, role:copilot, applicationsets, *, */*, allow
+      p, role:copilot, logs, *, */*, allow
+      p, role:copilot, clusters, *, *, allow
+      p, role:copilot, projects, *, *, allow
+      p, role:copilot, repositories, *, *, allow
+      g, copilot, role:copilot
   params:
     server.insecure: "true"
     # Bound how long a values-only commit can stay invisible.
