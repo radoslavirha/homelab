@@ -1,7 +1,8 @@
 apps:
   homelab-dashboard-ui:
-    # SECRET_UNIFI_API_KEY is rendered into the served config.json at pod start.
-    # Without a restart, a rotated Unifi key is never picked up.
+    # SECRET_UNIFI_API_KEY reaches nginx as an env var (secretRefs -> envFrom) and is
+    # read once at container start. Without a restart, a rotated Unifi key is never
+    # picked up.
     annotations:
       reloader.stakater.com/auto: "true"
     image:
@@ -31,6 +32,14 @@ apps:
       hostname: dashboard.home
       pathName: ""
       stripPrefix: false
+    # The Unifi host and credential are server-side only — see
+    # docs/superpowers/plans/2026-08-25-dashboard-credential-boundary-homelab.md.
+    # nginx reads UNIFI_HOST in proxy_pass and attaches SECRET_UNIFI_API_KEY (via the
+    # secretRefs envFrom below) with proxy_set_header. config.json deliberately carries
+    # neither, because nginx serves it to the browser.
+    env:
+      - name: UNIFI_HOST
+        value: "https://192.168.1.1"
     secretRefs:
       - name: homelab-dashboard-ui-unifi-credentials
         keys:
@@ -81,16 +90,16 @@ apps:
         path: /usr/share/nginx/html/config.json
         subPath: config.json
         # nginx cannot check the config it serves, so the chart runs the app's own Zod
-        # schema in an initContainer. An empty SECRET_UNIFI_API_KEY substitution is valid
-        # JSON and would otherwise boot a Ready pod whose every Unifi request 401s.
+        # schema in an initContainer. It no longer covers the credential (that moved to
+        # the image's own entrypoint guard) but serverPattern, scheme and unifi.site are
+        # still required, so an empty substitution still fails init rather than booting a
+        # Ready pod that renders nothing.
         # Validator image: ghcr.io/radoslavirha/homelab-dashboard-ui-config-validator:<image.tag>
         validate: true
         content: |
           {
             "title": "homelab",
             "unifi": {
-              "host": "https://192.168.1.1",
-              "apiKey": "{{ SECRET_UNIFI_API_KEY }}",
               "site": "default"
             },
             "serverPattern": "^server(\\d+)\\.home$",
