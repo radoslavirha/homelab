@@ -1,5 +1,5 @@
 lockfile_version: '1'
-generated_at: '2026-08-19T19:21:58.885021+00:00'
+generated_at: '2026-08-25T18:37:34.399614+00:00'
 dependencies: []
 deployments:
 - kind: project-relative
@@ -146,39 +146,6 @@ deployments:
   - .
   active_owner: .
   content_hash: null
-- kind: uri
-  target: mcp
-  value: context7
-  runtime: claude
-  scope: project
-  owners:
-  - .
-  active_owner: .
-  content_hash: null
-- kind: uri
-  target: mcp
-  value: context7
-  runtime: vscode
-  scope: project
-  owners:
-  - .
-  active_owner: .
-  content_hash: null
-mcp_servers:
-- context7
-mcp_configs:
-  context7:
-    name: context7
-    transport: http
-    registry: false
-    headers:
-      CONTEXT7_API_KEY: ${input:context7_api_key}
-    url: https://mcp.context7.com/mcp
-mcp_target_servers:
-  claude:
-  - context7
-  vscode:
-  - context7
 local_deployed_files:
 - .agents/skills/sync-docs
 - .agents/skills/sync-docs/SKILL.md

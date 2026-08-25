@@ -8,10 +8,4 @@ targets:
 dependencies:
   apm: []
   mcp:
-    - name: context7
-      registry: false
-      transport: http
-      url: https://mcp.context7.com/mcp
-      headers:
-        CONTEXT7_API_KEY: ${input:context7_api_key}
 scripts: {}
