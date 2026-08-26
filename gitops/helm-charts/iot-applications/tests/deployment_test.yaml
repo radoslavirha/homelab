@@ -120,7 +120,7 @@ tests:
           value: "true"
       # Must NOT land on the pod template — Reloader only reads workload metadata
       - isNull:
-          path: spec.template.metadata.annotations
+          path: spec.template.metadata.annotations["reloader.stakater.com/auto"]
 
   - it: should NOT render workload annotations block when annotations unset
     set:
@@ -132,7 +132,7 @@ tests:
       - isNull:
           path: metadata.annotations
 
-  - it: should NOT render pod annotations block when no podAnnotations
+  - it: should render only the OTel resource annotations when no podAnnotations
     set:
       apps.my-app.image.repository: ghcr.io/example/my-app
       apps.my-app.labels.component: api
@@ -142,8 +142,11 @@ tests:
       apps.my-app.templates.config.path: /app/config
       apps.my-app.templates.config.content: '{"key":"value"}'
     asserts:
-      - isNull:
+      # The OTel resource attributes are always templated onto the pod; nothing else is
+      - equal:
           path: spec.template.metadata.annotations
+          value:
+            resource.opentelemetry.io/service.name: my-app
 
   - it: should render podAnnotations on the pod template
     set:
@@ -159,6 +162,54 @@ tests:
       - equal:
           path: spec.template.metadata.annotations["custom/annotation"]
           value: "hello"
+      # podAnnotations are merged with, not substituted for, the OTel resource attributes
+      - equal:
+          path: spec.template.metadata.annotations["resource.opentelemetry.io/service.name"]
+          value: my-app
+
+  - it: should template the OTel service.version from image.tag
+    set:
+      apps.my-app.image.repository: ghcr.io/example/my-app
+      apps.my-app.image.tag: "1.2.3"
+      apps.my-app.labels.component: api
+      apps.my-app.labels.partOf: iot
+      apps.my-app.ingress.enabled: false
+    asserts:
+      - equal:
+          path: spec.template.metadata.annotations
+          value:
+            resource.opentelemetry.io/service.name: my-app
+            resource.opentelemetry.io/service.version: "1.2.3"
+
+  - it: should quote a numeric image.tag in the OTel service.version
+    set:
+      apps.my-app.image.repository: ghcr.io/example/my-app
+      apps.my-app.image.tag: 1.24
+      apps.my-app.labels.component: api
+      apps.my-app.labels.partOf: iot
+      apps.my-app.ingress.enabled: false
+    asserts:
+      # An unquoted tag in values.yaml parses as a float — it must reach the annotation
+      # as a string, or the manifest is rejected
+      - equal:
+          path: spec.template.metadata.annotations["resource.opentelemetry.io/service.version"]
+          value: "1.24"
+
+  - it: should let podAnnotations override the OTel resource attributes
+    set:
+      apps.my-app.image.repository: ghcr.io/example/my-app
+      apps.my-app.image.tag: "1.2.3"
+      apps.my-app.labels.component: api
+      apps.my-app.labels.partOf: iot
+      apps.my-app.ingress.enabled: false
+      apps.my-app.podAnnotations.resource\.opentelemetry\.io/service\.name: overridden
+    asserts:
+      - equal:
+          path: spec.template.metadata.annotations["resource.opentelemetry.io/service.name"]
+          value: overridden
+      - equal:
+          path: spec.template.metadata.annotations["resource.opentelemetry.io/service.version"]
+          value: "1.2.3"
 
   - it: should apply container security context
     set:

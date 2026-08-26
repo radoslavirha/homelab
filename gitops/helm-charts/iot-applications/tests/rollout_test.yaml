@@ -129,3 +129,41 @@ tests:
       - lengthEqual:
           path: spec.template.spec.initContainers
           count: 1
+
+  - it: should render the OTel resource annotations on the pod, workload annotations on the Rollout
+    set:
+      apps.my-app.image.repository: ghcr.io/example/my-app
+      apps.my-app.image.tag: "1.2.3"
+      apps.my-app.labels.component: api
+      apps.my-app.labels.partOf: iot
+      apps.my-app.ingress.enabled: false
+      apps.my-app.rollout.enabled: true
+      apps.my-app.rollout.strategy: canary
+      apps.my-app.annotations.reloader\.stakater\.com/auto: "true"
+    asserts:
+      - equal:
+          path: metadata.annotations["reloader.stakater.com/auto"]
+          value: "true"
+      - isNull:
+          path: spec.template.metadata.annotations["reloader.stakater.com/auto"]
+      - equal:
+          path: spec.template.metadata.annotations
+          value:
+            resource.opentelemetry.io/service.name: my-app
+            resource.opentelemetry.io/service.version: "1.2.3"
+
+  - it: should merge podAnnotations with the OTel resource annotations
+    set:
+      apps.my-app.image.repository: ghcr.io/example/my-app
+      apps.my-app.labels.component: api
+      apps.my-app.labels.partOf: iot
+      apps.my-app.ingress.enabled: false
+      apps.my-app.rollout.enabled: true
+      apps.my-app.rollout.strategy: canary
+      apps.my-app.podAnnotations.custom/annotation: "hello"
+    asserts:
+      - equal:
+          path: spec.template.metadata.annotations
+          value:
+            custom/annotation: "hello"
+            resource.opentelemetry.io/service.name: my-app
