@@ -257,6 +257,60 @@ dependencies:
 deployments:
 - kind: project-relative
   target: agents
+  value: .agents/skills/probe-traffic
+  runtime: null
+  scope: project
+  owners:
+  - .
+  active_owner: .
+  content_hash: null
+- kind: project-relative
+  target: agents
+  value: .agents/skills/probe-traffic/SKILL.md
+  runtime: null
+  scope: project
+  owners:
+  - .
+  active_owner: .
+  content_hash: sha256:438a196e11f0f443497dcfd1eb7f5ff6bd11e6a27c8cebfea07c5063ceab3147
+- kind: project-relative
+  target: agents
+  value: .agents/skills/probe-traffic/references/gotchas.md
+  runtime: null
+  scope: project
+  owners:
+  - .
+  active_owner: .
+  content_hash: sha256:208d5644d93402761c719b021fce8b009404806bf3c9414a256c6b850de7410e
+- kind: project-relative
+  target: agents
+  value: .agents/skills/probe-traffic/references/lenses.md
+  runtime: null
+  scope: project
+  owners:
+  - .
+  active_owner: .
+  content_hash: sha256:3e7aade978297d85c45329efc314a6debe5d6e440790f005056c97fea5744d15
+- kind: project-relative
+  target: agents
+  value: .agents/skills/probe-traffic/references/targets.md
+  runtime: null
+  scope: project
+  owners:
+  - .
+  active_owner: .
+  content_hash: sha256:f9fbd2bab0a407d403b5235a1006f59d027213d20e797e504d40bf3434d4e4c0
+- kind: project-relative
+  target: agents
+  value: .agents/skills/probe-traffic/references/vantages.md
+  runtime: null
+  scope: project
+  owners:
+  - .
+  active_owner: .
+  content_hash: sha256:41c487899b4ac4352aa2c2b67f24ce1ab42826cb6402b082e4aeeef320f96487
+- kind: project-relative
+  target: agents
   value: .agents/skills/sync-docs
   runtime: null
   scope: project
@@ -471,6 +525,60 @@ deployments:
   - obra/superpowers
   active_owner: obra/superpowers
   content_hash: sha256:8db5a922b242dd4e1bf824cb91c13b3e8d8e8a86d6ceaf7f0774eb9cce909d65
+- kind: project-relative
+  target: claude
+  value: .claude/skills/probe-traffic
+  runtime: null
+  scope: project
+  owners:
+  - .
+  active_owner: .
+  content_hash: null
+- kind: project-relative
+  target: claude
+  value: .claude/skills/probe-traffic/SKILL.md
+  runtime: null
+  scope: project
+  owners:
+  - .
+  active_owner: .
+  content_hash: sha256:438a196e11f0f443497dcfd1eb7f5ff6bd11e6a27c8cebfea07c5063ceab3147
+- kind: project-relative
+  target: claude
+  value: .claude/skills/probe-traffic/references/gotchas.md
+  runtime: null
+  scope: project
+  owners:
+  - .
+  active_owner: .
+  content_hash: sha256:208d5644d93402761c719b021fce8b009404806bf3c9414a256c6b850de7410e
+- kind: project-relative
+  target: claude
+  value: .claude/skills/probe-traffic/references/lenses.md
+  runtime: null
+  scope: project
+  owners:
+  - .
+  active_owner: .
+  content_hash: sha256:3e7aade978297d85c45329efc314a6debe5d6e440790f005056c97fea5744d15
+- kind: project-relative
+  target: claude
+  value: .claude/skills/probe-traffic/references/targets.md
+  runtime: null
+  scope: project
+  owners:
+  - .
+  active_owner: .
+  content_hash: sha256:f9fbd2bab0a407d403b5235a1006f59d027213d20e797e504d40bf3434d4e4c0
+- kind: project-relative
+  target: claude
+  value: .claude/skills/probe-traffic/references/vantages.md
+  runtime: null
+  scope: project
+  owners:
+  - .
+  active_owner: .
+  content_hash: sha256:41c487899b4ac4352aa2c2b67f24ce1ab42826cb6402b082e4aeeef320f96487
 - kind: project-relative
   target: claude
   value: .claude/skills/receiving-code-review
@@ -1615,6 +1723,12 @@ deployments:
   active_owner: .
   content_hash: null
 local_deployed_files:
+- .agents/skills/probe-traffic
+- .agents/skills/probe-traffic/SKILL.md
+- .agents/skills/probe-traffic/references/gotchas.md
+- .agents/skills/probe-traffic/references/lenses.md
+- .agents/skills/probe-traffic/references/targets.md
+- .agents/skills/probe-traffic/references/vantages.md
 - .agents/skills/sync-docs
 - .agents/skills/sync-docs/SKILL.md
 - .agents/skills/sync-docs/references/doc-map.md
@@ -1622,6 +1736,12 @@ local_deployed_files:
 - .agents/skills/sync-obsidian/SKILL.md
 - .agents/skills/sync-obsidian/references/note-template.md
 - .agents/skills/sync-obsidian/references/source-map.md
+- .claude/skills/probe-traffic
+- .claude/skills/probe-traffic/SKILL.md
+- .claude/skills/probe-traffic/references/gotchas.md
+- .claude/skills/probe-traffic/references/lenses.md
+- .claude/skills/probe-traffic/references/targets.md
+- .claude/skills/probe-traffic/references/vantages.md
 - .claude/skills/sync-docs
 - .claude/skills/sync-docs/SKILL.md
 - .claude/skills/sync-docs/references/doc-map.md
@@ -1632,11 +1752,21 @@ local_deployed_files:
 - .github/skills/sync-docs
 - .github/skills/sync-obsidian
 local_deployed_file_hashes:
+  .agents/skills/probe-traffic/SKILL.md: sha256:438a196e11f0f443497dcfd1eb7f5ff6bd11e6a27c8cebfea07c5063ceab3147
+  .agents/skills/probe-traffic/references/gotchas.md: sha256:208d5644d93402761c719b021fce8b009404806bf3c9414a256c6b850de7410e
+  .agents/skills/probe-traffic/references/lenses.md: sha256:3e7aade978297d85c45329efc314a6debe5d6e440790f005056c97fea5744d15
+  .agents/skills/probe-traffic/references/targets.md: sha256:f9fbd2bab0a407d403b5235a1006f59d027213d20e797e504d40bf3434d4e4c0
+  .agents/skills/probe-traffic/references/vantages.md: sha256:41c487899b4ac4352aa2c2b67f24ce1ab42826cb6402b082e4aeeef320f96487
   .agents/skills/sync-docs/SKILL.md: sha256:3276a76f0adf53f8aa39ed75e58b0f1f25263605cd30d60f4b2f49e6996388ec
   .agents/skills/sync-docs/references/doc-map.md: sha256:4ad83558822de790cdc61e79b51cb35d67dd8c349105a6466ecd901e175cc948
   .agents/skills/sync-obsidian/SKILL.md: sha256:965cd646024a84a7e766de9918a9e66e526c344f1fbf5e7f78eaf900831a5e39
   .agents/skills/sync-obsidian/references/note-template.md: sha256:c794975f06f7c18c3dccfc0e37b6aca65e48b853a148d140eb9f3e4b4ccf91e6
   .agents/skills/sync-obsidian/references/source-map.md: sha256:2080c1861bc50daa1593851f8c2aa674350966b2e885e045cd8ef817944b63e8
+  .claude/skills/probe-traffic/SKILL.md: sha256:438a196e11f0f443497dcfd1eb7f5ff6bd11e6a27c8cebfea07c5063ceab3147
+  .claude/skills/probe-traffic/references/gotchas.md: sha256:208d5644d93402761c719b021fce8b009404806bf3c9414a256c6b850de7410e
+  .claude/skills/probe-traffic/references/lenses.md: sha256:3e7aade978297d85c45329efc314a6debe5d6e440790f005056c97fea5744d15
+  .claude/skills/probe-traffic/references/targets.md: sha256:f9fbd2bab0a407d403b5235a1006f59d027213d20e797e504d40bf3434d4e4c0
+  .claude/skills/probe-traffic/references/vantages.md: sha256:41c487899b4ac4352aa2c2b67f24ce1ab42826cb6402b082e4aeeef320f96487
   .claude/skills/sync-docs/SKILL.md: sha256:3276a76f0adf53f8aa39ed75e58b0f1f25263605cd30d60f4b2f49e6996388ec
   .claude/skills/sync-docs/references/doc-map.md: sha256:4ad83558822de790cdc61e79b51cb35d67dd8c349105a6466ecd901e175cc948
   .claude/skills/sync-obsidian/SKILL.md: sha256:965cd646024a84a7e766de9918a9e66e526c344f1fbf5e7f78eaf900831a5e39
