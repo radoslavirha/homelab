@@ -6,6 +6,7 @@ targets:
   - claude
   - copilot
 dependencies:
-  apm: []
+  apm:
+    - obra/superpowers
   mcp:
 scripts: {}

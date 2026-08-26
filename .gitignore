@@ -23,3 +23,6 @@ apm_modules/
 .vscode/mcp.json
 .mcp.json
 .agents
+.claude
+.github/hooks
+.github/skills
