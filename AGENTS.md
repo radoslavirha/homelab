@@ -383,5 +383,6 @@ See [docs/iac.md](docs/iac.md) for the full migration sequence.
 
 - **`sync-docs`** — after any repo change; keeps README.md, AGENTS.md, docs/architecture.md, docs/iac.md in sync
 - **`sync-obsidian`** — after any change to clusters, service hostnames, IPs, or app versions; updates `Server/Homelab Overview.md` in Obsidian for IoT planning agents
+- **`probe-traffic`** — generate real traffic against a cluster and verify what it produced; use when checking that telemetry actually flows, testing reachability or egress, or validating NetworkPolicy before/after a change
 
 `sync-docs` automatically calls `sync-obsidian` at the end of its procedure. Run `sync-obsidian` standalone when the repo docs are already correct but the Obsidian snapshot is stale.
