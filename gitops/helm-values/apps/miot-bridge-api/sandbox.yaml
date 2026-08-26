@@ -8,7 +8,7 @@
 apps:
   miot-bridge-api:
     image:
-      tag: "0.22.5"
+      tag: "0.22.6"
     udpIngress:
       entrypoint: udp-miot-sbx
     templates:
