@@ -1,0 +1,30 @@
+# RootNetworkPolicies — App-of-Apps for default-deny network policy.
+# Discovers ApplicationSets in gitops/argocd-manifests/apps/network-policies/.
+#
+# Sync wave 5 — last. The policies select workloads by pod label, so every
+# workload they are meant to permit must already exist: apps are wave 4,
+# MongoDB/EMQX wave 3, Traefik wave 2. Applying a default-deny before the
+# things it allowlists have been created is how a bootstrap deadlocks.
+#
+# The child Applications are manual-sync; see the ApplicationSet for why.
+# This root stays automated so the Applications themselves are always present.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root-network-policies
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/radoslavirha/homelab
+    targetRevision: HEAD
+    path: gitops/argocd-manifests/apps/network-policies
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true

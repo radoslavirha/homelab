@@ -1,0 +1,24 @@
+# interactive-map-feeder-api in-cluster egress: OTLP only.
+# Its CHMI internet egress lives in CiliumNetworkPolicy.egress-chmi.yaml.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-egress-interactive-map-feeder-api
+  namespace: production
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: interactive-map-feeder-api
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: alloy-receiver
+      ports:
+        - protocol: TCP
+          port: 4318

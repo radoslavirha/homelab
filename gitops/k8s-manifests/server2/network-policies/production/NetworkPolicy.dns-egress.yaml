@@ -1,0 +1,40 @@
+# Egress to CoreDNS for every pod in the namespace.
+#
+# ── This file is the cliff, not default-deny ─────────────────────────────────
+# `podSelector: {}` with `policyTypes: [Egress]` selects EVERY pod, and a pod
+# selected by any egress policy denies all egress that does not match a rule.
+# So the moment this syncs, every pod in production can reach DNS and nothing else.
+# NetworkPolicy.default-deny.yaml adds ingress denial and covers pods no other
+# policy selects; it is not what switches enforcement on.
+#
+# Enable Cilium policy audit mode BEFORE this lands.
+#
+# Denying DNS is "the classic outage": every lookup fails and the symptoms
+# (timeouts deep inside client libraries) point everywhere except the policy.
+#
+# Not justified by the Stage 1 survey — the pods emitted no DNS during the
+# window, because connections are long-lived and names resolved at startup.
+# Justified by construction: every pod resolves eventually (restart, MongoDB
+# topology refresh, MQTT reconnect, any outbound HTTP call).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-egress
+  namespace: production
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53

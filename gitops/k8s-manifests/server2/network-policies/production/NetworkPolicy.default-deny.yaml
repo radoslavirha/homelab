@@ -1,0 +1,30 @@
+# Namespace default-deny, ingress and egress.
+#
+# Note what this does and does not do. NetworkPolicy.dns-egress.yaml already
+# selects every pod for egress, so egress enforcement begins there, not here.
+# This file adds ingress denial and covers any pod no other policy selects.
+# Both are inert while Cilium policy audit mode is on; turning audit mode OFF
+# is what actually arms enforcement.
+#
+# Rollback: `kubectl delete networkpolicy default-deny -n production` restores
+# connectivity immediately — policy removal takes effect with no pod restart.
+#
+# ── sync-wave 1: this file lands AFTER the allowlist ─────────────────────────
+# Every other policy here is wave 0 and applies as one unit. This one denies
+# ingress for every pod, and the only thing that restores it is
+# CiliumNetworkPolicy.host-ingress.yaml. ArgoCD orders custom resources after
+# core ones within a wave, so without this annotation the deny could land while
+# the CNP that re-permits kubelet probes and Traefik had not — an ingress
+# blackout for as long as that gap lasted.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  namespace: production
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress

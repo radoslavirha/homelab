@@ -1,0 +1,47 @@
+# miot-bridge-api LAN egress — miIO device control and polling.
+# This is the rule that breaks the house if it is wrong.
+#
+# ── Evidence ─────────────────────────────────────────────────────────────────
+# On server1, miot-bridge-api sends UDP to 192.168.1.85:54321 (the standard
+# miIO port) every 5s, driven by `polling.intervalMs: 5000`. Confirmed in
+# Hubble and by the app's own `miot_client_call_duration_seconds_count`.
+#
+# On server2 nothing was observed, because both pods log "Loaded 0
+# subscription(s) across 0 device(s)" — no devices registered, so the poller has
+# nothing to poll. The flow appears the moment a device is registered. A
+# survey-only policy would omit this rule and break at registration time rather
+# than apply time: the worst possible delay. Included on server1 behaviour and
+# configuration, deliberately, not on server2 observation.
+#
+# ── Why a /24 and not the one known device IP ────────────────────────────────
+# Devices are registered at runtime via POST /devices, and discovery
+# (POST /devices/discover) sweeps the subnet. Pinning 192.168.1.85/32 would make
+# registration silently fail later. The /24 is the honest scope of what this app
+# is designed to reach.
+#
+# The node's own IP falls inside this /24 but carries the `host` identity, so
+# this does NOT grant access to the node. Correct and intended.
+#
+# ── No Loxone rule ───────────────────────────────────────────────────────────
+# Loxone consumes MQTT only (owner, 2026-08-26), via the EMQX rule in
+# NetworkPolicy.egress-miot-bridge-api.yaml. The values still set
+# `udp.notifications.enabled: true` -> 192.168.1.140:50450; that is stale config
+# to be turned off, not a flow to permit. No UDP egress to .140 was observed.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-egress-lan-miio
+  namespace: sandbox
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: miot-bridge-api
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 192.168.1.0/24
+      ports:
+        - protocol: UDP
+          port: 54321
