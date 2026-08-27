@@ -1,23 +1,24 @@
 # Default-deny network policy — Stage 1 survey and draft allowlist
 
-**Scope:** this repository only. Stage 1 (survey) of Phase 0.2, plus the draft policies that Stage 2
-will put into audit mode. **Nothing was applied to any cluster** — the entire survey was read-only, and
-the policy files are drafts that no ArgoCD Application references.
+**Scope:** this repository only. Phase 0.2 — the survey, the allowlist it produced, and the
+enforced rollout on server2. **server2 is enforced and verified as of 2026-08-26** (see
+[Stage 3 — enforced on server2](#stage-3--enforced-on-server2-2026-08-26)). server1 is not.
 
 **Task definition:** [`iot-miniservers` → `docs/superpowers/specs/2026-08-25-auth-phase-0-hardening.md`](../../../../iot-miniservers/docs/superpowers/specs/2026-08-25-auth-phase-0-hardening.md),
 section **0.2 — Default-deny network policy**. That document is the authority; this one is the durable
 artifact it asks for ("Record the inventory in the homelab repo. It is the durable artifact of this
 task — more valuable long-term than the policies themselves").
 
-**Policies:** [`gitops/k8s-manifests/server2/network-policies/`](../../../gitops/k8s-manifests/server2/network-policies/) — `production/` and `sandbox/`, inert until an ArgoCD Application points at them
+**Policies:** [`gitops/k8s-manifests/server2/network-policies/`](../../../gitops/k8s-manifests/server2/network-policies/) — `production/` and `sandbox/`
+**ArgoCD:** [`apps/network-policies/NetworkPolicies.yaml`](../../../gitops/argocd-manifests/apps/network-policies/NetworkPolicies.yaml) (ApplicationSet, one Application per namespace, **manual sync**) under [`roots/RootNetworkPolicies.yaml`](../../../gitops/argocd-manifests/roots/RootNetworkPolicies.yaml) at wave 5
 
-## Status — 2026-08-25
+## Status — 2026-08-26
 
 | Stage | State |
 | --- | --- |
 | Stage 1 — survey | **done, with stated confidence limits.** Flow inventory below. Live observation window was ~18 minutes; the gaps are named explicitly rather than papered over. |
-| Stage 2 — allowlist in audit mode | **drafted, not applied.** Seven policy objects across five files. Audit-mode procedure written up below. |
-| Stage 3 — deny | **not armed.** `NetworkPolicy.default-deny.yaml` exists but nothing applies it: no ArgoCD Application references this path. Note the real cliff is `NetworkPolicy.dns-egress.yaml`, not this file. |
+| Stage 2 — audit mode | **skipped, deliberately.** Audit mode forwards everything, so it cannot detect the connection-reuse failure this document warns about — the one where a bad policy looks fine until the next reconnect. A rolling restart under real enforcement tests exactly that, and sandbox gave a free canary with instant rollback. `PolicyAuditMode` remains `Disabled` on all three clusters. |
+| Stage 3 — deny | **enforced and verified on server2**, sandbox then production, 2026-08-26. Zero drops. Evidence below. **server1 not started.** |
 
 ---
 
@@ -504,3 +505,108 @@ receives nothing.
 - Add `hubble.metrics.labelsContext` (source/destination namespace) to the Cilium Helm values.
 - The `miot-bridge-api` UDP listener has a Service but no route — confirm whether it is meant to be
   reachable, or is vestigial.
+
+---
+
+## Stage 3 — enforced on server2 (2026-08-26)
+
+Applied sandbox first, verified, then production. **Zero `DROPPED` events in either namespace**
+across the full Hubble ring buffer, before and after a rolling restart of every workload.
+
+### What was actually proven, per rule
+
+The survey could not observe DNS, CHMI or LAN egress on server2 at all. Enforcement plus a forced
+restart turned every one of those from "argued from construction" into an observed verdict — except
+the LAN rule, which remains unexercisable here.
+
+| Rule | Evidence under enforcement |
+| --- | --- |
+| `allow-host-ingress` (CNP) | `(host) -> sandbox/…:4000 ALLOWED`, `…:80 ALLOWED`. Covers kubelet probes **and** Traefik — confirmed `hostNetwork: true`, pod IP == node IP == `192.168.1.201` |
+| `allow-dns-egress` | `sandbox/interactive-map-feeder-api -> kube-system/coredns:53 ALLOWED (UDP)` — **the first DNS ever observed from a server2 app pod.** Also from both restarted APIs |
+| `allow-egress-internet` | `sandbox/interactive-map-feeder-api -> 90.183.101.91:443 (world) ALLOWED` and `.75:443`. Both CHMI hosts. The `0.0.0.0/0 except` RFC1918 form correctly matches the `world` identity |
+| `allow-egress-miot-bridge-api` | `-> mongodb/mongodb-0:27017 ALLOWED`, `-> iot/emqx-0:1883 ALLOWED`, `-> monitoring/…alloy-receiver:4318 FORWARDED`, all from post-restart pods |
+| `allow-egress-qr-manager-api` | `-> mongodb/mongodb-0:27017 ALLOWED`; app log `Connect to mongo database: default` after restart, both namespaces |
+| `allow-egress-interactive-map-feeder-api` | OTLP proven end-to-end, not just permitted — see below |
+| `allow-egress-lan-miio` | **Still unexercised.** server2 has zero registered devices; both pods log `Loaded 0 subscription(s) across 0 device(s)`. This rule is verified on server1 only, and only once a device poll happens there |
+| `default-deny` | Applied 2–3 s *after* the allowlist, by design (see sync-wave note below). Nothing broke in the gap |
+
+### OTLP proven end-to-end, not merely permitted
+
+A `FORWARDED` verdict proves the packet was allowed, not that the data landed. Probe
+`probe-otlp-b5cd5a24` / trace `3d1d82d14f763b5a0b06365f1a628b2b` closed the loop:
+
+```
+response      PASS  200 in 22ms
+loki:traefik  PASS  TraceId matches the minted id
+loki:app      PASS  from the post-restart pod api-iot-interactive-map-feeder-api-bdc44b947-5n67r
+tempo         PASS  traefik (2 spans) + interactive-map-feeder-api (9 spans)
+```
+
+Tempo holding the app's spans means the app's OTLP reached the in-cluster Alloy receiver **and**
+Alloy's cross-cluster hop to server3 still works — confirming correction #1: default-deny on
+production/sandbox cannot break the trace path, because that hop belongs to `monitoring`.
+
+### The restart was the test, not the apply
+
+This document warns that server2's pods reuse long-lived connections, so a bad policy would look
+fine at apply time and break at the next reconnect. That is why every workload in both namespaces
+was rolling-restarted **after** the policies were enforced. All came up `1/1 Ready`, with
+`Connect to mongo database` and `MQTT client connected` in the logs. Applying and observing nothing
+would have proven nothing.
+
+The MQTT connect/disconnect flap reappeared for ~20 s after boot and then stopped, in both
+namespaces — matching the pre-existing behaviour recorded above. Zero drops confirms the policy is
+not its cause.
+
+### CHMI on server2 is live — correction to this document
+
+The table above says server2 had **never** called CHMI in 30 days of retention. That was read from
+metrics; it is wrong as a statement about capability. A pre-policy baseline probe returned
+`200, 769269 bytes` from `/v1/data-sources/radar/image` in **both** namespaces, and it still does
+under enforcement. The path is live on server2 and gave the rollout an exact pre/post oracle
+instead of the unexercisable flow this document expected.
+
+### Two changes made during review
+
+1. **`default-deny` now carries `argocd.argoproj.io/sync-wave: "1"`.** Everything else is wave 0.
+   ArgoCD orders custom resources after core ones within a wave, so without this the core
+   `NetworkPolicy` ingress deny could land while `CiliumNetworkPolicy.host-ingress` had not —
+   an ingress blackout taking kubelet probes and Traefik down together for the length of the gap.
+   Observed working: allowlist at 15 s, `default-deny` at 12 s.
+2. **The ArgoCD Applications are manual-sync**, unlike every other Application in this repo. The
+   documented rollback is `kubectl delete networkpolicy`, and `selfHeal` would undo exactly that on
+   the next reconcile.
+
+### Verified against the live cluster during review
+
+Every selector was checked against a real object rather than read: all four app pod labels, the
+`kube-dns` / `mongodb` / `emqx` / `alloy-receiver` selectors, and `kubernetes.io/metadata.name` on
+every namespace. Two findings that would each have been silent outages had they gone the other way:
+
+- **`alloy-receiver` is not `hostNetwork`** (pod IP `10.244.0.32`). A `podSelector` reaches it. Had
+  it been host-networked, the OTLP rule would have matched nothing and all telemetry would have
+  stopped at the next reconnect.
+- **The existing `mongodb/mongodb` NetworkPolicy does not conflict** — `ingress: [ports: 27017]`
+  with no `from` is allow-from-anywhere, and `egress: [{}]` is allow-all. Gap 8 above is closed.
+
+Also confirmed inert: `api-iot-miot-bridge-api-udp` (ClusterIP `:4000/UDP`) has no ingress rule, and
+nothing can reach it — the `UDPRoute` CRD is not installed at all and the Gateway listens on HTTP/80
+only.
+
+### Before server1
+
+server1 is the cluster where a mistake is expensive: one registered device, six subscriptions, live
+miIO polling every 5 s. Two things to settle first.
+
+1. **Turn off `udp.notifications` in the miot-bridge-api values.** Both namespaces still set
+   `udp.notifications.enabled: true` → `192.168.1.140:50450`, and the policy set deliberately does
+   not permit it, on the owner's statement that Loxone consumes MQTT only. On server2 that
+   disagreement is untestable — no devices, so no notifications fire. On server1 it fires on every
+   property change and will be dropped. Either the config goes to `false` or the flow gets a rule;
+   leaving the two disagreeing is what makes it a surprise later.
+2. **Write down the ports 80/443 constraint** in the app repo, as
+   `NetworkPolicy.egress-internet.yaml` itself asks. An external dependency on any other port will
+   fail in-cluster with no local symptom.
+
+Then: add server1 to the generator list in `NetworkPolicies.yaml`, sync sandbox, restart, verify,
+and only then production.
