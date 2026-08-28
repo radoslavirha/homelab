@@ -18,7 +18,7 @@ task — more valuable long-term than the policies themselves").
 | --- | --- |
 | Stage 1 — survey | **done, with stated confidence limits.** Flow inventory below. Live observation window was ~18 minutes; the gaps are named explicitly rather than papered over. |
 | Stage 2 — audit mode | **skipped, deliberately.** Audit mode forwards everything, so it cannot detect the connection-reuse failure this document warns about — the one where a bad policy looks fine until the next reconnect. A rolling restart under real enforcement tests exactly that, and sandbox gave a free canary with instant rollback. `PolicyAuditMode` remains `Disabled` on all three clusters. |
-| Stage 3 — deny | **enforced and verified on server2**, sandbox then production, 2026-08-26. Zero drops. Evidence below. **server1 not started.** |
+| Stage 3 — deny | **enforced and verified on both clusters.** server2 2026-08-26, server1 2026-08-28, sandbox before production each time. Zero drops in all four namespaces. Evidence below. One gap found afterwards: [egress to the apiserver is denied](#the-gap-this-rollout-left-apiserver-egress). |
 
 ---
 
@@ -205,7 +205,7 @@ Do not put that Application in the same commit as the policies.
 | `NetworkPolicy.egress-internet.yaml` | NetworkPolicy | outbound 443/80, private ranges excluded |
 | `NetworkPolicy.default-deny.yaml` | NetworkPolicy | ingress + egress deny for unselected pods |
 
-Eight of nine objects per namespace are plain `NetworkPolicy`, per the portability goal. One is not.
+Seven of the eight objects per namespace are plain `NetworkPolicy`, per the portability goal. One is not.
 
 **`CiliumNetworkPolicy.host-ingress.yaml` uses `fromEntities: [host]`, and it is not optional.** A plain
 NetworkPolicy could only say "allow the node" as an `ipBlock`. On this cluster that silently fails:
@@ -610,3 +610,99 @@ miIO polling every 5 s. Two things to settle first.
 
 Then: add server1 to the generator list in `NetworkPolicies.yaml`, sync sandbox, restart, verify,
 and only then production.
+
+---
+
+## Stage 3 — enforced on server1 (2026-08-28)
+
+Same order as server2: sandbox, verify, restart, production, restart. **Zero drops in either
+namespace.** server1's policy set is a byte-identical copy of server2's — `diff -r` between the
+two directories is empty and must stay that way.
+
+server1 was checked against the assumptions the policies encode rather than assumed to mirror
+server2: same pod labels, Traefik `hostNetwork` on `192.168.1.200`, `alloy-receiver` **not**
+host-networked (`10.244.0.28`), `PolicyCIDRMatchMode` empty, and `mongodb/mongodb` the only
+pre-existing policy.
+
+### The LAN rule finally got exercised
+
+`allow-egress-lan-miio` had never been tested anywhere — server2 has no registered devices, so
+the flow does not exist there. server1 has one device with six subscriptions polling every 5 s,
+and it survived enforcement:
+
+```
+production/api-iot-miot-bridge-api-56685c46c8-bp68z:57496 -> 192.168.1.85:54321 (ID:16777217)
+  policy-verdict:none ALLOWED (UDP)
+production/api-iot-miot-bridge-api-56685c46c8-bp68z:57496 <- 192.168.1.85:54321 (ID:16777217)
+  to-endpoint FORWARDED (UDP)
+```
+
+from a pod created *after* the policy was enforced, still logging
+`Loaded 6 subscription(s) across 1 device(s)`.
+
+Worth noting the identity change: before the policy the device was `(world)`; afterwards it is
+`(ID:16777217)`, a CIDR identity Cilium allocated for the `192.168.1.0/24` prefix named in the
+rule. That is the visible proof the `ipBlock` is what matches, not a fallback.
+
+The device's replies arrive on the conntrack entry the egress opened, so `default-deny` on
+ingress does not need a matching inbound rule. The 5 s poll interval keeps that entry alive
+comfortably.
+
+### Loxone: the disagreement is resolved
+
+The UDP notification channel to `192.168.1.140:50450` was never consumed, and was removed from
+the app config entirely on 2026-08-28 (see the miot-bridge commit) rather than left enabled and
+silently dropped. Confirmed on server1, the only cluster where it could ever have fired: zero
+flows to `.140` after the change, while the device poll continues.
+
+### Full verdict matrix, server1 production, post-restart
+
+Every rule exercised, all `FORWARDED`, nothing dropped:
+
+| From | To | Port |
+| --- | --- | --- |
+| `miot-bridge-api` | both CoreDNS pods | UDP 53 |
+| `miot-bridge-api` | `emqx-0` | TCP 1883 |
+| `miot-bridge-api` | `mongodb-0` | TCP 27017 |
+| `miot-bridge-api` | `alloy-receiver` | TCP 4318 |
+| `miot-bridge-api` | `192.168.1.85` (world) | **UDP 54321** |
+| `qr-manager-api` | CoreDNS, `mongodb-0` | UDP 53, TCP 27017 |
+| `interactive-map-feeder-api` | CoreDNS, `alloy-receiver`, internet | UDP 53, TCP 4318, TCP 443 |
+| host | all three APIs | TCP 4000 |
+| host | `qr-manager-ui` | TCP 80 |
+
+---
+
+## The gap this rollout left: apiserver egress
+
+**Pod egress to the Kubernetes apiserver is denied.** Found after both clusters were enforced,
+and written up separately in
+[`2026-08-28-netpol-apiserver-egress.md`](./2026-08-28-netpol-apiserver-egress.md).
+
+`10.96.0.1` is inside the service CIDR, inside the `10.0.0.0/8` entry in the `except` list of
+`NetworkPolicy.egress-internet.yaml`, and no other rule grants it. Verified from inside a
+`qr-manager-api` pod on server1/sandbox, with controls to isolate it:
+
+```
+kubernetes.default.svc:443  => TIMEOUT (exit 28)
+10.96.0.1:443               => TIMEOUT (exit 28)
+opendata.chmi.cz:443        => 200        <- internet rule works
+mongodb:27017               => open       <- in-cluster rule works
+```
+
+DNS resolved, so it is the connection being dropped rather than the name.
+
+**Nothing is broken today** — no workload calls the apiserver, which is why every drop counter
+stayed at zero through both rollouts. It matters for the auth work, where verifying
+ServiceAccount tokens means fetching JWKS from `kubernetes.default.svc`.
+
+The Hubble drop shows exactly why an `ipBlock` would not fix it:
+
+```
+sandbox/api-iot-qr-manager-api:40768 <> 192.168.1.200:6443 (host) Policy denied DROPPED (TCP Flags: SYN)
+```
+
+The ClusterIP is DNAT'd to the node's apiserver, so the destination carries the **`host`**
+identity — and CIDR selectors do not match `host` while `PolicyCIDRMatchMode` is empty. This is
+the same trap `CiliumNetworkPolicy.host-ingress.yaml` documents for ingress; it was simply not
+carried across to egress. The supported form is `toEntities: [kube-apiserver]`.
