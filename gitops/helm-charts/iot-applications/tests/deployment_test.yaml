@@ -630,3 +630,121 @@ tests:
       - equal:
           path: spec.template.spec.initContainers[1].securityContext.runAsUser
           value: 65532
+
+  # ── projected ServiceAccount token + CA bundle ─────────────────────────────
+  - it: should NOT mount a projected token by default
+    set:
+      apps.my-app.image.repository: ghcr.io/example/my-app
+      apps.my-app.labels.component: api
+      apps.my-app.labels.partOf: iot
+      apps.my-app.ingress.enabled: false
+    asserts:
+      - notExists:
+          path: spec.template.spec.volumes
+      - notExists:
+          path: spec.template.spec.containers[0].volumeMounts
+
+  # The case the old `if templates` condition broke: an app with no templates
+  # emitted no volumes: key at all, so the projected volume had nowhere to go.
+  - it: should emit volumes for a projected token even when the app has no templates
+    set:
+      apps.my-app.image.repository: ghcr.io/example/my-app
+      apps.my-app.labels.component: api
+      apps.my-app.labels.partOf: iot
+      apps.my-app.ingress.enabled: false
+      apps.my-app.serviceAccount.create: true
+      apps.my-app.serviceAccount.projectedToken.enabled: true
+    asserts:
+      - equal:
+          path: spec.template.spec.volumes[0].name
+          value: kube-api-access
+      - equal:
+          path: spec.template.spec.volumes[0].projected.sources[0].serviceAccountToken.path
+          value: token
+      - equal:
+          path: spec.template.spec.volumes[0].projected.sources[0].serviceAccountToken.expirationSeconds
+          value: 3600
+      - equal:
+          path: spec.template.spec.volumes[0].projected.sources[1].configMap.name
+          value: kube-root-ca.crt
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[0].mountPath
+          value: /var/run/secrets/kubernetes.io/serviceaccount
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[0].readOnly
+          value: true
+
+  # The default-audience token must carry NO audience field — the apiserver
+  # rejects tokens whose audience is not in --api-audiences.
+  - it: should mint the apiserver token without an audience
+    set:
+      apps.my-app.image.repository: ghcr.io/example/my-app
+      apps.my-app.labels.component: api
+      apps.my-app.labels.partOf: iot
+      apps.my-app.ingress.enabled: false
+      apps.my-app.serviceAccount.create: true
+      apps.my-app.serviceAccount.projectedToken.enabled: true
+    asserts:
+      - notExists:
+          path: spec.template.spec.volumes[0].projected.sources[0].serviceAccountToken.audience
+
+  - it: should add one extra audience-scoped token per audience, keeping the default one
+    set:
+      apps.my-app.image.repository: ghcr.io/example/my-app
+      apps.my-app.labels.component: api
+      apps.my-app.labels.partOf: iot
+      apps.my-app.ingress.enabled: false
+      apps.my-app.serviceAccount.create: true
+      apps.my-app.serviceAccount.projectedToken.enabled: true
+      apps.my-app.serviceAccount.projectedToken.expirationSeconds: 900
+      apps.my-app.serviceAccount.projectedToken.audiences:
+        - qr-manager-api
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.volumes[0].projected.sources
+          count: 3
+      - equal:
+          path: spec.template.spec.volumes[0].projected.sources[2].serviceAccountToken.path
+          value: token-qr-manager-api
+      - equal:
+          path: spec.template.spec.volumes[0].projected.sources[2].serviceAccountToken.audience
+          value: qr-manager-api
+      - equal:
+          path: spec.template.spec.volumes[0].projected.sources[2].serviceAccountToken.expirationSeconds
+          value: 900
+
+  - it: should keep template volumes alongside the projected token
+    set:
+      apps.my-app.image.repository: ghcr.io/example/my-app
+      apps.my-app.labels.component: api
+      apps.my-app.labels.partOf: iot
+      apps.my-app.ingress.enabled: false
+      apps.my-app.templates.config.file: config.json
+      apps.my-app.templates.config.path: /home/app/config
+      apps.my-app.templates.config.content: "{}"
+      apps.my-app.serviceAccount.create: true
+      apps.my-app.serviceAccount.projectedToken.enabled: true
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.volumes
+          count: 3
+      - equal:
+          path: spec.template.spec.volumes[2].name
+          value: kube-api-access
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[1].name
+          value: kube-api-access
+
+  - it: should fail when an audience is an empty string
+    set:
+      apps.my-app.image.repository: ghcr.io/example/my-app
+      apps.my-app.labels.component: api
+      apps.my-app.labels.partOf: iot
+      apps.my-app.ingress.enabled: false
+      apps.my-app.serviceAccount.create: true
+      apps.my-app.serviceAccount.projectedToken.enabled: true
+      apps.my-app.serviceAccount.projectedToken.audiences:
+        - ""
+    asserts:
+      - failedTemplate:
+          errorMessage: "serviceAccount.projectedToken.audiences must not contain an empty string; omit the entry instead. [apps.my-app.serviceAccount.projectedToken]."

@@ -155,6 +155,90 @@
 {{- end -}}
 {{- end -}}
 
+{{/* ── Projected ServiceAccount token + CA bundle ────────────────────────────
+
+     Gives a pod what it needs to call the Kubernetes apiserver — most
+     immediately, to fetch the cluster JWKS and verify ServiceAccount tokens.
+     Two things are required and neither works alone: a CA bundle (or TLS
+     fails outright) and a bearer token (the apiserver runs
+     `--anonymous-auth=false`, so an anonymous caller gets 401).
+
+     The token deliberately has NO `audience`, so it is minted for the
+     apiserver's own audience (`--api-audiences`, which is the issuer URL and
+     differs per cluster). A token minted with a service audience — the kind
+     the auth design wants for service-to-service calls — is REJECTED by the
+     apiserver. Those belong in `audiences:` below, at their own paths,
+     alongside this one; they do not replace it.
+
+     Kept opt-in. `automountServiceAccountToken: false` on the ServiceAccount
+     stays as it is: this volume is explicit, scoped and short-lived, which is
+     the point. A workload that never calls the apiserver gets nothing.
+*/}}
+
+{{/* Mount path. The conventional location, so Kubernetes client libraries
+     find the token and CA with no configuration. */}}
+{{- define "iot-applications.projectedToken.mountPath" -}}
+/var/run/secrets/kubernetes.io/serviceaccount
+{{- end -}}
+
+{{/* True when the app asked for a projected token.
+     Input: application dictionary */}}
+{{- define "iot-applications.projectedToken.enabled" -}}
+{{- $sa := .serviceAccount | default dict -}}
+{{- $pt := $sa.projectedToken | default dict -}}
+{{- if $pt.enabled -}}true{{- end -}}
+{{- end -}}
+
+{{/* Validates projectedToken.
+     Input is dictionary with projectedToken: dictionary, applicationName: string */}}
+{{- define "iot-applications.validators.projectedToken" -}}
+{{- if .projectedToken.enabled -}}
+{{- range $audience := .projectedToken.audiences | default list -}}
+{{- if not (kindIs "string" $audience) -}}
+{{- fail (printf "serviceAccount.projectedToken.audiences must be a list of strings. [apps.%s.serviceAccount.projectedToken]." $.applicationName) -}}
+{{- end -}}
+{{- if eq $audience "" -}}
+{{- fail (printf "serviceAccount.projectedToken.audiences must not contain an empty string; omit the entry instead. [apps.%s.serviceAccount.projectedToken]." $.applicationName) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/* The projected volume. Input: application dictionary + name (as $ctx). */}}
+{{- define "iot-applications.projectedToken.volume" -}}
+{{- $pt := (.application.serviceAccount | default dict).projectedToken | default dict -}}
+{{- include "iot-applications.validators.projectedToken" (dict "projectedToken" $pt "applicationName" .name) -}}
+- name: kube-api-access
+  projected:
+    defaultMode: 420
+    sources:
+      {{- /* Default audience: the only token the apiserver itself accepts. */}}
+      - serviceAccountToken:
+          path: token
+          expirationSeconds: {{ $pt.expirationSeconds | default 3600 }}
+      {{- /* Published by Kubernetes into every namespace. Supplies the trust
+             root without turning automountServiceAccountToken back on. */}}
+      - configMap:
+          name: kube-root-ca.crt
+          items:
+            - key: ca.crt
+              path: ca.crt
+      {{- /* One token per callee, each useless against any other service. */}}
+      {{- range $audience := $pt.audiences | default list }}
+      - serviceAccountToken:
+          path: token-{{ $audience }}
+          audience: {{ $audience | quote }}
+          expirationSeconds: {{ $pt.expirationSeconds | default 3600 }}
+      {{- end }}
+{{- end -}}
+
+{{/* The matching read-only mount. */}}
+{{- define "iot-applications.projectedToken.volumeMount" -}}
+- name: kube-api-access
+  mountPath: {{ include "iot-applications.projectedToken.mountPath" . }}
+  readOnly: true
+{{- end -}}
+
 {{/* Returns labels for selector */}}
 {{- define "iot-applications.labels.selector" -}}
 app.kubernetes.io/name: {{ .name }}

@@ -14,7 +14,19 @@ apps:
     replicas: 1
     serviceAccount:
       create: true
+      # No ambient token: automount would give every pod a long-lived,
+      # full-audience one. projectedToken below is the explicit, scoped,
+      # short-lived replacement.
       automountServiceAccountToken: false
+      # Mounts a default-audience token + the cluster CA at
+      # /var/run/secrets/kubernetes.io/serviceaccount, which is what lets this
+      # service verify cluster-issued ServiceAccount tokens (JWKS fetch from
+      # kubernetes.default.svc). Both files are needed: without ca.crt the TLS
+      # handshake fails, without the token the apiserver returns 401.
+      # Per-callee audiences get added here when the first real
+      # service-to-service call exists, not speculatively.
+      projectedToken:
+        enabled: true
     resources:
       requests:
         cpu: 250m

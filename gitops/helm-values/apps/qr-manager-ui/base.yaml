@@ -13,6 +13,13 @@ apps:
       tag: "0.2.1"
       pullPolicy: Always
     replicas: 1
+    # Was running as the `default` ServiceAccount, which meant Kubernetes
+    # automounted a cluster token into it — the only pod in these namespaces
+    # that still held one. A static nginx SPA never calls the apiserver, so it
+    # gets its own ServiceAccount with automount off and no projectedToken.
+    serviceAccount:
+      create: true
+      automountServiceAccountToken: false
     resources:
       requests:
         cpu: 50m

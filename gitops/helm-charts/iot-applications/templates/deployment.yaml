@@ -13,6 +13,7 @@
 {{- $udpServiceRef := (($application.udpIngress | default dict).serviceRef | default "") -}}
 {{- $udpService := get ($application.services | default dict) $udpServiceRef | default dict -}}
 {{- $serviceAccount := $application.serviceAccount | default dict -}}
+{{- $projectedToken := include "iot-applications.projectedToken.enabled" $application -}}
 {{- if not (($application.rollout | default dict).enabled) }}
 ---
 apiVersion: apps/v1
@@ -223,7 +224,9 @@ spec:
           lifecycle:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- if $application.templates | default dict | len }}
+          {{- /* Emitted when EITHER Jinja2 templates or a projected token is wanted —
+                 an app with neither must still render a valid pod spec. */}}
+          {{- if or ($application.templates | default dict | len) $projectedToken }}
           volumeMounts:
             {{- /* Add volumes with substituted config files from Jinja2 container. */}}
             {{- range $templateName, $template := $application.templates | default dict }}
@@ -233,6 +236,9 @@ spec:
               {{- if $template.subPath }}
               subPath: {{ $template.subPath }}
               {{- end }}
+            {{- end }}
+            {{- if $projectedToken }}
+            {{- include "iot-applications.projectedToken.volumeMount" $ctx | nindent 12 }}
             {{- end }}
           {{- end }}
       {{- with $application.nodeSelector }}
@@ -247,7 +253,7 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- if $application.templates | default dict | len }}
+      {{- if or ($application.templates | default dict | len) $projectedToken }}
       volumes:
         {{- range $templateName, $template := $application.templates | default dict }}
         {{- include "iot-applications.validators.template" (dict "name" $templateName "template" $template "applicationName" $applicationName) }}
@@ -258,6 +264,9 @@ spec:
         {{- /* EmptyDir for Jinja2 rendered output. */}}
         - name: {{ include "iot-applications.identifier" $ctx }}-tpl-out-{{ $templateName }}
           emptyDir: {}
+        {{- end }}
+        {{- if $projectedToken }}
+        {{- include "iot-applications.projectedToken.volume" $ctx | nindent 8 }}
         {{- end }}
       {{- end }}
 {{- end }}

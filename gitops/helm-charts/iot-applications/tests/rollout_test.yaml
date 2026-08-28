@@ -167,3 +167,39 @@ tests:
           value:
             custom/annotation: "hello"
             resource.opentelemetry.io/service.name: my-app
+
+  # ── projected ServiceAccount token + CA bundle ─────────────────────────────
+  # rollout.yaml duplicates deployment.yaml's volume structure; the same
+  # restructured condition has to hold here or a canary app silently loses it.
+  - it: should mount the projected token on a Rollout too
+    set:
+      apps.my-app.image.repository: ghcr.io/example/my-app
+      apps.my-app.labels.component: api
+      apps.my-app.labels.partOf: iot
+      apps.my-app.ingress.enabled: false
+      apps.my-app.rollout.enabled: true
+      apps.my-app.rollout.strategy: canary
+      apps.my-app.serviceAccount.create: true
+      apps.my-app.serviceAccount.projectedToken.enabled: true
+    asserts:
+      - equal:
+          path: spec.template.spec.volumes[0].name
+          value: kube-api-access
+      - equal:
+          path: spec.template.spec.volumes[0].projected.sources[1].configMap.name
+          value: kube-root-ca.crt
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts[0].mountPath
+          value: /var/run/secrets/kubernetes.io/serviceaccount
+
+  - it: should NOT mount a projected token on a Rollout by default
+    set:
+      apps.my-app.image.repository: ghcr.io/example/my-app
+      apps.my-app.labels.component: api
+      apps.my-app.labels.partOf: iot
+      apps.my-app.ingress.enabled: false
+      apps.my-app.rollout.enabled: true
+      apps.my-app.rollout.strategy: canary
+    asserts:
+      - notExists:
+          path: spec.template.spec.volumes

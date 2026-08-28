@@ -25,6 +25,37 @@
 #       create: false
 #       name: ""
 #       annotations: {}
+#       # automountServiceAccountToken: false stops the pod receiving an ambient,
+#       # long-lived, full-audience token. Leave it false and use projectedToken
+#       # below, which is explicit, scoped and short-lived.
+#       automountServiceAccountToken: false
+#
+#       # projectedToken mounts a short-lived ServiceAccount token and the cluster
+#       # CA bundle at /var/run/secrets/kubernetes.io/serviceaccount — the
+#       # conventional path, so Kubernetes client libraries find them unconfigured.
+#       #
+#       # Off by default. Enable it only for a workload that actually calls the
+#       # Kubernetes apiserver or verifies cluster-issued ServiceAccount tokens.
+#       # A static frontend does not need one.
+#       #
+#       # Both files are required and neither works alone: without ca.crt the TLS
+#       # handshake fails, and without the token the apiserver returns 401 because
+#       # it runs with --anonymous-auth=false.
+#       projectedToken:
+#         enabled: false
+#         # expirationSeconds is the token lifetime; the kubelet rotates the file
+#         # in place before it expires. Minimum 600, Kubernetes default 3600.
+#         expirationSeconds: 3600
+#         # audiences mints ONE ADDITIONAL token per entry, at path
+#         # token-<audience>, each valid only for that callee — so a token stolen
+#         # from one service is useless against another.
+#         #
+#         # These are for service-to-service calls, NOT for the apiserver. The
+#         # apiserver only accepts tokens whose audience is in --api-audiences,
+#         # so an audience-scoped token 401s against it while looking correct.
+#         # The default-audience `token` file is always mounted for that purpose.
+#         audiences: []
+#           # - qr-manager-api
 
 #     # resources defines CPU and memory requests and limits.
 #     # https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
