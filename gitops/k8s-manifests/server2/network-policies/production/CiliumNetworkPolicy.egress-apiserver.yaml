@@ -1,0 +1,68 @@
+# Egress to the Kubernetes apiserver.
+#
+# Needed so a pod can fetch the cluster's JWKS from
+# https://kubernetes.default.svc/openid/v1/jwks and verify ServiceAccount
+# tokens. Nothing does that yet; this exists so the auth work is not blocked by
+# a policy change that has to be rolled out to two clusters first.
+#
+# ── Why CiliumNetworkPolicy, and not an ipBlock ──────────────────────────────
+# This is the second instance of the trap CiliumNetworkPolicy.host-ingress.yaml
+# documents for ingress, now on the egress side.
+#
+# `kubernetes.default.svc` is 10.96.0.1, but the pod never talks to that address
+# on the wire: with kubeProxyReplacement the ClusterIP is translated to the
+# node's real apiserver endpoint before policy is evaluated. The dropped packet
+# that led to this file proves it:
+#
+#   sandbox/api-iot-qr-manager-api:40768 <> 192.168.1.200:6443 (host)
+#     Policy denied DROPPED (TCP Flags: SYN)
+#
+# Note the identity: `host`. Cilium's CIDR selectors do not match the `host` /
+# `remote-node` identities unless `policyCIDRMatchMode` includes `nodes`, and it
+# is empty on both clusters. So an `ipBlock` for 10.96.0.1/32 would look
+# correct, pass review, and match nothing — leaving exactly the timeout it was
+# written to fix. `toEntities: [kube-apiserver]` is the supported form.
+#
+# ── Both ports, deliberately ─────────────────────────────────────────────────
+# 443 is what the pod connects to (the ClusterIP port). 6443 is what the packet
+# carries once translated, and is the port that actually appeared in the drop.
+# Listing both means the rule holds whichever side of the translation policy is
+# evaluated on, and costs nothing: the `kube-apiserver` entity is the apiserver
+# either way.
+#
+# ── Namespace-wide, deliberately ─────────────────────────────────────────────
+# `endpointSelector: {}` rather than per-app, matching how dns-egress is scoped.
+#
+# Every service-to-service path in the auth design verifies tokens the same way,
+# so a per-app rule would have to be revisited for every service added later —
+# and the failure mode is a timeout deep inside an HTTP client that points
+# nowhere near a network policy. That is the footgun this repo already decided
+# not to ship once, in NetworkPolicy.egress-internet.yaml.
+#
+# What it grants is small. The app ServiceAccounts set
+# `automountServiceAccountToken: false`, so these pods hold no cluster
+# credentials; an unauthenticated request to the apiserver gets a 401. Reaching
+# it is not the same as being able to use it.
+#
+# ── This is not sufficient on its own ────────────────────────────────────────
+# `automountServiceAccountToken: false` also removes `ca.crt`, so a pod has no
+# trust root for the apiserver's certificate. The CA is available without
+# touching that setting: Kubernetes publishes the `kube-root-ca.crt` ConfigMap
+# into every namespace. Mounting it is an application-chart change and belongs
+# with the auth work that consumes it, not here.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: allow-egress-apiserver
+  namespace: production
+spec:
+  endpointSelector: {}
+  egress:
+    - toEntities:
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+            - port: "6443"
+              protocol: TCP
