@@ -1,0 +1,61 @@
+# Outbound internet access for every pod in the namespace.
+#
+# ── Why this is broad on purpose ─────────────────────────────────────────────
+# An earlier revision pinned each third-party host with Cilium `toFQDNs`
+# (intranet.chmi.cz, opendata.chmi.cz, miot-spec.org), derived from 30 days of
+# the apps' own OTel metrics. It was removed deliberately.
+#
+# The problem was not tightness, it was that the constraint lived nowhere a
+# developer would find it. Adding an external API to an app is a change in
+# iot-miniservers (`externalApis` config); the matching egress rule would have
+# been a change in THIS repo. Nothing in AGENTS.md, docs/Deployment.md, the
+# add-workspace-member skill, or the http-provider READMEs mentions network
+# policy at all — verified, zero hits. So the failure mode was: add an API, it
+# works locally, then times out in-cluster inside axios with nothing pointing at
+# a firewall. Documenting that would have been shipping a footgun with a warning
+# label attached.
+#
+# The security given up is close to nothing. The rules that carry the value are
+# the in-cluster ones (no lateral movement to other pods or namespaces) and the
+# LAN one (no scanning the house). A container that can already reach the whole
+# LAN gains little from also being denied outbound HTTPS.
+#
+# Pinning FQDNs also dragged in Cilium's DNS proxy, which is extra machinery in
+# the path of every lookup. Gone with it.
+#
+# ── The remaining constraint, which IS still undocumented ────────────────────
+# Ports 443 and 80 only. Every HTTP API is covered; an external dependency on
+# some other port would still be denied. That is a deliberate, narrow trade —
+# it keeps a compromised container from opening arbitrary outbound connections
+# — but it must be written down before these policies are enforced, or it is
+# the same trap in smaller form.
+#
+# Plain NetworkPolicy, not Cilium: `0.0.0.0/0` minus the private ranges says
+# "the internet, nothing internal" without needing entity selectors. Portable,
+# and no DNS proxy involved.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-egress-internet
+  namespace: sandbox
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              # Cluster pod/service CIDRs — in-cluster traffic is governed by
+              # the per-app rules, not by this one.
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              # The LAN, including the Xiaomi devices and the node itself.
+              # Covered by NetworkPolicy.egress-lan-miio.yaml.
+              - 192.168.0.0/16
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 80

@@ -1,0 +1,48 @@
+# miot-bridge-api in-cluster egress: MongoDB, EMQX, OTLP. All three directly
+# observed in Stage 1 on both clusters and both namespaces.
+#
+# OTLP goes to the in-cluster Alloy receiver, NOT cross-cluster to server3 —
+# Alloy makes that hop itself, from the `monitoring` namespace. Default-deny
+# here cannot break the trace path; applying it to `monitoring` later would.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-egress-miot-bridge-api
+  namespace: sandbox
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: miot-bridge-api
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: mongodb
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: mongodb
+      ports:
+        - protocol: TCP
+          port: 27017
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: iot
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: emqx
+      ports:
+        - protocol: TCP
+          port: 1883
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: alloy-receiver
+      ports:
+        - protocol: TCP
+          port: 4318

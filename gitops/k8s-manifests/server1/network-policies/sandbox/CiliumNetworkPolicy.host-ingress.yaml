@@ -1,0 +1,41 @@
+# ALL ingress to application pods. Two callers, indistinguishable at the policy
+# layer because both are host-network:
+#   1. kubelet -> /health/live, /health/ready probes
+#   2. Traefik -> all user-facing ingress (Gateway API HTTPRoutes)
+#
+# Stage 1 confirmed these are the only ingress sources: every packet arriving on
+# a service port came from the node's cilium_host address. No pod-to-pod
+# ingress, and no metrics scraping — the apps push OTLP rather than being
+# scraped.
+#
+# ── Why CiliumNetworkPolicy and not NetworkPolicy ────────────────────────────
+# A real exception to the "prefer plain NetworkPolicy" rule, not a style choice.
+# A plain policy could only express this as an ipBlock holding the node and
+# cilium_host IPs. On Cilium that does not work: CIDR/ipBlock selectors do not
+# match the `host` or `remote-node` identities unless `policyCIDRMatchMode`
+# includes `nodes`, and it is unset here (verified: `PolicyCIDRMatchMode: []`).
+# Such a rule would look correct, pass review, and silently match nothing —
+# taking probes and all ingress down together.
+#
+# Cilium also auto-allows host->pod ingress by default (`allow-localhost: auto`),
+# so probes would likely survive with no rule at all. Deliberately not relied
+# upon: it is a default that can change, and being explicit costs nothing.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: allow-host-ingress
+  namespace: sandbox
+spec:
+  endpointSelector: {}
+  ingress:
+    - fromEntities:
+        # `host` is the local node: kubelet probes and Traefik. On a multi-node
+        # cluster `remote-node` would also be needed; these are single-node
+        # Talos clusters, so it is deliberately omitted.
+        - host
+      toPorts:
+        - ports:
+            - port: "4000"
+              protocol: TCP   # the three Ts.ED APIs
+            - port: "80"
+              protocol: TCP   # qr-manager-ui (nginx)

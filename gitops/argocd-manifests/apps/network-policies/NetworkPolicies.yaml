@@ -16,11 +16,15 @@
 # time ArgoCD reconciled — turning the emergency brake into a temporary one.
 # Switch to automated once both clusters have run enforced for a while.
 #
-# ── server1 is absent from the generator ────────────────────────────────────
-# Only server2 has manifests under network-policies/ today. server1 is added to
-# the list below once its set exists and server2 has been verified enforced.
-# server1 is the cluster with a live registered device and real miIO LAN
-# traffic — see docs/superpowers/plans/2026-08-25-network-default-deny.md.
+# ── The two clusters' policy sets are byte-identical ────────────────────────
+# `diff -r gitops/k8s-manifests/server1/network-policies \
+#          gitops/k8s-manifests/server2/network-policies` is empty, and should
+# stay that way. Current behaviour differs between the clusters only until
+# someone registers a device on server2, so tailoring either set to what its
+# cluster happens to do today is how the LAN rule ends up missing on the
+# cluster that later needs it. They are separate directories rather than one
+# shared path only because everything else under k8s-manifests/ is per-cluster;
+# if they ever must diverge, do it deliberately and say why in the file.
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
@@ -32,6 +36,8 @@ spec:
         generators:
           - list:
               elements:
+                - cluster: server1
+                  clusterServer: https://192.168.1.200:6443
                 - cluster: server2
                   clusterServer: https://192.168.1.201:6443
           - list:
