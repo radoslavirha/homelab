@@ -9,8 +9,6 @@ apps:
   miot-bridge-api:
     image:
       tag: "0.22.6"
-    udpIngress:
-      entrypoint: udp-miot-sbx
     templates:
       config:
         content: |
@@ -21,19 +19,6 @@ apps:
               },
               "publicURL": "{{ VAR_PROTOCOL }}://{{ VAR_SUBDOMAIN }}.{{ COMPONENT }}.{{ VAR_PUBLIC_DOMAIN }}/{{ PATH_NAME }}",
               "cachePath": "./cache",
-              "http": {
-                  "notifications": {
-                      "enabled": false
-                  }
-              },
-              "udp": {
-                  "enabled": true,
-                  "port": {{ CONTAINER_UDP_PORT }},
-                  "notifications": {
-                      "enabled": true,
-                      "address": "192.168.1.140:50450"
-                  }
-              },
               "mqtt": {
                   "enabled": true,
                   "url": "{{ VAR_MQTT_URL }}",

@@ -1,5 +1,5 @@
 # miot-bridge-api — shared base values
-# Env-specific: replicas, udpIngress.entrypoint, templates.config.content, VAR_* → production.yaml / sandbox.yaml
+# Env-specific: replicas, templates.config.content, VAR_* → production.yaml / sandbox.yaml
 
 apps:
   miot-bridge-api:
@@ -31,19 +31,22 @@ apps:
         protocol: TCP
         port: 80
         targetPort: 4000
-      udp:
-        enabled: true
-        protocol: UDP
-        port: 4000
-        targetPort: 4000
     ingress:
       enabled: true
       serviceRef: http
       pathName: iot/miot-bridge
-    udpIngress:
-      enabled: true
-      serviceRef: udp
-      # entrypoint defined per-env: udp-miot-prod (production) / udp-miot-sbx (sandbox)
+    # No udpIngress. The UDP command listener and the UDP/HTTP notification channels were
+    # never used (owner, 2026-08-27) and are switched off in the config below, so the
+    # Service, the IngressRouteUDP and the container's UDP port all go with them.
+    #
+    # What this removed: Traefik runs hostNetwork and bound the `udp-miot-prod` /
+    # `udp-miot-sbx` entrypoints on the node, so 192.168.1.20x:4000-4001/UDP was a real
+    # LAN-reachable path into this pod. It is now closed at the application layer as well
+    # as by NetworkPolicy — allow-host-ingress permits TCP only.
+    #
+    # The Traefik entrypoints themselves still exist in
+    # gitops/helm-values/<cluster>/traefik.yaml and now have no backend. Removing them is
+    # a separate change: Traefik is hostNetwork with one replica, so it restarts ingress.
     secretRefs:
       - name: miot-bridge-api-mqtt-credentials
         keys:
@@ -65,9 +68,6 @@ apps:
       timeoutSeconds: 2
     # Shallow by design — /health/live never touches the check registry. A MongoDB or MQTT
     # outage must degrade readiness, never restart pods.
-    #
-    # HTTP-only, so this probe is blind to the UDP listener: the process can be serving
-    # HTTP while the UDP socket is dead. UDP liveness is a tracked follow-up, out of scope.
     livenessProbe:
       httpGet:
         path: /health/live
