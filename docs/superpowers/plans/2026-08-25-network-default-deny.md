@@ -18,7 +18,8 @@ task — more valuable long-term than the policies themselves").
 | --- | --- |
 | Stage 1 — survey | **done, with stated confidence limits.** Flow inventory below. Live observation window was ~18 minutes; the gaps are named explicitly rather than papered over. |
 | Stage 2 — audit mode | **skipped, deliberately.** Audit mode forwards everything, so it cannot detect the connection-reuse failure this document warns about — the one where a bad policy looks fine until the next reconnect. A rolling restart under real enforcement tests exactly that, and sandbox gave a free canary with instant rollback. `PolicyAuditMode` remains `Disabled` on all three clusters. |
-| Stage 3 — deny | **enforced and verified on both clusters.** server2 2026-08-26, server1 2026-08-28, sandbox before production each time. Zero drops in all four namespaces. Evidence below. One gap found afterwards: [egress to the apiserver is denied](#the-gap-this-rollout-left-apiserver-egress). |
+| Stage 3 — deny | **enforced and verified on both clusters.** server2 2026-08-26, server1 2026-08-28, sandbox before production each time. Zero drops in all four namespaces. Evidence below. |
+| Apiserver egress | **fixed and verified, 2026-08-28.** Nine objects per namespace now. See [apiserver egress](#the-gap-this-rollout-left-apiserver-egress). |
 
 ---
 
@@ -673,11 +674,12 @@ Every rule exercised, all `FORWARDED`, nothing dropped:
 
 ---
 
-## The gap this rollout left: apiserver egress
+## The gap this rollout left: apiserver egress — fixed 2026-08-28
 
-**Pod egress to the Kubernetes apiserver is denied.** Found after both clusters were enforced,
-and written up separately in
-[`2026-08-28-netpol-apiserver-egress.md`](./2026-08-28-netpol-apiserver-egress.md).
+**Pod egress to the Kubernetes apiserver was denied.** Found after both clusters were enforced,
+planned in [`2026-08-28-netpol-apiserver-egress.md`](./2026-08-28-netpol-apiserver-egress.md),
+and fixed by `CiliumNetworkPolicy.egress-apiserver.yaml` in all four namespaces. The diagnosis
+below is kept because the mechanism is the reusable part.
 
 `10.96.0.1` is inside the service CIDR, inside the `10.0.0.0/8` entry in the `except` list of
 `NetworkPolicy.egress-internet.yaml`, and no other rule grants it. Verified from inside a
@@ -706,3 +708,47 @@ The ClusterIP is DNAT'd to the node's apiserver, so the destination carries the 
 identity — and CIDR selectors do not match `host` while `PolicyCIDRMatchMode` is empty. This is
 the same trap `CiliumNetworkPolicy.host-ingress.yaml` documents for ingress; it was simply not
 carried across to egress. The supported form is `toEntities: [kube-apiserver]`.
+
+### The fix, and what it proves
+
+`CiliumNetworkPolicy.egress-apiserver.yaml`, `toEntities: [kube-apiserver]`, in all four
+namespaces. Two decisions worth recording:
+
+**Both 443 and 6443.** 443 is what a pod dials; 6443 is what the packet carries once the
+ClusterIP is translated, and is the port that actually appeared in the drop. Listing both makes
+the rule correct on either side of the translation and grants nothing extra — the entity is the
+apiserver either way.
+
+**`endpointSelector: {}`, not per-app**, matching how `dns-egress` is scoped. Every
+service-to-service path in the auth design verifies tokens the same way, so a per-app rule would
+have to be revisited for every service added later, with a timeout deep inside an HTTP client as
+the only symptom. That is the footgun this repo already declined to ship once, in
+`NetworkPolicy.egress-internet.yaml`. The grant is small: `automountServiceAccountToken: false`
+means these pods hold no cluster credentials, so an unauthenticated request gets a 401.
+
+Verified in **all four namespaces**, from a throwaway pod in the namespace — which the
+namespace-wide selector covers exactly as it covers the app pods:
+
+| Check | Before | After |
+| --- | --- | --- |
+| `jwks`, insecure | timeout (exit 28) | **HTTP 401** |
+| `jwks`, TLS verified against `kube-root-ca.crt` | — | **HTTP 401** |
+| control — `opendata.chmi.cz:443` | 200 | 200 |
+| control — `1.1.1.1:8443` | dropped | **still dropped** |
+
+The last row is the one that matters as much as the first: it proves the new rule did not widen
+general egress. The 80/443 restriction still holds.
+
+### The CA question, answered
+
+Use the **`kube-root-ca.crt` ConfigMap**. Kubernetes publishes it into every namespace, it
+carries the same CA bundle, and it keeps `automountServiceAccountToken: false` intact — which
+the projected-volume alternative does not.
+
+Proven rather than assumed: `curl --cacert /ca/ca.crt https://kubernetes.default.svc/openid/v1/jwks`
+completes the TLS handshake and returns the apiserver's own `Status` object with `"code": 401`.
+A verifying client therefore has a working trust root without any ServiceAccount change.
+
+Mounting it is an application-chart change and deliberately **not** done here — it belongs with
+the auth work that consumes it. What is done here is the part that had to be rolled out to two
+clusters before that work could start.
