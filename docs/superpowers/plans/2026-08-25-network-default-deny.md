@@ -752,3 +752,67 @@ A verifying client therefore has a working trust root without any ServiceAccount
 Mounting it is an application-chart change and deliberately **not** done here — it belongs with
 the auth work that consumes it. What is done here is the part that had to be rolled out to two
 clusters before that work could start.
+
+---
+
+## Projected ServiceAccount token + CA — done 2026-08-28
+
+The last piece: apiserver egress was permitted, but pods had no ServiceAccount volume at all, so
+a JWKS fetch still could not succeed. Planned in
+[`2026-08-28-projected-sa-token-and-ca.md`](./2026-08-28-projected-sa-token-and-ca.md).
+
+**Acceptance test passes on all six API pods** — three APIs × two clusters, production:
+
+```text
+qr-manager-api               HTTP 200  jwks keys=1
+miot-bridge-api              HTTP 200  jwks keys=1
+interactive-map-feeder-api   HTTP 200  jwks keys=1
+```
+
+Chain complete: NetworkPolicy permits the apiserver → `ca.crt` validates the TLS → the token
+authenticates → 200 with the real signing keys. Each link was already known to fail on its own
+(timeout, TLS error, 401 respectively), so 200 is the only result that proves all three.
+
+### Why the token has no `audience`, demonstrated
+
+The apiserver accepts only tokens whose audience is in `--api-audiences`, which here is the
+issuer URL — and it **differs per cluster**. The minted tokens show it:
+
+| Cluster | `aud` claim | lifetime |
+| --- | --- | --- |
+| server1 | `https://192.168.1.200:6443` | 3600 s |
+| server2 | `https://192.168.1.201:6443` | 3600 s |
+
+Omitting `audience` is what makes one chart value correct on both clusters. An audience-scoped
+token — the kind service-to-service calls need — is *rejected* by the apiserver while looking
+perfectly configured, which is why `audiences:` adds tokens at `token-<audience>` paths
+**alongside** the default one rather than replacing it. None are configured yet; they belong
+with the first real service-to-service call.
+
+### The chart bug this exposed
+
+`volumes:` and `volumeMounts:` in both `deployment.yaml` and `rollout.yaml` were gated on
+`if templates`, so an app with no Jinja2 templates emitted no `volumes:` key at all and the
+projected volume had nowhere to go. Both are now emitted when either is wanted. Tests went
+78 → 86, and were confirmed to **fail when the condition is reverted** (3 failures) rather than
+passing vacuously.
+
+### One security fix taken while here
+
+`qr-manager-ui` was running as the `default` ServiceAccount, so Kubernetes automounted a cluster
+token into it — the only pod in these namespaces still holding an ambient one, in a static nginx
+frontend that never calls the apiserver. It now has its own ServiceAccount with automount off and
+no projected token. Verified: **zero** pods across all four namespaces carry an auto-mounted
+`kube-api-access-*` volume.
+
+### Final state, both clusters
+
+| | policies | ready | drops |
+| --- | --- | --- | --- |
+| server1/production | 9 | 5 | 0 |
+| server1/sandbox | 9 | 5 | 0 |
+| server2/production | 9 | 5 | 0 |
+| server2/sandbox | 9 | 5 | 0 |
+
+All twelve routes 200. server1 still polling its device — `Loaded 6 subscription(s) across
+1 device(s)`, 32 miIO UDP flows in the buffer.
