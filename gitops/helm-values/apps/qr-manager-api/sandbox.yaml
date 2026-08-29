@@ -1,5 +1,10 @@
 # qr-manager-api — sandbox overrides
 #
+# The trailing /r on redirect.baseURL is not a typo. The redirect endpoint is mounted at
+# /r/:slug; production reaches it through a gateway addPrefix on qr.home and so has no /r
+# in its baseURL, but sandbox composes the chart's path-based route, where nothing adds the
+# prefix. Nothing is printed from sandbox — this only keeps the qrURL field truthful.
+#
 # Probes, lifecycle and strategy live in base.yaml — they were staged here first and
 # promoted once a sandbox rollout had been watched.
 # See docs/superpowers/plans/2026-08-06-iot-app-health-checks-homelab.md
@@ -17,7 +22,7 @@ apps:
                   "httpPort": {{ CONTAINER_PORT }}
               },
               "redirect": {
-                  "baseURL": "{{ VAR_PROTOCOL }}://{{ VAR_SUBDOMAIN }}.{{ COMPONENT }}.{{ VAR_PUBLIC_DOMAIN }}/{{ PATH_NAME }}"
+                  "baseURL": "{{ VAR_PROTOCOL }}://{{ VAR_SUBDOMAIN }}.{{ COMPONENT }}.{{ VAR_PUBLIC_DOMAIN }}/{{ PATH_NAME }}/r"
               },
               "mongodb": {
                   "enabled": true,

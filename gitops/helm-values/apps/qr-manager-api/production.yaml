@@ -1,4 +1,10 @@
 # qr-manager-api — production overrides
+#
+# redirect.baseURL has no path and must keep none. The app serves the redirect at /r/:slug,
+# and the /r is supplied by the addPrefix middleware on the qr.home HTTPRoute
+# (gitops/k8s-manifests/server1/qr-manager-api/production/Middleware.addprefix-qr.yaml, which
+# explains the whole arrangement). Putting /r here as well would double it and break every
+# printed label.
 
 apps:
   qr-manager-api:
