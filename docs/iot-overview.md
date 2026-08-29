@@ -62,7 +62,7 @@ miot-bridge-api polls MiOT cloud (every 5 s)
 
 | Topic | Publisher | Consumer | Format |
 |-------|-----------|----------|--------|
-| `iot/loxone/state` | miot-bridge-api (or Loxone directly) | Telegraf | JSON: `{measurement, room, <fields>}` |
+| `iot/loxone/state` | Loxone Miniserver | Telegraf | JSON: `{measurement, room, <fields>}` |
 | `iot/miot-bridge/device/+/notifications` | miot-bridge-api | EMQX rule | JSON: property→value map |
 | `iot/miot-bridge/devices/notifications` | EMQX rule (republish) | Loxone | text/plain: `deviceId=X\nprop=val` |
 

@@ -124,7 +124,7 @@ Which is exactly why this skill generates traffic rather than waiting for it.
 ## Auth
 
 Every endpoint above is unauthenticated as of 2026-08-26. Phase 0 hardening
-(`iot-miniservers` → `docs/superpowers/specs/2026-08-25-auth-phase-0-hardening.md`) will change
+(`iot-miniservers` → `docs/superpowers/OPEN-THREADS.md`, where Phase 0 was closed out) will change
 that. When it lands, add the credential step here: fetch from OpenBao at run time with the `bao`
 CLI already in the probe image, pass as a header, never commit a token and never echo one into
 run output.

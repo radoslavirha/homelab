@@ -1,13 +1,14 @@
 # Default-deny network policy — Stage 1 survey and draft allowlist
 
-**Scope:** this repository only. Phase 0.2 — the survey, the allowlist it produced, and the
-enforced rollout on server2. **server2 is enforced and verified as of 2026-08-26** (see
-[Stage 3 — enforced on server2](#stage-3--enforced-on-server2-2026-08-26)). server1 is not.
+**Scope:** this repository only. Phase 0.2 — the survey, the allowlist it produced, and the enforced
+rollout. **Both clusters are enforced and verified:** server2 2026-08-26 (see
+[Stage 3](#stage-3--enforced-on-server2-2026-08-26)), server1 2026-08-28.
 
-**Task definition:** [`iot-miniservers` → `docs/superpowers/specs/2026-08-25-auth-phase-0-hardening.md`](../../../../iot-miniservers/docs/superpowers/specs/2026-08-25-auth-phase-0-hardening.md),
-section **0.2 — Default-deny network policy**. That document is the authority; this one is the durable
-artifact it asks for ("Record the inventory in the homelab repo. It is the durable artifact of this
-task — more valuable long-term than the policies themselves").
+**Task definition:** the Phase 0.2 brief in `iot-miniservers`, since closed out into
+[`docs/superpowers/OPEN-THREADS.md`](../../../../iot-miniservers/docs/superpowers/OPEN-THREADS.md).
+**This document is now the authority** — it is the durable artifact that brief asked for ("Record the
+inventory in the homelab repo. It is the durable artifact of this task — more valuable long-term than
+the policies themselves").
 
 **Policies:** [`gitops/k8s-manifests/server2/network-policies/`](../../../gitops/k8s-manifests/server2/network-policies/) — `production/` and `sandbox/`
 **ArgoCD:** [`apps/network-policies/NetworkPolicies.yaml`](../../../gitops/argocd-manifests/apps/network-policies/NetworkPolicies.yaml) (ApplicationSet, one Application per namespace, **manual sync**) under [`roots/RootNetworkPolicies.yaml`](../../../gitops/argocd-manifests/roots/RootNetworkPolicies.yaml) at wave 5
