@@ -38,6 +38,10 @@ global:
 #           baoUsernameKey: username
 #           baoPasswordKey: password
 #           idempotencyStrategy: api-check  # api-check | bao-check
+#           acl:               # optional; written to the built_in_database authz source
+#             - permission: allow      # allow | deny
+#               action: subscribe      # publish | subscribe | all
+#               topic: "some/topic"    # wildcards and ${username}/${clientid} supported
 
 # mongodb:
 #   host: ""

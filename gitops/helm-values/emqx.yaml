@@ -34,6 +34,50 @@ persistence:
 recreatePods: true
 
 emqxConfig:
+  # --- Topic ACLs -----------------------------------------------------------
+  # Rules live on each user in gitops/helm-values/<cluster>/provisioner/emqx.yaml and
+  # are written to the built_in_database authorization source by the EMQX provisioner
+  # Job — the same backend that holds the accounts. That Job also deletes the stock
+  # `file` source, whose shipped acl.conf ends `{allow, all}.` and would make the flip
+  # below a no-op. Only the switch itself lives here: it is a scalar, so it survives
+  # the envFrom ConfigMap shape a multi-line acl.conf never could.
+  #
+  # UNCOMMENT ONLY AFTER THE AUDIT BELOW IS CLEAN. Flipping this with a missing rule
+  # silently stops a client publishing while it stays connected and looks healthy.
+  # recreatePods: true above means this change does roll the broker.
+  # EMQX_AUTHORIZATION__NO_MATCH: deny
+  #
+  # --- Audit before flipping -------------------------------------------------
+  # `$events/client_check_authz_complete` exists in this open-source 5.8.9 build and
+  # reports every authorization decision, including `authz_source` — empty when no
+  # rule matched and the no_match default decided it. While no_match is still `allow`,
+  # those are exactly the checks that `deny` would break.
+  #
+  # Enable temporarily, watch `iot/_authz_audit` with MQTT Explorer through a full
+  # cycle of real traffic (a vacuum run, a command from Loxone, a telegraf write),
+  # then comment it out again and flip no_match.
+  #
+  # EMQX_rule_engine__rules__AUTHZ_AUDIT:
+  #   enable: true
+  #   description: "Temporary: republish every authorization check so the checks that would be denied under no_match=deny can be observed before flipping it."
+  #   sql: |-
+  #     SELECT
+  #       clientid, username, topic, action, result, authz_source
+  #     FROM
+  #       "$events/client_check_authz_complete"
+  #   actions:
+  #     - function: "republish"
+  #       args:
+  #         topic: "iot/_authz_audit"
+  #         direct_dispatch: false
+  #         qos: 0
+  #         retain: false
+  #         payload: |-
+  #           ${username} ${action} ${topic} -> ${result} (source=${authz_source})
+  #         mqtt_properties:
+  #           Content-Type: "text/plain"
+  #           Payload-Format-Indicator: "true"
+  #
   # Do not add EMQX_OPENTELEMETRY__* here. OpenTelemetry in EMQX is **Enterprise-only
   # as of 5.8.3** — confirmed by an EMQX maintainer:
   # https://github.com/emqx/emqx/issues/14395#issuecomment-2550653939

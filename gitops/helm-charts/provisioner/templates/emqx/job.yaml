@@ -80,6 +80,40 @@ spec:
                 echo "Authenticator configured."
               fi
 
+              # --- Authorization ------------------------------------------------------
+              # Same backend as authentication: one built-in database, one dashboard page,
+              # rules keyed per username. The Job only ever writes usernames listed in
+              # values, so rules maintained by hand for other accounts are left alone.
+              AUTHZ_EXISTS=$(curl -sf \
+                -H "${AUTH_HEADER}" \
+                "${EMQX_HOST}/api/v5/authorization/sources" \
+                | jq '[.sources[] | select(.type=="built_in_database")] | length')
+
+              if [ "${AUTHZ_EXISTS:-0}" -eq 0 ]; then
+                echo "Configuring built_in_database authorization source..."
+                curl -sf -X POST \
+                  -H "${AUTH_HEADER}" \
+                  -H "Content-Type: application/json" \
+                  "${EMQX_HOST}/api/v5/authorization/sources" \
+                  -d '{"type": "built_in_database", "enable": true, "max_rules": 100}' > /dev/null
+                echo "Authorization source configured."
+              fi
+
+              # Retire the stock `file` source. Its shipped acl.conf ends `{allow, all}.`,
+              # which would allow everything ahead of the rules below and make
+              # authorization.no_match = deny a no-op. Only runs while the source exists.
+              FILE_SOURCE_EXISTS=$(curl -sf \
+                -H "${AUTH_HEADER}" \
+                "${EMQX_HOST}/api/v5/authorization/sources" \
+                | jq '[.sources[] | select(.type=="file")] | length')
+
+              if [ "${FILE_SOURCE_EXISTS:-0}" -gt 0 ]; then
+                echo "Removing stock 'file' authorization source (it ends with {allow, all}.)..."
+                curl -sf -X DELETE \
+                  -H "${AUTH_HEADER}" \
+                  "${EMQX_HOST}/api/v5/authorization/sources/file" > /dev/null
+              fi
+
               {{- range $job.users }}
 
               # User: {{ .mqttUsername }}
@@ -124,6 +158,39 @@ spec:
                   {{ .baoPasswordKey | default "password" }}="${MQTT_PASS}"
                 echo "MQTT user '{{ .mqttUsername }}' provisioned and written to OpenBao."
               fi
+              {{- if .acl }}
+
+              # ACL rules for {{ .mqttUsername }} — applied whether or not the account was
+              # just created, so a rule change lands without touching the credential.
+              # PUT replaces this username's whole rule list; other usernames are untouched.
+              cat > /tmp/acl.json <<'ACL_RULES_EOF'
+              {"username": "{{ .mqttUsername }}", "rules": {{ .acl | toJson }}}
+              ACL_RULES_EOF
+
+              curl -sf -X PUT \
+                -H "${AUTH_HEADER}" \
+                -H "Content-Type: application/json" \
+                "${EMQX_HOST}/api/v5/authorization/sources/built_in_database/rules/users/{{ .mqttUsername }}" \
+                -d @/tmp/acl.json > /dev/null
+
+              # Read back. A silently-unapplied ACL is the failure mode this exists to avoid.
+              # Compared on permission/action/topic only, sorted: the broker fills in qos
+              # and retain defaults and does not promise rule order, either of which would
+              # fail an exact diff for no reason.
+              curl -sf \
+                -H "${AUTH_HEADER}" \
+                "${EMQX_HOST}/api/v5/authorization/sources/built_in_database/rules/users/{{ .mqttUsername }}" \
+                | jq -S '[.rules[] | {permission, action, topic}] | sort' > /tmp/acl.readback.json
+              jq -S '[.rules[] | {permission, action, topic}] | sort' /tmp/acl.json > /tmp/acl.sent.json
+
+              if diff -q /tmp/acl.sent.json /tmp/acl.readback.json > /dev/null; then
+                echo "ACL for '{{ .mqttUsername }}': {{ len .acl }} rule(s) applied and verified."
+              else
+                echo "ERROR: broker ACL for '{{ .mqttUsername }}' differs from what was sent."
+                diff /tmp/acl.sent.json /tmp/acl.readback.json || true
+                exit 1
+              fi
+              {{- end }}
               {{- end }}
 {{- end }}
 {{- end }}
