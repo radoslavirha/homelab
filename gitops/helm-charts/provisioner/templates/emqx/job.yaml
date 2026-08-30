@@ -91,12 +91,26 @@ spec:
 
               if [ "${AUTHZ_EXISTS:-0}" -eq 0 ]; then
                 echo "Configuring built_in_database authorization source..."
-                curl -sf -X POST \
+                # Every EMQX Job in this wave runs concurrently and all of them can see
+                # "absent" at the same time; the losers get 400 duplicated_authz_source_type.
+                # That is the desired end state, not a failure — re-check before giving up.
+                if ! curl -sf -X POST \
                   -H "${AUTH_HEADER}" \
                   -H "Content-Type: application/json" \
                   "${EMQX_HOST}/api/v5/authorization/sources" \
-                  -d '{"type": "built_in_database", "enable": true, "max_rules": 100}' > /dev/null
-                echo "Authorization source configured."
+                  -d '{"type": "built_in_database", "enable": true, "max_rules": 100}' > /dev/null; then
+                  AUTHZ_EXISTS=$(curl -sf \
+                    -H "${AUTH_HEADER}" \
+                    "${EMQX_HOST}/api/v5/authorization/sources" \
+                    | jq '[.sources[] | select(.type=="built_in_database")] | length')
+                  if [ "${AUTHZ_EXISTS:-0}" -eq 0 ]; then
+                    echo "ERROR: could not create the built_in_database authorization source."
+                    exit 1
+                  fi
+                  echo "Authorization source was created concurrently by another Job."
+                else
+                  echo "Authorization source configured."
+                fi
               fi
 
               # Retire the stock `file` source. Its shipped acl.conf ends `{allow, all}.`,
@@ -109,9 +123,21 @@ spec:
 
               if [ "${FILE_SOURCE_EXISTS:-0}" -gt 0 ]; then
                 echo "Removing stock 'file' authorization source (it ends with {allow, all}.)..."
-                curl -sf -X DELETE \
+                # Same race as above: a concurrent Job may have deleted it already, which
+                # returns 404. Only a source that still exists afterwards is a real failure.
+                if ! curl -sf -X DELETE \
                   -H "${AUTH_HEADER}" \
-                  "${EMQX_HOST}/api/v5/authorization/sources/file" > /dev/null
+                  "${EMQX_HOST}/api/v5/authorization/sources/file" > /dev/null; then
+                  FILE_SOURCE_EXISTS=$(curl -sf \
+                    -H "${AUTH_HEADER}" \
+                    "${EMQX_HOST}/api/v5/authorization/sources" \
+                    | jq '[.sources[] | select(.type=="file")] | length')
+                  if [ "${FILE_SOURCE_EXISTS:-0}" -gt 0 ]; then
+                    echo "ERROR: the 'file' authorization source is still present."
+                    exit 1
+                  fi
+                  echo "'file' source was already removed by another Job."
+                fi
               fi
 
               {{- range $job.users }}

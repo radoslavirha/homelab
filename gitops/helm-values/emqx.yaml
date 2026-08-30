@@ -37,47 +37,50 @@ emqxConfig:
   # --- Topic ACLs -----------------------------------------------------------
   # Rules live on each user in gitops/helm-values/<cluster>/provisioner/emqx.yaml and
   # are written to the built_in_database authorization source by the EMQX provisioner
-  # Job — the same backend that holds the accounts. That Job also deletes the stock
-  # `file` source, whose shipped acl.conf ends `{allow, all}.` and would make the flip
-  # below a no-op. Only the switch itself lives here: it is a scalar, so it survives
-  # the envFrom ConfigMap shape a multi-line acl.conf never could.
+  # Job — the same backend that holds the accounts. Only the enforcement switch lives
+  # here: it is a scalar, so it survives the envFrom ConfigMap shape a multi-line
+  # acl.conf never could.
   #
-  # UNCOMMENT ONLY AFTER THE AUDIT BELOW IS CLEAN. Flipping this with a missing rule
-  # silently stops a client publishing while it stays connected and looks healthy.
-  # recreatePods: true above means this change does roll the broker.
+  # STEP 3, NOT YET TAKEN. Uncomment only once the audit below shows every real client
+  # matching a rule. Flipping this with a rule missing stops a client publishing while
+  # it stays connected and looks healthy. recreatePods: true rolls the broker on change.
+  # Spec: docs/superpowers/specs/2026-08-30-mqtt-acl-enforcement.md
   # EMQX_AUTHORIZATION__NO_MATCH: deny
+
+  # --- Authorization audit (temporary, STEP 2) ------------------------------
+  # `$events/client_check_authz_complete` fires on every authorization decision and
+  # carries `authz_source` — empty when no rule matched and the no_match default
+  # decided it. While no_match is still `allow`, those are exactly the checks that
+  # `deny` would break.
   #
-  # --- Audit before flipping -------------------------------------------------
-  # `$events/client_check_authz_complete` exists in this open-source 5.8.9 build and
-  # reports every authorization decision, including `authz_source` — empty when no
-  # rule matched and the no_match default decided it. While no_match is still `allow`,
-  # those are exactly the checks that `deny` would break.
+  # The console action prints each decision to the broker log, which Alloy already
+  # ships to Loki, so the evidence accumulates without anyone watching a topic. Query:
+  #   {k8s_pod_name="emqx-0", k8s_cluster_name="server1"} |= "authz_audit"
   #
-  # Enable temporarily, watch `iot/_authz_audit` with MQTT Explorer through a full
-  # cycle of real traffic (a vacuum run, a command from Loxone, a telegraf write),
-  # then comment it out again and flip no_match.
-  #
-  # EMQX_rule_engine__rules__AUTHZ_AUDIT:
-  #   enable: true
-  #   description: "Temporary: republish every authorization check so the checks that would be denied under no_match=deny can be observed before flipping it."
-  #   sql: |-
-  #     SELECT
-  #       clientid, username, topic, action, result, authz_source
-  #     FROM
-  #       "$events/client_check_authz_complete"
-  #   actions:
-  #     - function: "republish"
-  #       args:
-  #         topic: "iot/_authz_audit"
-  #         direct_dispatch: false
-  #         qos: 0
-  #         retain: false
-  #         payload: |-
-  #           ${username} ${action} ${topic} -> ${result} (source=${authz_source})
-  #         mqtt_properties:
-  #           Content-Type: "text/plain"
-  #           Payload-Format-Indicator: "true"
-  #
+  # REMOVE BOTH THIS RULE AND THE LOG LEVEL BELOW once no_match is flipped. EMQX's own
+  # docs warn the console action is a debugging tool and costs performance in
+  # production, and info-level logging is noisier than this broker normally runs.
+  EMQX_rule_engine__rules__AUTHZ_AUDIT:
+    enable: true
+    description: "TEMPORARY (spec 2026-08-30-mqtt-acl-enforcement): print every authorization decision so the checks that would be denied under no_match=deny can be found before flipping it. Remove once flipped."
+    sql: |-
+      SELECT
+        'authz_audit' as tag,
+        clientid,
+        username,
+        topic,
+        action,
+        result,
+        authz_source
+      FROM
+        "$events/client_check_authz_complete"
+    actions:
+      - function: "console"
+
+  # The console log handler defaults to `warning`, which would swallow the rule action
+  # output above. Temporary, and paired with the audit rule — revert both together.
+  EMQX_LOG__CONSOLE__LEVEL: info
+
   # Do not add EMQX_OPENTELEMETRY__* here. OpenTelemetry in EMQX is **Enterprise-only
   # as of 5.8.3** — confirmed by an EMQX maintainer:
   # https://github.com/emqx/emqx/issues/14395#issuecomment-2550653939
