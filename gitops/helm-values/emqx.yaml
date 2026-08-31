@@ -55,11 +55,36 @@ emqxConfig:
   # Spec: docs/superpowers/specs/2026-08-30-mqtt-acl-enforcement.md
   EMQX_AUTHORIZATION__NO_MATCH: deny
 
-  # Kept at info for now, deliberately: authorization denials log as
-  # `authorization_permission_denied` with `tag: AUTHZ`, and this guarantees they are
-  # visible in Loki while enforcement beds in, whatever level EMQX emits them at.
-  # Revert to the chart default once the broker has run denied-free for a while:
-  #   {k8s_pod_name="emqx-0"} |= "authorization_permission_denied"
+  # --- Denial visibility ----------------------------------------------------
+  # EMQX's own `authorization_permission_denied` line is not a signal we can rely on:
+  # its log level is undocumented, and with the audit rule gone this broker emitted
+  # ZERO lines in 14 hours at info — so an empty denial query proves nothing about
+  # denials, only that the broker is quiet.
+  #
+  # This rule makes the signal explicit. Same event source and console action as the
+  # 2026-08-30 audit (proven to reach Loki), narrowed to denials only, so it is silent
+  # while everything is healthy and prints exactly when a client is refused:
+  #   {k8s_pod_name="emqx-0"} |= "authz_denied"
+  EMQX_rule_engine__rules__AUTHZ_DENIED:
+    enable: true
+    description: "Print every DENIED authorization decision. Silent while healthy — a line here means a client was refused a topic and something needs a rule (or a restart; check subscriptions= first)."
+    sql: |-
+      SELECT
+        'authz_denied' as tag,
+        clientid,
+        username,
+        topic,
+        action,
+        authz_source
+      FROM
+        "$events/client_check_authz_complete"
+      WHERE
+        result = 'deny'
+    actions:
+      - function: "console"
+
+  # Required for the console action above to be emitted at all — the chart default is
+  # `warning`, which swallows it. Keep both or remove both.
   EMQX_LOG__CONSOLE__LEVEL: info
 
   # Do not add EMQX_OPENTELEMETRY__* here. OpenTelemetry in EMQX is **Enterprise-only
