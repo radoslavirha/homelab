@@ -8,7 +8,7 @@
 apps:
   miot-bridge-api:
     image:
-      tag: "0.23.1"
+      tag: "0.23.2"
     templates:
       config:
         content: |
