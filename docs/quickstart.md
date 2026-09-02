@@ -86,6 +86,10 @@ bao kv put secret/server3/grafana \
 # ExternalDNS — UniFi API key:
 bao kv put secret/server3/external-dns api-key=<unifi-api-key>
 
+# cert-manager — Cloudflare API token for ACME DNS-01 (Zone:DNS:Edit + Zone:Zone:Read on irha.cz).
+# Created by hand in the Cloudflare dashboard, one token per cluster — see docs/secrets.md.
+bao kv put secret/server3/cert-manager api-token=<cloudflare-token>
+
 # Shared OTLP bearer token — used by every cluster's k8s-monitoring OTLP destination.
 # Lives at a non-cluster path; server2 ESO policy has an explicit read grant for it.
 bao kv put secret/otel-gateway/auth-token token=$(openssl rand -base64 32 | tr -d '=+/')
@@ -229,6 +233,10 @@ bao kv put secret/<cluster>/provisioner-token token="$PROVISIONER_TOKEN"
 ```bash
 # ExternalDNS — UniFi API key:
 bao kv put secret/<cluster>/external-dns api-key=<unifi-api-key>
+
+# cert-manager — Cloudflare API token for ACME DNS-01. One token per cluster, created by
+# hand in the Cloudflare dashboard. See docs/secrets.md for the exact permission set.
+bao kv put secret/<cluster>/cert-manager api-token=<cloudflare-token>
 
 # InfluxDB2 admin credentials:
 bao kv put secret/<cluster>/influxdb2 \

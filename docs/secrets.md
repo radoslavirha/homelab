@@ -12,6 +12,7 @@ Every stage in `docs/iac.md` and `gitops/README.md` that requires secrets links 
 | OpenBao path | Keys | Required before | Cluster |
 |---|---|---|---|
 | `secret/server3/argocd` | `adminPasswordHash` | ArgoCD install (`apps` stage) | server3 |
+| `secret/<cluster>/cert-manager` | `api-token` | infra stage — cert-manager | any |
 | `secret/<cluster>/external-dns` | `api-key` | gateway stage | any |
 | `secret/server3/grafana` | `admin-user`, `admin-password` | observability stage | server3 |
 | `secret/server3/grafana-image-renderer` | `token` | *optional — image-renderer pods only* | server3 |
@@ -97,6 +98,70 @@ bao kv put secret/server3/grafana-image-renderer token=$(python3 -c "import secr
 # Verify (don't print the value — just confirm the key exists)
 bao kv get -field=token secret/server3/grafana-image-renderer | wc -c
 ```
+
+---
+
+## \<cluster\>/cert-manager
+
+**Required before:** infra stage, cert-manager (sync wave 1). cert-manager solves ACME DNS-01
+challenges by writing `_acme-challenge.<name>` TXT records into the **`irha.cz` zone at
+Cloudflare**. Without this token no certificate is ever issued and every `Certificate` sits
+`Pending`.
+
+Design and rationale: [`docs/superpowers/specs/2026-09-01-tls-certificates.md`](superpowers/specs/2026-09-01-tls-certificates.md).
+
+### Create the token (Cloudflare dashboard — manual, outside this repo)
+
+**One token per cluster.** Secrets do not cross clusters, and cert-manager runs once per
+cluster. Separate tokens mean one can be revoked without taking down the other two, and the
+Cloudflare audit log attributes every TXT write to a cluster.
+
+My Profile → API Tokens → *Create Token* → **Create Custom Token**:
+
+| Field | Value |
+|---|---|
+| Name | `cert-manager-<cluster>` |
+| Permissions | `Zone` · `DNS` · **Edit** |
+| Permissions | `Zone` · `Zone` · **Read** |
+| Zone Resources | Include · Specific zone · **`irha.cz`** |
+| TTL / IP filtering | leave unset |
+
+Nothing else. `Zone → Zone → Read` is what lets cert-manager find the zone ID for a name;
+`Zone → DNS → Edit` is what lets it create and delete the challenge TXT. Account-level
+permissions are not needed and must not be granted.
+
+The token is shown **once**. Copy it straight into OpenBao.
+
+### Store
+
+```bash
+bao kv put secret/<cluster>/cert-manager api-token=<cloudflare-token>
+```
+
+### Verify
+
+```bash
+# Key present, value not printed:
+bao kv get -format=json secret/<cluster>/cert-manager | jq -r '.data.data | keys[]'
+
+# Token is live and scoped to irha.cz (both must return "success": true):
+T=$(bao kv get -field=api-token secret/<cluster>/cert-manager)
+curl -s -H "Authorization: Bearer $T" \
+  https://api.cloudflare.com/client/v4/user/tokens/verify | jq '{success, status: .result.status}'
+curl -s -H "Authorization: Bearer $T" \
+  "https://api.cloudflare.com/client/v4/zones?name=irha.cz" | jq '{success, zone: .result[0].name}'
+```
+
+`Zone → DNS → Edit` cannot be proven by a read. First real proof is the staging `Certificate`
+in stage 2 of the TLS spec: the TXT record appears in the Cloudflare dashboard during issuance
+and disappears after.
+
+No ESO policy change is needed: the path sits under `secret/data/<cluster>/*`, which every
+cluster's `<cluster>-external-secrets` policy already grants ([iac.md](iac.md) step 3.d), and
+server3's `read-secrets` covers `secret/data/*`.
+
+**Status 2026-09-02:** seeded and verified for server1, server2 and server3 — three distinct
+active tokens, each resolving the `irha.cz` zone.
 
 ---
 

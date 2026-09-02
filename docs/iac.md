@@ -104,6 +104,11 @@ bao kv put secret/server3/grafana \
   admin-password=<strong-password>
 bao kv put secret/server3/external-dns api-key=<unifi-api-key>
 
+# cert-manager — Cloudflare API token for ACME DNS-01 challenges on the irha.cz zone.
+# Scope: Zone:DNS:Edit + Zone:Zone:Read, specific zone irha.cz. One token per cluster.
+# Created by hand in the Cloudflare dashboard — see docs/secrets.md.
+bao kv put secret/server3/cert-manager api-token=<cloudflare-token>
+
 # Shared OTLP bearer token — authenticates cross-cluster OTLP from server2 → server3.
 # Stored at a non-cluster path because multiple clusters (server2, server3) read the same token.
 # server2 ESO policy (step 3.d) includes an explicit read grant for secret/otel-gateway/*.
@@ -246,6 +251,12 @@ bao kv put secret/<cluster>/provisioner-token token="$PROVISIONER_TOKEN"
 
 #    ExternalDNS — UniFi API key (gateway stage):
 bao kv put secret/<cluster>/external-dns api-key=<unifi-api-key>
+
+#    cert-manager — Cloudflare API token for ACME DNS-01 (infra stage):
+#      Scope: Zone:DNS:Edit + Zone:Zone:Read, specific zone irha.cz. Nothing else.
+#      One token per cluster, created by hand in the Cloudflare dashboard.
+#      See docs/secrets.md for the creation walkthrough and verification commands.
+bao kv put secret/<cluster>/cert-manager api-token=<cloudflare-token>
 
 #    InfluxDB2 admin credentials (iot stage; ESO syncs before pod starts):
 #      admin-token: any 20+ char string — InfluxDB2 accepts arbitrary values.
