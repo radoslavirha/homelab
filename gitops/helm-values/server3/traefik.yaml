@@ -14,6 +14,32 @@ ingressRoute:
       # Provide the target IP explicitly so external-dns can create the A record.
       external-dns.alpha.kubernetes.io/target: "192.168.1.202"
 
+# HTTPS Gateway listener. Per cluster, not shared, because certificateRefs names a
+# cluster-specific Secret — server1 and server2 have no certificate yet (stage 5), and a
+# listener pointing at a Secret that does not exist would sit unprogrammed.
+#
+# The listener map merges with `web` from gitops/helm-values/traefik.yaml rather than
+# replacing it, so port 80 keeps serving throughout the migration. That is deliberate:
+# the certificate covers only the irha.cz names, so every .home hostname stays HTTP-on-80
+# until stage 7 retires it.
+#
+# There is deliberately NO 80 -> 443 redirect here. `ports.web.http.redirections.entryPoint`
+# is the obvious next line and it would break OTLP ingest — otel.server3.home:4318 is an
+# HTTPRoute on `web`, and OTLP exporters do not follow 301s. Stage 7.5, after OTLP moves.
+gateway:
+  listeners:
+    websecure:
+      port: 443
+      protocol: HTTPS
+      namespacePolicy:
+        from: All
+      certificateRefs:
+        # Issued by cert-manager into the traefik namespace; declared in
+        # gitops/k8s-manifests/server3/traefik/Certificate.server3-tls.yaml.
+        # A listener resolves certificateRefs in the Gateway's own namespace, which is why
+        # the Certificate is co-located here and needs no ReferenceGrant.
+        - name: server3-tls
+
 service:
   externalIPs:
     - 192.168.1.202

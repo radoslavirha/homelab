@@ -15,7 +15,17 @@ spec:
     - name: traefik-gateway
       namespace: traefik
   hostnames:
+    # Both names, deliberately, for the whole migration. hostnames is a list, so a route can
+    # answer to the old and new name at once: nothing that points at .home breaks, and the
+    # irha.cz name can be tested before anything depends on it. The .home entries come out
+    # at stage 7.
+    #
+    # grafana is apex tier (exposure spec's Public list), so the new name is grafana.irha.cz
+    # and NOT grafana.server3.homelab.irha.cz — the certificate carries both, but this is the
+    # one hostname the service gets. Publishing it later becomes a routing change, never a
+    # rename.
     - grafana.server3.home
+    - grafana.irha.cz
   rules:
     - backendRefs:
         - name: grafana
