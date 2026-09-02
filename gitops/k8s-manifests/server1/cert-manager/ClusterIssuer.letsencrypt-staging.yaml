@@ -19,8 +19,12 @@ metadata:
 spec:
   acme:
     server: https://acme-staging-v02.api.letsencrypt.org/directory
-    # Where Let's Encrypt sends expiry warnings if renewal ever stops working.
-    email: radoslav.irha@gmail.com
+    # No `email`. ACME v2 makes the contact optional, and cert-manager registers the
+    # account happily without one. The only thing given up is Let's Encrypt's expiry
+    # warning mail, which fires at 20 days out and lands in a mailbox nobody watches —
+    # step 8.1's alert on certmanager_certificate_expiration_timestamp_seconds is both
+    # earlier and actually visible. Adding an address here would publish it in a public
+    # repo for no operational gain.
     # cert-manager creates this Secret itself and stores the ACME account key in it.
     # It is NOT read from OpenBao and must not be pre-created. Losing it costs nothing
     # worse than a new account registration on the next issuance.

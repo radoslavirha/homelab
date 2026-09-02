@@ -53,8 +53,10 @@ spec:
       syncPolicy:
         syncOptions:
           - CreateNamespace=true
-          # cert-manager's CRDs are far past the 262144-byte annotation limit that
-          # client-side apply's last-applied-configuration would need.
+          # Required, not preference: three of cert-manager's six CRDs are past the
+          # 262144-byte ceiling on the last-applied-configuration annotation that
+          # client-side apply needs — challenges 269KB, clusterissuers 326KB, issuers 326KB.
+          # The ExternalSecret opts back out per-resource; see the comment in its manifest.
           - ServerSideApply=true
         automated:
           selfHeal: true
