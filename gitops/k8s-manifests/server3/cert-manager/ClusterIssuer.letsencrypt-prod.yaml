@@ -1,0 +1,39 @@
+---
+# Let's Encrypt PRODUCTION. Certificates from this issuer are trusted by every browser and
+# OS trust store, which is the entire point of moving off .home.
+#
+# Two things this issuer has that letsencrypt-staging does not:
+#
+#   Rate limits. 50 certificates per registered domain per week, and — the one that
+#   actually bites — 5 failed validations per account/hostname per hour. Debug against
+#   letsencrypt-staging, never here.
+#
+#   Certificate Transparency. Every certificate issued is submitted to public CT logs and
+#   is searchable on crt.sh within minutes. The dnsNames below become public knowledge the
+#   moment one is issued. That is why the per-cluster wildcard matters: *.server3.homelab.irha.cz
+#   in a CT log reveals the cluster but not argocd, openbao, longhorn, headlamp or hubble.
+#   Adding per-service SANs would publish the whole service inventory.
+#
+# The ACME account here is separate from staging's — different directory URL, different
+# account key Secret.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+  annotations:
+    argocd.argoproj.io/sync-wave: "100"
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    # No `email` — see the note in ClusterIssuer.letsencrypt-staging.yaml.
+    privateKeySecretRef:
+      name: letsencrypt-prod-account-key
+    solvers:
+      - dns01:
+          cloudflare:
+            apiTokenSecretRef:
+              name: cloudflare-api-token
+              key: api-token
+        selector:
+          dnsZones:
+            - irha.cz

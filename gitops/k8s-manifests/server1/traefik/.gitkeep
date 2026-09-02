@@ -1,0 +1,7 @@
+Placeholder. The Traefik ApplicationSet reads gitops/k8s-manifests/<cluster>/traefik as a
+directory source, and ArgoCD errors on a path that does not exist — so this directory has to
+be present on every cluster even while it is empty.
+
+server1's Certificate arrives in stage 5 of
+docs/superpowers/specs/2026-09-01-tls-certificates.md. Delete this file once a real manifest
+lands here.

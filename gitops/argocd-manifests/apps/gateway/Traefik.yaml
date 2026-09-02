@@ -30,6 +30,17 @@ spec:
         - repoURL: https://github.com/radoslavirha/homelab
           targetRevision: HEAD
           ref: values
+        # Cluster-scoped Traefik resources that are not chart values — currently the
+        # cert-manager Certificate backing the HTTPS listener.
+        #
+        # The Certificate belongs here rather than with the cert-manager Application because
+        # it targets the `traefik` namespace, and only this Application creates that
+        # namespace. Putting it in root-infra (wave 1) would deadlock a fresh bootstrap:
+        # the Certificate cannot apply into a namespace that root-gateway (wave 2) has not
+        # created yet, and wave 2 does not start until wave 1 is Healthy.
+        - repoURL: https://github.com/radoslavirha/homelab
+          targetRevision: HEAD
+          path: gitops/k8s-manifests/{{cluster}}/traefik
       destination:
         server: '{{clusterServer}}'
         namespace: traefik

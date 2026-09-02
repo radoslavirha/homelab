@@ -1,0 +1,51 @@
+---
+# The server3 cluster certificate.
+#
+# It lives in the `traefik` namespace, not `cert-manager`, because a Gateway listener's
+# certificateRefs resolve in the Gateway's own namespace. Co-locating avoids needing a
+# ReferenceGrant just to let the Gateway read its own certificate.
+#
+# cert-manager writes the result into the `server3-tls` Secret, and stage 4's `websecure`
+# listener references that Secret by name. Renewal is unattended, roughly 30 days before
+# expiry, and lands in the same Secret — Traefik watches it and reloads without a restart.
+#
+# SANs are per the naming decision in
+# docs/superpowers/specs/2026-09-01-tls-certificates.md#two-tiers-and-the-rule-that-separates-them.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: server3-tls
+  namespace: traefik
+spec:
+  secretName: server3-tls
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+
+  privateKey:
+    # Generate a fresh key on every renewal rather than re-signing the existing one.
+    # cert-manager's default is Never (reuse), which quietly turns a 90-day certificate
+    # into a multi-year key.
+    rotationPolicy: Always
+    algorithm: ECDSA
+    size: 256
+
+  dnsNames:
+    # The cluster apex. Not currently routed anywhere — carried so the certificate stays
+    # valid if something is ever served at the bare cluster name.
+    - server3.homelab.irha.cz
+    # Every infrastructure service on this cluster: argocd, vault, longhorn, headlamp,
+    # hubble, otel, traefik. A certificate wildcard covers exactly one label (RFC 6125),
+    # which is all these names need — and it keeps the service inventory out of the
+    # public CT logs.
+    - "*.server3.homelab.irha.cz"
+    # Apex tier. Listed individually and never via *.irha.cz — an apex wildcard would make
+    # this one cluster's certificate valid for every name in the zone.
+    #   auth    — Zitadel. Not deployed yet; the SAN costs nothing and the iss claim is
+    #             permanent, so it is worth having before anything depends on it.
+    #   grafana — on the exposure spec's Public list.
+    - auth.irha.cz
+    - grafana.irha.cz
+
+  # server3 runs no production/sandbox namespaces, so it needs no *.sandbox.… SAN.
+  # server1 and server2 do — see stage 5.
