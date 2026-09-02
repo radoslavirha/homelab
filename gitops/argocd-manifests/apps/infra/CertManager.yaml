@@ -1,0 +1,64 @@
+# cert-manager on all three clusters.
+#
+# Certificates are Secrets and Secrets do not cross clusters, so this is one install per
+# cluster — the same ApplicationSet-with-a-list-generator shape as ESO, Reloader and Traefik.
+#
+# sync-wave 2, inside root-infra (itself wave 1). ESO carries no wave annotation, so it is
+# wave 0 and lands first: the per-cluster ExternalSecret below needs ESO's CRDs to exist
+# before it can apply. root-infra as a whole finishes before root-gateway (wave 2), which is
+# what the HTTPS listener on Traefik will depend on in stage 4.
+#
+# Design: docs/superpowers/specs/2026-09-01-tls-certificates.md
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: cert-manager
+  namespace: argocd
+spec:
+  generators:
+    - list:
+        elements:
+          - cluster: server1
+            clusterServer: https://192.168.1.200:6443
+          - cluster: server2
+            clusterServer: https://192.168.1.201:6443
+          - cluster: server3
+            clusterServer: https://kubernetes.default.svc
+  template:
+    metadata:
+      name: cert-manager-{{cluster}}
+      annotations:
+        argocd.argoproj.io/sync-wave: "2"
+    spec:
+      project: default
+      sources:
+        - repoURL: https://charts.jetstack.io
+          chart: cert-manager
+          targetRevision: v1.21.1
+          helm:
+            releaseName: cert-manager
+            valueFiles:
+              - $values/gitops/helm-values/cert-manager.yaml
+              - $values/gitops/helm-values/{{cluster}}/cert-manager.yaml
+        - repoURL: https://github.com/radoslavirha/homelab
+          targetRevision: HEAD
+          ref: values
+        # ExternalSecret (Cloudflare API token) + ClusterIssuer.
+        - repoURL: https://github.com/radoslavirha/homelab
+          targetRevision: HEAD
+          path: gitops/k8s-manifests/{{cluster}}/cert-manager
+      destination:
+        server: '{{clusterServer}}'
+        namespace: cert-manager
+      syncPolicy:
+        syncOptions:
+          - CreateNamespace=true
+          # cert-manager's CRDs are far past the 262144-byte annotation limit that
+          # client-side apply's last-applied-configuration would need.
+          - ServerSideApply=true
+        automated:
+          selfHeal: true
+          # Matches ESO and Reloader. Safe here: crds.keep survives a prune, and cert-manager
+          # does not set an owner reference on the tls Secret it issues, so pruning a
+          # Certificate leaves the certificate material in place to be re-adopted.
+          prune: true

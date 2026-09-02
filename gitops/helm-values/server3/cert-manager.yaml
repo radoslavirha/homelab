@@ -1,0 +1,3 @@
+# cert-manager — server3 cluster overrides
+# Shared base values: gitops/helm-values/cert-manager.yaml
+# No cluster-specific overrides at this time.

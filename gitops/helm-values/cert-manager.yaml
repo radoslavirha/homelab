@@ -1,0 +1,78 @@
+# cert-manager — shared Helm values (ACME DNS-01 via Cloudflare)
+# Upstream values.yaml: https://github.com/cert-manager/cert-manager/blob/master/deploy/charts/cert-manager/values.yaml
+# Cluster-specific overrides: gitops/helm-values/<cluster>/cert-manager.yaml
+# Design: docs/superpowers/specs/2026-09-01-tls-certificates.md
+
+# The chart does NOT install CRDs by default. Nothing else in this repo installs them,
+# and the ClusterIssuer in gitops/k8s-manifests/<cluster>/cert-manager/ needs them.
+crds:
+  enabled: true
+  # "helm.sh/resource-policy": keep — an accidental uninstall of the Application must not
+  # garbage-collect every Certificate and Issuer in the cluster along with the CRDs.
+  keep: true
+
+# ── DNS-01 self-check ────────────────────────────────────────────────────────────────────
+# Before asking Let's Encrypt to validate, cert-manager resolves the _acme-challenge TXT
+# itself and waits until it is visible. By default that resolution follows the pod's own
+# resolver: CoreDNS -> the node resolver -> UniFi at 192.168.1.1.
+#
+# UniFi is a split-horizon authority for irha.cz — it answers LAN overrides for names like
+# grafana.server3.homelab.irha.cz that do not exist in the public zone at all. It has no
+# _acme-challenge TXT and never will, because cert-manager writes those to Cloudflare. A
+# local answer of "no such record" would stall the self-check indefinitely, and the
+# Certificate would sit Pending with an error that points nowhere useful.
+#
+# So the self-check is pinned to public recursive resolvers and forbidden from falling back
+# to the cluster's own. This is checking Cloudflare's view — which is what Let's Encrypt
+# will query — not the LAN's.
+#
+# Note the node resolver is NOT pinned anywhere: it comes from the router's DHCP lease
+# (verified on all three clusters, `talosctl get resolvers` -> 192.168.1.1). Do not "fix"
+# that by pointing the nodes at a public resolver — it would break the split horizon and
+# every in-cluster call to a LAN service would hang.
+dns01RecursiveNameservers: "1.1.1.1:53,8.8.8.8:53"
+dns01RecursiveNameserversOnly: true
+
+# ── Sizing ───────────────────────────────────────────────────────────────────────────────
+# Three certificates per cluster, renewed roughly monthly. The controller is idle almost
+# all of the time; these are floors that keep it out of BestEffort, not tuned figures.
+replicaCount: 1
+resources:
+  requests:
+    cpu: 10m
+    memory: 64Mi
+  limits:
+    cpu: 100m
+    memory: 256Mi
+
+webhook:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi
+
+cainjector:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 10m
+      memory: 64Mi
+    limits:
+      cpu: 100m
+      memory: 256Mi
+
+# One-shot Job that verifies the webhook is answering before Helm reports success. Useful
+# on first install, noise on every resync afterwards — and ArgoCD already gates the
+# ClusterIssuer behind sync-wave 100, which is the same guarantee.
+startupapicheck:
+  enabled: false
+
+# The chart's pod and container securityContext defaults (runAsNonRoot, seccompProfile
+# RuntimeDefault, allowPrivilegeEscalation false, all capabilities dropped) already satisfy
+# the `restricted` Pod Security Standard. Talos enforces `baseline` and warns at
+# `restricted`, so this namespace needs NO pod-security.kubernetes.io/enforce label —
+# unlike traefik, openbao, monitoring and longhorn-system, which carry `privileged`.

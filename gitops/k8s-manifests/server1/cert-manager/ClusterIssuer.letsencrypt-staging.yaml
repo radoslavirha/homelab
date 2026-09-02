@@ -1,0 +1,43 @@
+---
+# Let's Encrypt STAGING. Issues certificates that no browser trusts, from a CA with no
+# meaningful rate limits — the point is to exercise the whole pipeline (token scope,
+# Cloudflare TXT write, self-check, validation, Secret creation) without spending against
+# production's limit of 5 failed validations per hour.
+#
+# ClusterIssuer, not Issuer: an Issuer is namespaced and would need one copy in every
+# namespace that ever wants a certificate.
+#
+# sync-wave 100 — the cert-manager CRDs and the validating webhook that admits this resource
+# both arrive in wave 0 with the chart. Applying it earlier fails on a missing CRD or a
+# webhook that is not answering yet.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-staging
+  annotations:
+    argocd.argoproj.io/sync-wave: "100"
+spec:
+  acme:
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    # Where Let's Encrypt sends expiry warnings if renewal ever stops working.
+    email: radoslav.irha@gmail.com
+    # cert-manager creates this Secret itself and stores the ACME account key in it.
+    # It is NOT read from OpenBao and must not be pre-created. Losing it costs nothing
+    # worse than a new account registration on the next issuance.
+    privateKeySecretRef:
+      name: letsencrypt-staging-account-key
+    solvers:
+      - dns01:
+          cloudflare:
+            # Written by the ExternalSecret alongside this file. A ClusterIssuer resolves
+            # secret references in the cluster resource namespace, which is where
+            # cert-manager itself runs — hence no namespace field here.
+            apiTokenSecretRef:
+              name: cloudflare-api-token
+              key: api-token
+        # Not strictly required with a single solver, but it makes the intent explicit and
+        # turns a future misconfiguration into "no solver matched" rather than a silent
+        # attempt to write TXT records into a zone this token has no access to.
+        selector:
+          dnsZones:
+            - irha.cz
