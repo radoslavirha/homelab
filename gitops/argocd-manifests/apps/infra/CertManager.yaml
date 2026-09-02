@@ -29,6 +29,22 @@ spec:
       name: cert-manager-{{cluster}}
       annotations:
         argocd.argoproj.io/sync-wave: "2"
+        # Required companion to ServerSideApply below, not an optimisation.
+        #
+        # ArgoCD picks its diff strategy per Application, not per resource. With
+        # ServerSideApply on and the default (client-side) diff, it predicts live state by
+        # merging only the fields it manages — and `spec.data` on an ExternalSecret is an
+        # atomic list with no merge key, so the whole list is replaced in the prediction and
+        # the CRD's own defaults nested inside remoteRef (conversionStrategy,
+        # decodingStrategy, metadataPolicy, nullBytePolicy) vanish from it. The live object
+        # has them, the prediction does not, and the resource reports OutOfSync forever
+        # while being entirely correct.
+        #
+        # ServerSideDiff computes the prediction with a server-side apply dry-run instead,
+        # so the API server fills in the same defaults it filled in on the live object and
+        # the two agree. Per-resource ServerSideApply=false does NOT fix this — the diff
+        # strategy is already chosen at Application level by then.
+        argocd.argoproj.io/compare-options: ServerSideDiff=true
     spec:
       project: default
       sources:
@@ -56,7 +72,6 @@ spec:
           # Required, not preference: three of cert-manager's six CRDs are past the
           # 262144-byte ceiling on the last-applied-configuration annotation that
           # client-side apply needs — challenges 269KB, clusterissuers 326KB, issuers 326KB.
-          # The ExternalSecret opts back out per-resource; see the comment in its manifest.
           - ServerSideApply=true
         automated:
           selfHeal: true
