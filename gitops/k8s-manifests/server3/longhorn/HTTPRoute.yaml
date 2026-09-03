@@ -15,7 +15,11 @@ spec:
     - name: traefik-gateway
       namespace: traefik
   hostnames:
+    # Both names for the migration. hostnames is a list, so the route answers to the
+    # old and the new name at once and nothing pointing at .home breaks while the
+    # irha.cz name is proven. The .home entry comes out at stage 7.
     - longhorn.server3.home
+    - longhorn.server3.homelab.irha.cz
   rules:
     - backendRefs:
         - name: longhorn-frontend

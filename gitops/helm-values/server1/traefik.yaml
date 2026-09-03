@@ -4,8 +4,15 @@
 ingressRoute:
   dashboard:
     enabled: true
-    matchRule: "Host(`traefik.server1.home`) && (PathPrefix(`/dashboard`) || PathPrefix(`/api`))"
-    entryPoints: [web]
+    matchRule: "(Host(`traefik.server1.home`) || Host(`traefik.server1.homelab.irha.cz`)) && (PathPrefix(`/dashboard`) || PathPrefix(`/api`))"
+    # Both entrypoints: the .home name has no certificate and stays on plain HTTP
+    # until stage 7.
+    entryPoints: [web, websecure]
+    tls:
+      # An IngressRoute is served by the kubernetesCRD provider, which does not see
+      # the Gateway listener's certificateRefs. Without this Traefik answers with its
+      # built-in self-signed certificate and the browser warns.
+      secretName: server1-tls
     annotations:
       external-dns.alpha.kubernetes.io/target: "192.168.1.200"
 

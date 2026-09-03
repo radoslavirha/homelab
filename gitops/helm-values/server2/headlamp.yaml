@@ -2,5 +2,7 @@
 # Shared base values: gitops/helm-values/headlamp.yaml
 
 httpRoute:
+  # Both names for the migration; the .home entry comes out at stage 7.
   hostnames:
     - headlamp.server2.home
+    - headlamp.server2.homelab.irha.cz
