@@ -15,9 +15,6 @@ spec:
     - name: traefik-gateway
       namespace: traefik
   hostnames:
-    # Both names for the whole migration — hostnames is a list, so nothing that points
-    # at .home breaks while the new name is proven. The .home entry comes out at stage 7.
-    - longhorn.server2.home
     - longhorn.server2.homelab.irha.cz
   rules:
     - backendRefs:

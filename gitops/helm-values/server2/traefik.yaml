@@ -4,10 +4,11 @@
 ingressRoute:
   dashboard:
     enabled: true
-    matchRule: "(Host(`traefik.server2.home`) || Host(`traefik.server2.homelab.irha.cz`)) && (PathPrefix(`/dashboard`) || PathPrefix(`/api`))"
-    # Both entrypoints: the .home name has no certificate and stays on plain HTTP
-    # until stage 7.
-    entryPoints: [web, websecure]
+    matchRule: "Host(`traefik.server2.homelab.irha.cz`) && (PathPrefix(`/dashboard`) || PathPrefix(`/api`))"
+    # websecure only. The one hostname this route answers to is covered by the cluster
+    # certificate, so there is nothing left for `web` to serve — the .home name it existed
+    # for was retired at stage 7.
+    entryPoints: [websecure]
     tls:
       # An IngressRoute is served by the kubernetesCRD provider, which does not see
       # the Gateway listener's certificateRefs. Without this Traefik answers with its

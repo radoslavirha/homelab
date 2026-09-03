@@ -1,6 +1,6 @@
 ---
 # Exposes the OpenBao API via Traefik so that server2's ESO can reach it cross-cluster.
-# ExternalDNS will create: vault.server3.home → 192.168.1.202
+# ExternalDNS will create: vault.server3.homelab.irha.cz → 192.168.1.202
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
@@ -14,10 +14,6 @@ spec:
     - name: traefik-gateway
       namespace: traefik
   hostnames:
-    # Both names for the migration. hostnames is a list, so the route answers to the
-    # old and the new name at once and nothing pointing at .home breaks while the
-    # irha.cz name is proven. The .home entry comes out at stage 7.
-    - vault.server3.home
     - vault.server3.homelab.irha.cz
   rules:
     - backendRefs:

@@ -11,17 +11,13 @@ spec:
     - name: traefik-gateway
       namespace: traefik
   hostnames:
-    # Both names for the migration. hostnames is a list, so the route answers to the
-    # old and the new name at once and nothing pointing at .home breaks while the
-    # irha.cz name is proven. The .home entry comes out at stage 7.
-    - qr.home
     - qr.irha.cz
   rules:
     # Everything on this hostname is a QR scan. The addPrefix middleware rewrites `/x7k2`
     # to `/r/x7k2`, which is the only path qr-manager-api serves a redirect on — see
     # Middleware.addprefix-qr.yaml for why the prefix is added here rather than printed.
     #
-    # It also makes qr.home redirect-only: `/qr-codes` and `/api/docs` arrive at the app as
+    # It also makes qr.irha.cz redirect-only: `/qr-codes` and `/api/docs` arrive at the app as
     # `/r/qr-codes` and `/r/api/docs` and match nothing. Admin access is on the chart's
     # api.<domain>/iot/qr-manager route, which is separately matchable by path prefix and
     # is therefore the one a ForwardAuth middleware can be attached to.
