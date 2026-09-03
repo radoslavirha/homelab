@@ -1,7 +1,7 @@
 # qr-manager-api — production overrides
 #
 # redirect.baseURL has no path and must keep none. The app serves the redirect at /r/:slug,
-# and the /r is supplied by the addPrefix middleware on the qr.home HTTPRoute
+# and the /r is supplied by the addPrefix middleware on the qr.irha.cz HTTPRoute
 # (gitops/k8s-manifests/server1/qr-manager-api/production/Middleware.addprefix-qr.yaml, which
 # explains the whole arrangement). Putting /r here as well would double it and break every
 # printed label.
@@ -19,7 +19,7 @@ apps:
                   "httpPort": {{ CONTAINER_PORT }}
               },
               "redirect": {
-                  "baseURL": "http://qr.home"
+                  "baseURL": "https://qr.irha.cz"
               },
               "mongodb": {
                   "enabled": true,
