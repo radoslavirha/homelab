@@ -63,10 +63,10 @@ gitops/
       cert-manager/        ExternalSecret (cloudflare-api-token), ClusterIssuer letsencrypt-staging + letsencrypt-prod (ACME DNS-01 via Cloudflare)
       external-dns/        ExternalSecret (unifi-credentials), DNSEndpoint server2-anchor (server2.homelab.irha.cz A record)
       external-secrets/    ClusterSecretStore → OpenBao on server3
-      emqx/                ExternalSecret (emqx-credentials), HTTPRoute: mqtt.server2.homelab.irha.cz, IngressRouteTCP: port 1883
+      emqx/                ExternalSecret (emqx-credentials), HTTPRoute: mqtt.server2.homelab.irha.cz, IngressRouteTCP: 1883 plaintext + 8883 TLS
       influxdb2/           ExternalSecret (admin creds from OpenBao), HTTPRoute: influx.server2.homelab.irha.cz
       longhorn/            HTTPRoute: longhorn.server2.homelab.irha.cz → longhorn-frontend:80
-      mongodb/             ExternalSecret (root password from OpenBao), IngressRouteTCP: port 27017
+      mongodb/             ExternalSecret (root password from OpenBao), IngressRouteTCP: 27017 TLS-only (HostSNI + server2-tls)
       traefik/             Certificate.server2-tls.yaml → Secret server2-tls, consumed by the websecure Gateway listener
     server3/
       cilium/              HTTPRoute: hubble.server3.homelab.irha.cz → hubble-dashboard:80

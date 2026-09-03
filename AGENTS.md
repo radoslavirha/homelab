@@ -143,11 +143,11 @@ gitops/
       external-secrets/    ClusterSecretStore → remote server3 OpenBao at vault.server3.homelab.irha.cz
       iot/         ExternalSecret.provisioner-token.yaml (openbao-provision-token; sync-wave -1 via IotInfra)
       influxdb2/   ExternalSecret.yaml, HTTPRoute.yaml
-      emqx/        ExternalSecret.yaml, HTTPRoute.yaml, IngressRouteTCP.yaml
+      emqx/        ExternalSecret.yaml, HTTPRoute.yaml, IngressRouteTCP.yaml (1883 plaintext + 8883 TLS)
       telegraf/    ExternalSecret.telegraf.influxdb2.yaml, ExternalSecret.telegraf.mqtt.yaml
       external-dns/ ExternalSecret (unifi-credentials), DNSEndpoint server2-anchor (server2.homelab.irha.cz A record)
       longhorn/    HTTPRoute: longhorn.server2.homelab.irha.cz → longhorn-frontend:80
-      mongodb/     ExternalSecret, IngressRouteTCP, ExternalSecret.provisioner-token.yaml
+      mongodb/     ExternalSecret, IngressRouteTCP (27017, TLS-only), ExternalSecret.provisioner-token.yaml
       miot-bridge-api/ production/ and sandbox/ — ExternalSecret.mqtt.yaml, ExternalSecret.mongodb.yaml
       qr-manager-api/ production/ and sandbox/ — ExternalSecret.mongodb.yaml
       k8s-monitoring/ ExternalSecret.otel-auth-token.yaml (shared OTLP bearer token pulled from secret/otel-gateway/auth-token)

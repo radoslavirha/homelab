@@ -86,11 +86,37 @@ the same records, and the public zone holds nothing between renewals. Nodes reso
 `192.168.1.1` (DHCP-derived); cert-manager deliberately does not, running with
 `dns01RecursiveNameserversOnly` so its self-check bypasses the LAN view.
 
-**Deliberate plaintext.** Three paths stay unencrypted because TLS there is separate design
-work, not oversight: OTLP gRPC to `otel.server3.homelab.irha.cz:4317` and the MQTT and MongoDB
-`IngressRouteTCP`s, all of which match `HostSNI(*)` on their own entrypoints and terminate no
-TLS. Port 80 also still serves — there is no blanket 80 → 443 redirect, because ESPHome devices
-on the LAN fetch over plain HTTP and may not follow one.
+**LAN-exposed TCP.** Traefik runs `hostNetwork: true`, so every entrypoint is bound directly on
+the node IPs — what is defined in `ports:` is what the LAN can reach.
+
+| Port | Cluster | State |
+|------|---------|-------|
+| 443 | all | TLS, cluster certificate |
+| 80 | all | plaintext, no redirect — see below |
+| 27017 MongoDB | server1 · server2 | **TLS only**, terminated at Traefik against the cluster certificate; `mongod` itself is untouched. Compass connects with `?tls=true` |
+| 1883 MQTT | server1 · server2 | plaintext, authenticated |
+| 8883 MQTTS | server1 · server2 | TLS, same broker behind it |
+| 4317 OTLP gRPC | server3 | plaintext, **unauthenticated** |
+| 4000-4001 | server1 · server2 | UDP, miot |
+
+Both MQTT ports stay open on purpose. TLS termination selects the router by the SNI the client
+sends, and it is not established that the Loxone Miniserver and the ESP32 devices can do MQTT
+over TLS with SNI — several ESPHome and Arduino MQTT clients cannot. Closing 1883 before that is
+known would take the IoT estate offline. Authentication and ACLs are enforced on both
+(`EMQX_AUTHORIZATION__NO_MATCH: deny`), so the exposure on 1883 is the credential travelling in
+the clear inside the CONNECT packet, not unauthenticated access.
+
+OTLP gRPC is the one path with neither TLS nor authentication: gRPC refuses to attach per-RPC
+credentials to a plaintext channel, so it is TLS-or-nothing and TLS there is separate design
+work. Anything on the LAN can inject telemetry.
+
+Port 80 also still serves — there is no blanket 80 → 443 redirect, because ESPHome devices on
+the LAN fetch over plain HTTP and may not follow one.
+
+**The Traefik API is not exposed.** `api.insecure` is `false`; with `hostNetwork` it would put
+the API and dashboard on `:8080` of every node with no authentication, handing out every
+hostname, backend and middleware in the cluster. The dashboard is reachable only through its
+IngressRoute on `websecure`.
 
 ## ServiceAccounts
 

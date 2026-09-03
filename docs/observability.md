@@ -359,7 +359,7 @@ Two external endpoints are exposed via Traefik on server3:
 | Protocol | Endpoint | Traefik route |
 |----------|----------|---------------|
 | OTLP HTTP | `http://otel.server3.homelab.irha.cz` | HTTPRoute (Traefik port 80, plaintext — no 80 → 443 redirect exists) → backend port 4318 |
-| OTLP gRPC | `otel.server3.homelab.irha.cz:4317` | IngressRouteTCP → backend port 4317 |
+| OTLP gRPC | `otel.server3.homelab.irha.cz:4317` | IngressRouteTCP → backend port 4317. Plaintext **and unauthenticated** — bound on the node IP by hostNetwork, so anything on the LAN can inject telemetry |
 
 The gRPC endpoint uses raw TCP passthrough (`HostSNI(*)`), so no TLS is required from the client.
 
