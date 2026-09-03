@@ -9,7 +9,12 @@ metadata:
     {{- include "provisioner.labels" $ | nindent 4 }}
   annotations:
     argocd.argoproj.io/hook: PostSync
-    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+    # HookSucceeded alone leaves a FAILED Job behind, and a Job's spec.template is
+    # immutable — so the next sync tries to patch it, the patch is rejected, and the
+    # whole Application sync fails on an error that has nothing to do with what
+    # changed. BeforeHookCreation deletes any leftover Job first, so a failure is
+    # self-healing instead of wedging the Application until someone deletes it by hand.
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded,BeforeHookCreation
     argocd.argoproj.io/sync-wave: {{ $job.syncWave | default "0" | quote }}
 spec:
   template:

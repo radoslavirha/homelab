@@ -20,7 +20,7 @@ Every stage in `docs/iac.md` and `gitops/README.md` that requires secrets links 
 | `secret/<cluster>/emqx` | `dashboard-username`, `dashboard-password` | iot stage | any |
 | `secret/<cluster>/mongodb` | `root-password` | databases stage | any |
 | `secret/otel-gateway/auth-token` | `token` | observability stage | server1, server2 |
-| `secret/server3/influxdb2-grafana` | `token` | *provisioned at runtime* | server3 |
+| `secret/<cluster>/influxdb2-grafana` | `token` | *provisioned at runtime* | server1, server2 |
 
 `<cluster>` is the short cluster name: `server2`, `server3`, etc.
 
@@ -261,17 +261,34 @@ server3 ESO reads this via the `secret/data/*` wildcard in its `read-secrets` po
 
 ---
 
-## server3/influxdb2-grafana
+## \<cluster\>/influxdb2-grafana
 
-**Provisioned at runtime** by the InfluxDB2 PostSync provisioner Job on server2 (`influxdb2-provision-loxone`). No manual seeding required.
+**Provisioned at runtime** by the InfluxDB2 PostSync provisioner Job on that cluster
+(`influxdb2-provision-loxone`). No manual seeding required.
 
-The provisioner creates a read-only token scoped to the `loxone` and `loxone_downsample` buckets and writes it to this path. Server3 ESO syncs it into `monitoring/influxdb2-grafana` Secret, which Grafana mounts at `/etc/secrets/influxdb2-grafana/token`.
+The Job creates a read-only InfluxDB token scoped to the `loxone` and `loxone_downsample`
+buckets and writes it here. **server3's** ESO — which reads `secret/data/*` — syncs it into the
+`monitoring/<cluster>-influxdb2-grafana` Secret, and Grafana mounts it at
+`/etc/secrets/<cluster>-influxdb2-grafana/token` for that cluster's InfluxDB datasource.
 
-To rotate: delete the path in OpenBao, delete the old InfluxDB2 authorization, then force-sync the InfluxDB2 Application on server2.
+**The path is the writing cluster's own tree, and it has to be.** Each provisioner token is
+scoped to `secret/data/<its own cluster>/*` — see the `<cluster>-provisioner` policy in
+[iac.md](iac.md) step 3.e — so a Job simply cannot write anywhere else.
+
+> **Fixed 2026-09-03.** This used to live at `secret/server3/<cluster>-influxdb2-grafana`, which
+> no provisioner token has ever had permission to write. The value seeded at bootstrap on
+> 2026-05-04 stayed valid — InfluxDB tokens do not expire — so Grafana kept working while every
+> run of the Job failed on a 403 that nothing surfaced, because nothing alerts on a failed
+> PostSync hook. Both paths were copied to the new location before the switch; the old
+> `secret/server3/server{1,2}-influxdb2-grafana` entries are now unused and can be deleted.
+
+To rotate: delete the path in OpenBao, delete the old InfluxDB2 authorization, then sync the
+InfluxDB2 Application on that cluster. The token step is create-once — it skips when the path
+already holds a value, so the delete is what actually triggers a new one.
 
 ```bash
 # Verify (after InfluxDB2 PostSync runs)
-bao kv get secret/server3/influxdb2-grafana
+bao kv get secret/<cluster>/influxdb2-grafana
 ```
 
 ---

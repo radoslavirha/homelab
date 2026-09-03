@@ -27,12 +27,19 @@ influxdb2:
                 |> aggregateWindow(every: task.every, fn: mean)
                 |> to(bucket: "loxone_downsample")
       tokens:
+        # Scoped read-only InfluxDB token for the Grafana datasource on server3.
+        #
+        # Written to THIS cluster's own OpenBao tree. It used to target
+        # secret/server3/server1-influxdb2-grafana via baoCluster, which no provisioner
+        # token has ever been allowed to write: each is scoped to secret/data/<own
+        # cluster>/* only. The seeded value survived from bootstrap, so Grafana kept
+        # working while every run of this Job failed on a 403 it never surfaced.
+        # server3's ESO reads secret/data/*, so it consumes this path just as happily.
         - description: server1-grafana-read
           readBuckets:
             - loxone
             - loxone_downsample
-          baoPath: server1-influxdb2-grafana
-          baoCluster: server3
+          baoPath: influxdb2-grafana
           baoKey: token
 
     telegraf:
