@@ -1,8 +1,10 @@
 global:
-  domain: argocd.server3.home
+  # LAN-only by design — ArgoCD is the control plane for all three clusters and is
+  # deliberately NOT apex tier. See the naming decision in the TLS spec.
+  domain: argocd.server3.homelab.irha.cz
 
 notifications:
-  argocdUrl: http://argocd.server3.home
+  argocdUrl: https://argocd.server3.homelab.irha.cz
   metrics:
     enabled: true
     service:
@@ -13,7 +15,9 @@ notifications:
 configs:
   cm:
     admin.enabled: "true"
-    url: http://argocd.server3.home
+    # External URL. TLS terminates at Traefik's websecure listener against server3-tls;
+    # the server itself still speaks plaintext behind it (configs.params below).
+    url: https://argocd.server3.homelab.irha.cz
     # Machine account for the Argo CD MCP server (read-only, see rbac below).
     # `apiKey` grants token generation only — no `login`, so this account cannot
     # sign in to the UI and needs no password in argocd-secret.
@@ -173,7 +177,9 @@ server:
         group: gateway.networking.k8s.io
         kind: Gateway
     hostnames:
+      # Both names through the migration; the .home entry comes out at stage 7.
       - argocd.server3.home
+      - argocd.server3.homelab.irha.cz
     rules:
       - matches:
           - path:
