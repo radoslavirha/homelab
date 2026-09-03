@@ -173,7 +173,9 @@ Verified by POSTing a synthetic record to the live Loki 3.7.1 `/otlp/v1/logs` (H
 
 ### server1/server2 forwarding (OTLP to server3)
 
-All signals are forwarded via a single OTLP destination to `otel.server3.homelab.irha.cz:4317`. The connection is **unauthenticated plaintext gRPC**, and stayed that way through the TLS migration: the receiver is an `IngressRouteTCP` matching `HostSNI(*)` on its own 4317 entrypoint, so it terminates no TLS and the hostname is only ever a DNS lookup. Renaming it off `.home` did not encrypt the hop.
+All signals are forwarded via a single OTLP destination to `otel.server3.homelab.irha.cz:4317`, **over TLS but unauthenticated**. Traefik terminates against `server3-tls` on the `otlp-grpc` entrypoint and forwards plaintext h2c to `alloy-receiver` — gRPC without TLS is h2c, so the receiver holds no certificate. The route matches a real `HostSNI`, which is what makes the endpoint encrypted-only: `HostSNI(*)` would also match connections carrying no SNI at all.
+
+Both senders verify the public chain (`tls.insecure: false`, no skip-verify) against the system roots in the Alloy image. What is still missing is proof of *who* is connecting: anything on the LAN that speaks TLS can inject telemetry. A bearer token would not help — `alloy-receiver` has never validated one, since k8s-monitoring exposes no server-side OTLP auth. Real authentication means mTLS: a Traefik `TLSOption` with `clientAuth` against an internal CA, plus a client certificate per cluster (the destination supports `tls.cert`/`tls.key`).
 
 > **Why there is no bearer token.** An earlier design sent one. It cannot work over this transport: gRPC refuses to attach per-RPC credentials to an insecure channel — `the credentials require transport level security` — so combining `tls.insecure: true` with `auth.type: bearerToken` stops the exporter from starting at all, and no telemetry leaves the cluster. Nothing is lost by dropping it, because server3's `alloy-receiver` never validated the token either: `k8s-monitoring` exposes no server-side OTLP auth. The endpoint has always relied on private-network isolation.
 >
@@ -359,7 +361,7 @@ Two external endpoints are exposed via Traefik on server3:
 | Protocol | Endpoint | Traefik route |
 |----------|----------|---------------|
 | OTLP HTTP | `http://otel.server3.homelab.irha.cz` | HTTPRoute (Traefik port 80, plaintext — no 80 → 443 redirect exists) → backend port 4318 |
-| OTLP gRPC | `otel.server3.homelab.irha.cz:4317` | IngressRouteTCP → backend port 4317. Plaintext **and unauthenticated** — bound on the node IP by hostNetwork, so anything on the LAN can inject telemetry |
+| OTLP gRPC | `otel.server3.homelab.irha.cz:4317` | IngressRouteTCP, **TLS** (`server3-tls`, real HostSNI) → backend port 4317 h2c. Encrypted but unauthenticated |
 
 The gRPC endpoint uses raw TCP passthrough (`HostSNI(*)`), so no TLS is required from the client.
 

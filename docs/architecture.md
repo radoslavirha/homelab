@@ -96,7 +96,7 @@ the node IPs — what is defined in `ports:` is what the LAN can reach.
 | 27017 MongoDB | server1 · server2 | **TLS only**, terminated at Traefik against the cluster certificate; `mongod` itself is untouched. Compass connects with `?tls=true` |
 | 1883 MQTT | server1 · server2 | plaintext, authenticated |
 | 8883 MQTTS | server1 · server2 | TLS, same broker behind it |
-| 4317 OTLP gRPC | server3 | plaintext, **unauthenticated** |
+| 4317 OTLP gRPC | server3 | **TLS**, terminated at Traefik; unauthenticated |
 | 4000-4001 | server1 · server2 | UDP, miot |
 
 Both MQTT ports stay open on purpose. TLS termination selects the router by the SNI the client
@@ -106,9 +106,12 @@ known would take the IoT estate offline. Authentication and ACLs are enforced on
 (`EMQX_AUTHORIZATION__NO_MATCH: deny`), so the exposure on 1883 is the credential travelling in
 the clear inside the CONNECT packet, not unauthenticated access.
 
-OTLP gRPC is the one path with neither TLS nor authentication: gRPC refuses to attach per-RPC
-credentials to a plaintext channel, so it is TLS-or-nothing and TLS there is separate design
-work. Anything on the LAN can inject telemetry.
+OTLP gRPC is encrypted but still unauthenticated. Traefik terminates TLS against the cluster
+certificate and forwards plaintext h2c to `alloy-receiver` — gRPC without TLS *is* h2c, so the
+receiver needs no certificate of its own. What that does not do is prove who is connecting:
+anything on the LAN that speaks TLS can still inject telemetry. Authentication needs mTLS,
+because the receiving end has never validated a bearer token — k8s-monitoring exposes no
+server-side OTLP auth, so sending one would authenticate nothing while looking like it did.
 
 Port 80 also still serves — there is no blanket 80 → 443 redirect, because ESPHome devices on
 the LAN fetch over plain HTTP and may not follow one.
