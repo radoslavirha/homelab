@@ -1,3 +1,6 @@
 # server2 cluster VARs
 # Shared across all apps deployed on server2.
-VAR_PUBLIC_DOMAIN: server2.home
+# Hard cutover, unlike the rest of stage 6: the chart emits exactly one hostname
+# per route, so the .home names stop answering the moment this syncs. Covered by
+# the *.server2.homelab.irha.cz and *.sandbox.server2.homelab.irha.cz SANs on server2-tls.
+VAR_PUBLIC_DOMAIN: server2.homelab.irha.cz

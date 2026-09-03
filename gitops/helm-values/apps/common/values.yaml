@@ -1,5 +1,9 @@
 # cluster VARs
 # Shared across all apps deployed on cluster.
-VAR_PROTOCOL: http
+# https everywhere. Traefik terminates on the websecure listener against the
+# per-cluster certificate; the app Services behind it still speak plain HTTP.
+# This feeds every rendered app config (publicURL, apiBaseURL, redirect baseURL),
+# so it is the single line that makes generated URLs https.
+VAR_PROTOCOL: https
 VAR_MQTT_URL: "mqtt://emqx.iot.svc.cluster.local:1883"
 VAR_MONGODB_URL: "mongodb://mongodb.mongodb.svc.cluster.local:27017"
