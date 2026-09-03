@@ -1,0 +1,35 @@
+---
+# The server1 cluster certificate. Same shape as server3's — see
+# gitops/k8s-manifests/server3/traefik/Certificate.server3-tls.yaml for why it lives in the
+# traefik namespace and why the Traefik Application owns it rather than cert-manager's.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: server1-tls
+  namespace: traefik
+spec:
+  secretName: server1-tls
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+
+  privateKey:
+    rotationPolicy: Always
+    algorithm: ECDSA
+    size: 256
+
+  dnsNames:
+    - server1.homelab.irha.cz
+    # Infrastructure on this cluster: headlamp, hubble, longhorn, influx, mqtt, and the
+    # production app names api/apps.
+    - "*.server1.homelab.irha.cz"
+    # Sandbox. One wildcard per STAGE, not per component — this is what the
+    # api.sandbox.… ordering buys, and it means adding an app never touches this list.
+    #
+    # NOTE: the chart still emits sandbox.api.… today. Stage 6.0 reverses that. Until it
+    # does, this SAN matches nothing — it is carried now so stage 6.0 is a chart change
+    # only and does not also need a certificate reissue.
+    - "*.sandbox.server1.homelab.irha.cz"
+    # Apex tier: the URL shortener. Deliberately short — printed QR codes point at it.
+    - qr.irha.cz
+

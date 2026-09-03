@@ -1,11 +1,17 @@
 # ExternalDNS — server1 cluster overrides
 # Shared base values: gitops/helm-values/external-dns.yaml
 
-# Only manage records under server1.home
+# ADDITIVE through the migration — routes carry .home and irha.cz side by side, and a
+# hostname missing from this list is ignored SILENTLY by ExternalDNS. Must land before any
+# route on this cluster carries an irha.cz name. Apex names are listed individually; a bare
+# `irha.cz` would have all three clusters claiming the whole zone.
 domainFilters:
   - server1.home
   # This one should be moved to server 1
   - qr.home
+  - server1.homelab.irha.cz
+  # Apex tier: the URL shortener, and a SAN on server1-tls.
+  - qr.irha.cz
 
 # TXT registry owner ID — must be unique per cluster to avoid record conflicts
 txtOwnerId: homelab-server1

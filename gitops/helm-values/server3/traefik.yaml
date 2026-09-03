@@ -6,8 +6,17 @@ ingressRoute:
     enabled: true
     # Custom match rule with Host() so external-dns traefik-proxy source can extract the hostname.
     # The default rule only has PathPrefix, which gives external-dns nothing to work with.
-    matchRule: "Host(`traefik.server3.home`) && (PathPrefix(`/dashboard`) || PathPrefix(`/api`))"
-    entryPoints: [web]
+    matchRule: "(Host(`traefik.server3.home`) || Host(`traefik.server3.homelab.irha.cz`)) && (PathPrefix(`/dashboard`) || PathPrefix(`/api`))"
+    # Both entrypoints. The .home name has no certificate and stays on plain HTTP; the
+    # irha.cz name gets the real one. Dropping `web` here would break the old URL before
+    # stage 7 is ready to retire it.
+    entryPoints: [web, websecure]
+    tls:
+      # An IngressRoute is served by the kubernetesCRD provider, which is a separate path
+      # from the Gateway API listener — it does not inherit the listener's certificateRefs.
+      # Without an explicit secretName here Traefik would answer with its built-in
+      # self-signed default certificate and the browser would warn.
+      secretName: server3-tls
     annotations:
       # traefik-proxy source resolves target from status.loadBalancer.ingress by default.
       # Since the Traefik Service is ClusterIP (no LB), that is always empty.

@@ -9,6 +9,20 @@ ingressRoute:
     annotations:
       external-dns.alpha.kubernetes.io/target: "192.168.1.201"
 
+
+# HTTPS Gateway listener. Per cluster because certificateRefs names a cluster-specific
+# Secret. See gitops/helm-values/server3/traefik.yaml for the full reasoning — including
+# why there is deliberately no 80 -> 443 redirect yet (stage 7.5, after OTLP moves).
+gateway:
+  listeners:
+    websecure:
+      port: 443
+      protocol: HTTPS
+      namespacePolicy:
+        from: All
+      certificateRefs:
+        - name: server2-tls
+
 service:
   externalIPs:
     - 192.168.1.201
