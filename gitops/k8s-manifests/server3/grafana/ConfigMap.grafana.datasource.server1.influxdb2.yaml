@@ -16,12 +16,11 @@ data:
         type: influxdb
         uid: influxdb2-server1
         access: proxy
-        url: http://influx.server1.home
+        url: https://influx.server1.homelab.irha.cz
         editable: false
         jsonData:
           version: Flux
           organization: homelab
           defaultBucket: loxone
-          tlsSkipVerify: true
         secureJsonData:
           token: $__file{/etc/secrets/server1-influxdb2-grafana/token}
