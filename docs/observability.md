@@ -499,6 +499,61 @@ Prerequisites before the `RootObservability` waves sync:
 
 After that, `RootObservability` and `server3/RootObservability` sync automatically in wave 3 via `Bootstrap.yaml`. No standalone applies.
 
+## Certificate alerting and the renewal path
+
+Three wildcard certificates carry every HTTPS name in the homelab — `server1-tls`,
+`server2-tls`, `server3-tls`, one per cluster, each in that cluster's `traefik` namespace.
+One failed renewal takes out every HTTPS name on that cluster at once, so this is the single
+highest-leverage thing in the stack to watch.
+
+**How renewal works.** cert-manager requests a new certificate at **30 days before expiry**
+(90-day Let's Encrypt lifetime, renewed at two thirds). It solves ACME DNS-01 by writing a
+`_acme-challenge` TXT record to Cloudflare, waits for the self-check, then deletes it — about
+90 seconds, entirely unattended. The service never has to be publicly reachable; only the
+*name* is proven. Failures are retried quietly and logged to a pod nobody reads, which is
+exactly why the alerts below exist.
+
+**Alert rules** — [`ConfigMap.grafana.alerts.certificates.yaml`](../gitops/k8s-manifests/server3/grafana/ConfigMap.grafana.alerts.certificates.yaml),
+provisioned through the same labelled-ConfigMap path as datasources and dashboards
+(`grafana_alert: "1"`, picked up by the `grafana-sc-alerts` sidecar). They live in the
+`Platform` folder in Grafana.
+
+| Rule | Fires when | Why that threshold |
+|------|-----------|--------------------|
+| TLS certificate expiring soon | under 21 days remaining, for 1h | renewal starts at 30 days, so this is over a week of failures — past anything transient, with three weeks left to fix by hand |
+| TLS certificate not Ready | `certmanager_certificate_ready_status{condition="True"}` is 0, for 30m | catches what the expiry metric cannot see, such as a certificate never issued at all |
+| ACME ClusterIssuer not Ready | `certmanager_clusterissuer_ready_status{condition="True"}` is 0, for 30m | a dead ACME account or revoked Cloudflare token surfaces here weeks before any certificate is near expiry |
+
+All three use `noDataState: Alerting`. A missing series is the *more* dangerous case, not a
+quieter one — it means the scrape broke or cert-manager is gone, and nothing is watching
+expiry at all.
+
+**There is no contact point yet.** Alerts surface in Grafana's alert list and push nowhere.
+Adding a destination later does not require touching these rules: attach a notification policy
+to the `severity` and `component: cert-manager` labels they already carry.
+
+**When one fires:**
+
+```bash
+# What does cert-manager think the state is?
+kubectl --context admin@<cluster> -n traefik describe certificate <cluster>-tls
+
+# The in-flight attempt, if any — CertificateRequest, then Order, then Challenge
+kubectl --context admin@<cluster> -n traefik get certificaterequest,order,challenge
+
+kubectl --context admin@<cluster> -n cert-manager logs deploy/cert-manager --tail=100
+```
+
+The two failure modes worth knowing:
+
+- **Cloudflare token expired or revoked.** The Challenge stalls with a DNS-01 error.
+  The token lives at `secret/<cluster>/cert-manager` in OpenBao and reaches the cluster via
+  ExternalSecret — see [docs/secrets.md](secrets.md).
+- **DNS-01 self-check cannot resolve.** cert-manager runs with
+  `dns01RecursiveNameserversOnly` against public resolvers on purpose: the cluster's own
+  resolver is UniFi, which answers with LAN addresses and knows nothing of the `_acme-challenge`
+  record at Cloudflare. Pointing cert-manager at the LAN resolver would stall every issuance.
+
 ## Design decisions
 
 ### Why no kube-prometheus-stack?
