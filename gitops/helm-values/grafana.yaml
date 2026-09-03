@@ -22,6 +22,12 @@ persistence:
 
 # Sidecar watches ConfigMaps labelled grafana_datasource="1" in all namespaces
 sidecar:
+  # Alert rules are provisioned the same way datasources and dashboards are: a labelled
+  # ConfigMap, written into /etc/grafana/provisioning/alerting and reloaded through the
+  # admin API. Off by default in the chart.
+  alerts:
+    enabled: true
+    searchNamespace: ALL
   datasources:
     enabled: true
     searchNamespace: ALL

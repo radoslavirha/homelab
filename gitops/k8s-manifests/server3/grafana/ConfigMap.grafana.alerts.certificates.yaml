@@ -1,0 +1,213 @@
+---
+# Certificate alerting — stage 8 of the TLS migration.
+#
+# Three wildcard certificates carry every HTTPS name in the homelab, one per cluster. A
+# renewal that fails is invisible until a browser refuses to connect, and by then every
+# service on that cluster is unreachable at once. cert-manager retries quietly and logs to
+# a pod nobody reads.
+#
+# Provisioned as a ConfigMap because that is how this Grafana already gets its datasources
+# and dashboards — the k8s-sidecar watches for the grafana_alert label, writes the file into
+# /etc/grafana/provisioning/alerting and calls the reload endpoint.
+#
+# NO CONTACT POINT YET, deliberately. These rules surface state in Grafana's alert list and
+# nothing is pushed anywhere; notification routing is a separate decision. The rules do not
+# need to change when it is made — a notification policy is attached to the labels below.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-alerts-certificates
+  namespace: monitoring
+  labels:
+    grafana_alert: "1"
+  annotations:
+    argocd.argoproj.io/sync-wave: "-50"
+data:
+  certificates.yaml: |-
+    apiVersion: 1
+    groups:
+      - orgId: 1
+        name: certificates
+        folder: Platform
+        interval: 5m
+        rules:
+          # ---------------------------------------------------------------------------
+          # Renewal is failing. cert-manager renews at 30 days before expiry, so a
+          # certificate still inside 21 days has been failing for over a week — well past
+          # anything transient, and with three weeks left to fix it by hand.
+          - uid: cert-expiring-soon
+            title: TLS certificate expiring soon
+            condition: C
+            for: 1h
+            # A missing series is the more dangerous case, not a quieter one: it means the
+            # scrape broke or cert-manager is gone, and nothing is watching the expiry at
+            # all. Alert on it rather than sitting silent.
+            noDataState: Alerting
+            execErrState: Alerting
+            data:
+              - refId: A
+                relativeTimeRange:
+                  from: 600
+                  to: 0
+                datasourceUid: prometheus
+                model:
+                  editorMode: code
+                  expr: (min by (cluster, namespace, name) (certmanager_certificate_expiration_timestamp_seconds) - time()) / 86400
+                  instant: true
+                  range: false
+                  intervalMs: 1000
+                  maxDataPoints: 43200
+                  legendFormat: __auto
+                  refId: A
+              - refId: B
+                relativeTimeRange:
+                  from: 0
+                  to: 0
+                datasourceUid: __expr__
+                model:
+                  type: reduce
+                  reducer: last
+                  expression: A
+                  refId: B
+              - refId: C
+                relativeTimeRange:
+                  from: 0
+                  to: 0
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  expression: B
+                  conditions:
+                    - evaluator:
+                        type: lt
+                        params:
+                          - 21
+                  refId: C
+            labels:
+              severity: warning
+              component: cert-manager
+            annotations:
+              summary: '{{ $labels.name }} on {{ $labels.cluster }} expires in under 21 days'
+              description: >-
+                cert-manager should have renewed this at 30 days before expiry, so renewal
+                has been failing for over a week. Check the Certificate and its
+                CertificateRequest in the {{ $labels.namespace }} namespace on
+                {{ $labels.cluster }}, then the cert-manager pod logs. The usual causes are
+                an expired Cloudflare API token or a DNS-01 self-check that cannot resolve.
+
+          # ---------------------------------------------------------------------------
+          # The Certificate object itself is not Ready — covers failure modes the expiry
+          # metric cannot see, such as a certificate that was never issued at all.
+          - uid: cert-not-ready
+            title: TLS certificate not Ready
+            condition: C
+            for: 30m
+            noDataState: Alerting
+            execErrState: Alerting
+            data:
+              - refId: A
+                relativeTimeRange:
+                  from: 600
+                  to: 0
+                datasourceUid: prometheus
+                model:
+                  editorMode: code
+                  expr: min by (cluster, namespace, name) (certmanager_certificate_ready_status{condition="True"})
+                  instant: true
+                  range: false
+                  intervalMs: 1000
+                  maxDataPoints: 43200
+                  legendFormat: __auto
+                  refId: A
+              - refId: B
+                relativeTimeRange:
+                  from: 0
+                  to: 0
+                datasourceUid: __expr__
+                model:
+                  type: reduce
+                  reducer: last
+                  expression: A
+                  refId: B
+              - refId: C
+                relativeTimeRange:
+                  from: 0
+                  to: 0
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  expression: B
+                  conditions:
+                    - evaluator:
+                        type: lt
+                        params:
+                          - 1
+                  refId: C
+            labels:
+              severity: critical
+              component: cert-manager
+            annotations:
+              summary: 'Certificate {{ $labels.name }} on {{ $labels.cluster }} is not Ready'
+              description: >-
+                Every HTTPS name on {{ $labels.cluster }} is served by this one certificate.
+                Inspect it with `kubectl --context admin@{{ $labels.cluster }} -n
+                {{ $labels.namespace }} describe certificate {{ $labels.name }}`.
+
+          # ---------------------------------------------------------------------------
+          # The issuer breaks before the certificates do. A dead ACME account or a revoked
+          # Cloudflare token shows up here weeks before any certificate is close to expiry,
+          # which is the whole point of alerting on it separately.
+          - uid: clusterissuer-not-ready
+            title: ACME ClusterIssuer not Ready
+            condition: C
+            for: 30m
+            noDataState: Alerting
+            execErrState: Alerting
+            data:
+              - refId: A
+                relativeTimeRange:
+                  from: 600
+                  to: 0
+                datasourceUid: prometheus
+                model:
+                  editorMode: code
+                  expr: min by (cluster, name) (certmanager_clusterissuer_ready_status{condition="True"})
+                  instant: true
+                  range: false
+                  intervalMs: 1000
+                  maxDataPoints: 43200
+                  legendFormat: __auto
+                  refId: A
+              - refId: B
+                relativeTimeRange:
+                  from: 0
+                  to: 0
+                datasourceUid: __expr__
+                model:
+                  type: reduce
+                  reducer: last
+                  expression: A
+                  refId: B
+              - refId: C
+                relativeTimeRange:
+                  from: 0
+                  to: 0
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  expression: B
+                  conditions:
+                    - evaluator:
+                        type: lt
+                        params:
+                          - 1
+                  refId: C
+            labels:
+              severity: warning
+              component: cert-manager
+            annotations:
+              summary: 'ClusterIssuer {{ $labels.name }} on {{ $labels.cluster }} is not Ready'
+              description: >-
+                No certificate can be issued or renewed on this cluster while the issuer is
+                unhealthy. Check the ACME account registration and the Cloudflare API token
+                in `secret/{{ $labels.cluster }}/cert-manager`.
