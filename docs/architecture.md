@@ -21,6 +21,7 @@ Multi-cluster Kubernetes homelab: three Talos Linux nodes managed with a shared 
 | [OpenBao](https://openbao.org/) | Secrets management; central backend for all clusters | server3 | Terraform `vault` | [openbao](https://artifacthub.io/packages/helm/openbao/openbao) | [server3](../iac/clusters/server3/helm-values/openbao.yaml) | [values.yaml](https://github.com/openbao/openbao-helm/blob/main/charts/openbao/values.yaml) |
 | [ArgoCD](https://argoproj.github.io/cd/) | GitOps CD; manages workloads on all three clusters | server3 | Terraform `apps` | [argo-cd](https://artifacthub.io/packages/helm/argo/argo-cd) | [server3](../gitops/helm-values/server3/argocd.yaml) | [values.yaml](https://github.com/argoproj/argo-helm/blob/main/charts/argo-cd/values.yaml) |
 | [External Secrets Operator](https://external-secrets.io/) | Sync secrets from OpenBao; ClusterSecretStore per cluster | server3 · server2 | ArgoCD | [external-secrets](https://artifacthub.io/packages/helm/external-secrets-operator/external-secrets) | [shared](../gitops/helm-values/external-secrets.yaml) · [server3](../gitops/helm-values/server3/external-secrets.yaml) · [server2](../gitops/helm-values/server2/external-secrets.yaml) | [values.yaml](https://github.com/external-secrets/external-secrets/blob/main/deploy/charts/external-secrets/values.yaml) |
+| [cert-manager](https://cert-manager.io/) | Issues the per-cluster wildcard TLS certificate from Let's Encrypt; ACME DNS-01 solved against Cloudflare, so a name needs no public reachability to be certified | all | ArgoCD | [cert-manager](https://artifacthub.io/packages/helm/cert-manager/cert-manager) | [shared](../gitops/helm-values/cert-manager.yaml) · [server1](../gitops/helm-values/server1/cert-manager.yaml) · [server2](../gitops/helm-values/server2/cert-manager.yaml) · [server3](../gitops/helm-values/server3/cert-manager.yaml) | [values.yaml](https://github.com/cert-manager/cert-manager/blob/master/deploy/charts/cert-manager/values.yaml) |
 | [Stakater Reloader](https://github.com/stakater/Reloader) | Restart workloads annotated `reloader.stakater.com/auto` when a referenced ConfigMap/Secret changes (ESO credential rotation) | all | ArgoCD | [reloader](https://artifacthub.io/packages/helm/stakater/reloader) | [shared](../gitops/helm-values/reloader.yaml) · [server3](../gitops/helm-values/server3/reloader.yaml) · [server2](../gitops/helm-values/server2/reloader.yaml) · [server1](../gitops/helm-values/server1/reloader.yaml) | [values.yaml](https://github.com/stakater/Reloader/blob/master/deployments/kubernetes/chart/reloader/values.yaml) |
 | [Traefik](https://traefik.io/) | Ingress / Gateway API proxy; hostNetwork bare-metal LB | server3 · server2 | ArgoCD | [traefik](https://artifacthub.io/packages/helm/traefik/traefik) | [shared](../gitops/helm-values/traefik.yaml) · [server3](../gitops/helm-values/server3/traefik.yaml) · [server2](../gitops/helm-values/server2/traefik.yaml) | [values.yaml](https://github.com/traefik/traefik-helm-chart/blob/master/traefik/values.yaml) |
 | [ExternalDNS](https://kubernetes-sigs.github.io/external-dns/) | Automatic DNS via UniFi webhook; sources: gateway-httproute, traefik-proxy, crd | server3 · server2 | ArgoCD | [external-dns](https://artifacthub.io/packages/helm/external-dns/external-dns) | [shared](../gitops/helm-values/external-dns.yaml) · [server3](../gitops/helm-values/server3/external-dns.yaml) · [server2](../gitops/helm-values/server2/external-dns.yaml) | [values.yaml](https://github.com/kubernetes-sigs/external-dns/blob/master/charts/external-dns/values.yaml) |
@@ -34,13 +35,62 @@ Multi-cluster Kubernetes homelab: three Talos Linux nodes managed with a shared 
 | iot-applications | Shared Helm chart for custom IoT apps; supports multi-app deployments, Jinja2 config templates, secretRefs, optional Argo Rollouts | server2 | ArgoCD `apps` | — | [chart](../gitops/helm-charts/iot-applications/) | — |
 | miot-bridge-api | MIOT device bridge API; HTTP + UDP ingress; MQTT + MongoDB; auto-provisioned credentials via PostSync Jobs | server2 | ArgoCD `apps` | — | [base](../gitops/helm-values/apps/miot-bridge-api/base.yaml) · [production](../gitops/helm-values/apps/miot-bridge-api/production.yaml) · [sandbox](../gitops/helm-values/apps/miot-bridge-api/sandbox.yaml) · [cluster](../gitops/helm-values/server2/apps/common/production.yaml) | — |
 | interactive-map-feeder-api | Interactive map feeder API; HTTP ingress only; no secrets | server2 | ArgoCD `apps` | — | [base](../gitops/helm-values/apps/interactive-map-feeder-api/base.yaml) · [production](../gitops/helm-values/apps/interactive-map-feeder-api/production.yaml) · [sandbox](../gitops/helm-values/apps/interactive-map-feeder-api/sandbox.yaml) · [cluster](../gitops/helm-values/server2/apps/common/production.yaml) | — |
-| qr-manager-api | QR code redirect + admin CRUD API; HTTP ingress + `qr.home` shortcut; MongoDB for slug storage; auto-provisioned MongoDB credentials via PostSync Jobs | server2 | ArgoCD `apps` | — | [base](../gitops/helm-values/apps/qr-manager-api/base.yaml) · [production](../gitops/helm-values/apps/qr-manager-api/production.yaml) · [sandbox](../gitops/helm-values/apps/qr-manager-api/sandbox.yaml) · [cluster](../gitops/helm-values/server2/apps/common/production.yaml) | — |
-| qr-manager-ui | QR code admin SPA (React + nginx); served at `apps.server2.home/qr-manager`; runtime `config.json` via ConfigMap subPath mount; no secrets | server2 | ArgoCD `apps` | — | [base](../gitops/helm-values/apps/qr-manager-ui/base.yaml) · [production](../gitops/helm-values/apps/qr-manager-ui/production.yaml) · [sandbox](../gitops/helm-values/apps/qr-manager-ui/sandbox.yaml) · [cluster](../gitops/helm-values/server2/apps/common/production.yaml) | — |
+| qr-manager-api | QR code redirect + admin CRUD API; HTTP ingress + `qr.irha.cz` shortcut; MongoDB for slug storage; auto-provisioned MongoDB credentials via PostSync Jobs | server2 | ArgoCD `apps` | — | [base](../gitops/helm-values/apps/qr-manager-api/base.yaml) · [production](../gitops/helm-values/apps/qr-manager-api/production.yaml) · [sandbox](../gitops/helm-values/apps/qr-manager-api/sandbox.yaml) · [cluster](../gitops/helm-values/server2/apps/common/production.yaml) | — |
+| qr-manager-ui | QR code admin SPA (React + nginx); served at `apps.server2.homelab.irha.cz/qr-manager`; runtime `config.json` via ConfigMap subPath mount; no secrets | server2 | ArgoCD `apps` | — | [base](../gitops/helm-values/apps/qr-manager-ui/base.yaml) · [production](../gitops/helm-values/apps/qr-manager-ui/production.yaml) · [sandbox](../gitops/helm-values/apps/qr-manager-ui/sandbox.yaml) · [cluster](../gitops/helm-values/server2/apps/common/production.yaml) | — |
 | [Prometheus](https://prometheus.io/) | TSDB receiving OTLP metrics; no scraping (remote-write only) | server3 | ArgoCD `observability` | [prometheus](https://artifacthub.io/packages/helm/prometheus-community/prometheus) | [shared](../gitops/helm-values/prometheus.yaml) · [server3](../gitops/helm-values/server3/prometheus.yaml) | [values.yaml](https://github.com/prometheus-community/helm-charts/blob/main/charts/prometheus/values.yaml) |
 | [Grafana](https://grafana.com/) | Observability dashboards; datasources: Prometheus, Loki, Tempo, InfluxDB2 (server2) | server3 | ArgoCD `observability` | [grafana](https://artifacthub.io/packages/helm/grafana-community/grafana) | [shared](../gitops/helm-values/grafana.yaml) · [server3](../gitops/helm-values/server3/grafana.yaml) | [values.yaml](https://github.com/grafana-community/helm-charts/blob/main/charts/grafana/values.yaml) |
 | [Loki](https://grafana.com/oss/loki/) | Log aggregation backend; ingest via the native OTLP endpoint `/otlp/v1/logs` (not the Loki push API) | server3 | ArgoCD `observability` | [loki](https://artifacthub.io/packages/helm/grafana-community/loki) | [shared](../gitops/helm-values/loki.yaml) | [values.yaml](https://github.com/grafana-community/helm-charts/blob/main/charts/loki/values.yaml) |
 | [Tempo](https://grafana.com/oss/tempo/) | Distributed tracing backend; OTLP gRPC/HTTP receiver | server3 | ArgoCD `observability` | [tempo](https://artifacthub.io/packages/helm/grafana-community/tempo) | [shared](../gitops/helm-values/tempo.yaml) | [values.yaml](https://github.com/grafana-community/helm-charts/blob/main/charts/tempo/values.yaml) |
-| [k8s-monitoring (Grafana Alloy)](https://grafana.com/docs/k8s-monitoring) | Infrastructure + app observability; cluster/host/pod metrics, logs, events; OTLP receiver (alloy-receiver); server3: fan-out to Prometheus (remote-write), Loki (native OTLP) and Tempo (OTLP gRPC); server1/server2: forward all signals to otel.server3.home:4317 | server1 · server2 · server3 | ArgoCD `observability` (AppSet) | [k8s-monitoring](https://artifacthub.io/packages/helm/grafana/k8s-monitoring) | [shared](../gitops/helm-values/k8s-monitoring.yaml) · [server1](../gitops/helm-values/server1/k8s-monitoring.yaml) · [server2](../gitops/helm-values/server2/k8s-monitoring.yaml) · [server3](../gitops/helm-values/server3/k8s-monitoring.yaml) | [values.yaml](https://github.com/grafana/k8s-monitoring-helm/blob/main/charts/k8s-monitoring/values.yaml) |
+| [k8s-monitoring (Grafana Alloy)](https://grafana.com/docs/k8s-monitoring) | Infrastructure + app observability; cluster/host/pod metrics, logs, events; OTLP receiver (alloy-receiver); server3: fan-out to Prometheus (remote-write), Loki (native OTLP) and Tempo (OTLP gRPC); server1/server2: forward all signals to otel.server3.homelab.irha.cz:4317 | server1 · server2 · server3 | ArgoCD `observability` (AppSet) | [k8s-monitoring](https://artifacthub.io/packages/helm/grafana/k8s-monitoring) | [shared](../gitops/helm-values/k8s-monitoring.yaml) · [server1](../gitops/helm-values/server1/k8s-monitoring.yaml) · [server2](../gitops/helm-values/server2/k8s-monitoring.yaml) · [server3](../gitops/helm-values/server3/k8s-monitoring.yaml) | [values.yaml](https://github.com/grafana/k8s-monitoring-helm/blob/main/charts/k8s-monitoring/values.yaml) |
+
+## Hostnames and TLS
+
+Every service is reachable over HTTPS with a publicly-trusted certificate, on a LAN-only name.
+Those two facts are independent: proving control of a *name* (ACME DNS-01, a TXT record at
+Cloudflare) is not the same as the *service* being reachable, so `vault.server3.homelab.irha.cz`
+holds a real Let's Encrypt certificate while resolving only on `192.168.1.0/24` and having no
+port forward. No private CA, no per-device trust store, no browser warnings.
+
+**Two naming tiers.** Infrastructure lives under a reserved subtree; the apex is kept free for
+names that are, or may become, publicly reachable.
+
+| Tier | Shape | Members |
+|------|-------|---------|
+| Infrastructure | `<svc>.<cluster>.homelab.irha.cz` | everything, by default |
+| Apex | `<svc>.irha.cz` | `qr.irha.cz`, `grafana.irha.cz`, `auth.irha.cz` (Zitadel, not yet deployed) |
+
+App routes generated by the `iot-applications` chart follow the same rule, with the stage label
+left of the component: `api.server2.homelab.irha.cz` for production,
+`api.sandbox.server2.homelab.irha.cz` for sandbox. That ordering means sandbox is not a
+subdomain of production — cookie scope, HSTS `includeSubDomains` and wildcard-scoped policy stop
+leaking across the boundary — and one wildcard covers a whole stage rather than one per
+component.
+
+**One certificate per cluster**, in that cluster's `traefik` namespace so a Gateway listener's
+`certificateRefs` resolve without a `ReferenceGrant`:
+
+| Cluster | `dnsNames` | Secret |
+|---------|-----------|--------|
+| server1 | `server1.homelab.irha.cz`, `*.server1.homelab.irha.cz`, `*.sandbox.server1.homelab.irha.cz`, `qr.irha.cz` | `server1-tls` |
+| server2 | `server2.homelab.irha.cz`, `*.server2.homelab.irha.cz`, `*.sandbox.server2.homelab.irha.cz` | `server2-tls` |
+| server3 | `server3.homelab.irha.cz`, `*.server3.homelab.irha.cz`, `auth.irha.cz`, `grafana.irha.cz` | `server3-tls` |
+
+A certificate wildcard matches exactly one label (RFC 6125), which is why the four-label sandbox
+names need their own SAN. A *DNS* wildcard matches at any depth (RFC 4592) — the two are spelled
+alike and behave differently.
+
+**Split horizon.** ExternalDNS writes A records to UniFi and only to UniFi, so LAN clients and
+cluster nodes get `192.168.1.x`. cert-manager writes `_acme-challenge` TXT records to Cloudflare
+and only during issuance — created, validated, deleted, roughly 90 seconds. The two never touch
+the same records, and the public zone holds nothing between renewals. Nodes resolve via
+`192.168.1.1` (DHCP-derived); cert-manager deliberately does not, running with
+`dns01RecursiveNameserversOnly` so its self-check bypasses the LAN view.
+
+**Deliberate plaintext.** Three paths stay unencrypted because TLS there is separate design
+work, not oversight: OTLP gRPC to `otel.server3.homelab.irha.cz:4317` and the MQTT and MongoDB
+`IngressRouteTCP`s, all of which match `HostSNI(*)` on their own entrypoints and terminate no
+TLS. Port 80 also still serves — there is no blanket 80 → 443 redirect, because ESPHome devices
+on the LAN fetch over plain HTTP and may not follow one.
 
 ## ServiceAccounts
 
@@ -153,7 +203,7 @@ Post-bootstrap steps for each new cluster:
 
 ## Observability
 
-Central LGTM stack on server3 — metrics (Prometheus), logs (Loki), traces (Tempo), dashboards (Grafana). OTel push endpoints: `http://otel.server3.home` (HTTP/4318 via HTTPRoute) and `otel.server3.home:4317` (gRPC via IngressRouteTCP).
+Central LGTM stack on server3 — metrics (Prometheus), logs (Loki), traces (Tempo), dashboards (Grafana). OTel push endpoints: `http://otel.server3.homelab.irha.cz` (HTTP/4318 via HTTPRoute) and `otel.server3.homelab.irha.cz:4317` (gRPC via IngressRouteTCP).
 See [docs/observability.md](observability.md) for full architecture, pipeline details, and datasource correlations.
 
 ## Secret management

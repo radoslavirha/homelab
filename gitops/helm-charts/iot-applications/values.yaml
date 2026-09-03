@@ -102,7 +102,7 @@
 #       serviceRef: http
 #       # ingress.hostname overrides the computed hostname ({subdomain}{component}.{domain}).
 #       # Use for apps that require a custom domain not following the standard pattern.
-#       # Example: dashboard.home
+#       # Example: dashboard.server3.homelab.irha.cz
 #       hostname: ""
 #       # ingress.stripPrefix controls whether a Traefik stripPrefix Middleware is created and attached.
 #       # Defaults to true. Set to false for UI apps that handle their own base path.

@@ -1,4 +1,4 @@
-# Exposes OpenBao on server3 via a Traefik HTTPRoute (vault.server3.home).
+# Exposes OpenBao on server3 via a Traefik HTTPRoute (vault.server3.homelab.irha.cz).
 # This allows server2's ESO ClusterSecretStore to reach OpenBao across cluster boundaries.
 # Deployed to the openbao namespace so the HTTPRoute is co-located with the service.
 # Depends on: traefik-server3 (GatewayClass must exist before this can bind).

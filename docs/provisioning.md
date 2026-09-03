@@ -344,7 +344,7 @@ Declared in [`gitops/helm-values/server2/provisioner/mongodb.yaml`](../gitops/he
 Symptom, from a Job's logs:
 
 ```text
-URL: GET http://vault.server3.home/v1/sys/internal/ui/mounts/secret/<cluster>/<env>/<app>
+URL: GET https://vault.server3.homelab.irha.cz/v1/sys/internal/ui/mounts/secret/<cluster>/<env>/<app>
 Code: 403. Errors:
 * permission denied
 ```
@@ -354,7 +354,7 @@ That URL is the `bao kv` preflight mount lookup — it 403s on an **invalid toke
 ```bash
 TOKEN=$(kubectl --context admin@<cluster> get secret openbao-provision-token -n mongodb \
   -o jsonpath='{.data.token}' | base64 -d)
-curl -s -H "X-Vault-Token: $TOKEN" http://vault.server3.home/v1/auth/token/lookup-self
+curl -s -H "X-Vault-Token: $TOKEN" https://vault.server3.homelab.irha.cz/v1/auth/token/lookup-self
 ```
 
 `{"errors":["permission denied"]}` means the token stored at `secret/<cluster>/provisioner-token` is dead. The usual cause is a token created **without `-orphan`** — it is revoked along with the login/root token that minted it.

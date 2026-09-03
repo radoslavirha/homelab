@@ -21,7 +21,7 @@ Loxone is the only physical IoT controller. MiOT Bridge supports UDP transport b
 
 | Service | Where | Purpose |
 |---------|-------|---------|
-| **EMQX** | server2, namespace `iot`, `mqtt.server2.home` | MQTT broker. All IoT traffic routes through it. Dashboard on port 18083 (HTTP), MQTT on port 1883 (TCP via Traefik entrypoint `mqtt`) |
+| **EMQX** | server2, namespace `iot`, `mqtt.server2.homelab.irha.cz` | MQTT broker. All IoT traffic routes through it. Dashboard on port 18083 (HTTP), MQTT on port 1883 (TCP via Traefik entrypoint `mqtt`) |
 | **InfluxDB2** | server2, namespace `iot` | Time-series storage for IoT sensor data. Org: `homelab`. Exposed via HTTPRoute |
 | **Telegraf** | server2, namespace `telegraf` | MQTT consumer → InfluxDB2 writer. No inbound ports |
 | **miot-bridge-api** | server2, namespaces `production` + `sandbox` | Bridges Loxone ↔ MiOT cloud devices. HTTP + UDP ingress. Polls MiOT devices every 5 s |

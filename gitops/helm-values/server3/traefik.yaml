@@ -28,13 +28,14 @@ ingressRoute:
 # listener pointing at a Secret that does not exist would sit unprogrammed.
 #
 # The listener map merges with `web` from gitops/helm-values/traefik.yaml rather than
-# replacing it, so port 80 keeps serving throughout the migration. That is deliberate:
-# the certificate covers only the irha.cz names, so every .home hostname stays HTTP-on-80
-# until stage 7 retires it.
+# replacing it, so port 80 keeps serving.
 #
 # There is deliberately NO 80 -> 443 redirect here. `ports.web.http.redirections.entryPoint`
-# is the obvious next line and it would break OTLP ingest — otel.server3.home:4318 is an
-# HTTPRoute on `web`, and OTLP exporters do not follow 301s. Stage 7.5, after OTLP moves.
+# is the obvious next line and it would break two things: OTLP ingest
+# (otel.server3.homelab.irha.cz:4318 is an HTTPRoute on `web`, and OTLP exporters do not
+# follow 301s) and an ESPHome device that fetches api.server1.homelab.irha.cz over plain
+# HTTP — TLS there means the esp-idf framework with verify_ssl: false. Left open on
+# purpose; a redirect nothing follows is worse than no redirect.
 gateway:
   listeners:
     websecure:

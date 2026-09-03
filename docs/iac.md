@@ -186,11 +186,11 @@ CLUSTER_CA=$(kubectl get configmap kube-root-ca.crt -n kube-system -o jsonpath='
 
 #    ── 3.b  Open a single OpenBao session (server3 must be reachable) ────────────────────────
 #
-#    If vault.server3.home DNS is not yet resolving, use a port-forward instead:
+#    If vault.server3.homelab.irha.cz DNS is not yet resolving, use a port-forward instead:
 #      kubectl port-forward -n openbao svc/openbao 8200:8200 --context server3 &
 #      export BAO_ADDR=http://127.0.0.1:8200
 
-export BAO_ADDR=http://vault.server3.home
+export BAO_ADDR=https://vault.server3.homelab.irha.cz
 bao login <root-token>
 
 #    ── 3.c  Register Kubernetes auth mount for this cluster ───────────────────────────────────
@@ -426,7 +426,7 @@ Uncomment the `backend "s3" {}` block before the first `terraform init`. No migr
 backend "s3" {
   bucket                      = "terraform-state"
   key                         = "clusters/<cluster>/<stage>/terraform.tfstate"
-  endpoint                    = "https://minio.server3.home"          # update to your MinIO URL
+  endpoint                    = "https://minio.server3.homelab.irha.cz"          # update to your MinIO URL
   region                      = "us-east-1"                        # MinIO ignores this
   skip_credentials_validation = true
   skip_metadata_api_check     = true

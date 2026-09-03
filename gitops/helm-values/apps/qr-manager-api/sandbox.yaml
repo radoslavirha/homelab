@@ -1,7 +1,7 @@
 # qr-manager-api — sandbox overrides
 #
 # The trailing /r on redirect.baseURL is not a typo. The redirect endpoint is mounted at
-# /r/:slug; production reaches it through a gateway addPrefix on qr.home and so has no /r
+# /r/:slug; production reaches it through a gateway addPrefix on qr.irha.cz and so has no /r
 # in its baseURL, but sandbox composes the chart's path-based route, where nothing adds the
 # prefix. Nothing is printed from sandbox — this only keeps the qrURL field truthful.
 #

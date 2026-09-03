@@ -186,10 +186,10 @@ CLUSTER_CA=$(kubectl get configmap kube-root-ca.crt -n kube-system \
   -o jsonpath='{.data.ca\.crt}')
 
 # Open an OpenBao session on server3:
-# (if vault.server3.home DNS is not yet resolving, port-forward instead:
+# (if vault.server3.homelab.irha.cz DNS is not yet resolving, port-forward instead:
 #  kubectl port-forward -n openbao svc/openbao 8200:8200 --context server3 &
 #  export BAO_ADDR=http://127.0.0.1:8200)
-export BAO_ADDR=http://vault.server3.home
+export BAO_ADDR=https://vault.server3.homelab.irha.cz
 bao login <root-token>
 
 # Register auth mount for this cluster:

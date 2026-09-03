@@ -1,6 +1,6 @@
 # Server3-only Dashboards App-of-Apps: OpenBao dashboard + HTTPRoute.
 # Sync wave 2 — runs in parallel with RootGateway. Publishes the OpenBao
-# HTTPRoute at vault.server3.home so server2's ClusterSecretStore (wave 1
+# HTTPRoute at vault.server3.homelab.irha.cz so server2's ClusterSecretStore (wave 1
 # ESO on server2, internal resource-wave 100) can resolve secrets.
 apiVersion: argoproj.io/v1alpha1
 kind: Application

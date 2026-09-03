@@ -90,7 +90,7 @@ gitops/
       emqx.yaml             server2 EMQX overrides
       external-dns.yaml     domainFilters, txtOwnerId
       external-secrets.yaml cluster-specific overrides
-      headlamp.yaml         hostname: headlamp.server2.home
+      headlamp.yaml         hostname: headlamp.server2.homelab.irha.cz
       influxdb2.yaml        server2 Longhorn storageClass overrides
       mongodb.yaml          server2 overrides
       k8s-monitoring.yaml   server2 cluster name + OTLP destination to server3
@@ -100,7 +100,7 @@ gitops/
       argocd.yaml           ArgoCD helm overrides
       external-dns.yaml     domainFilters, txtOwnerId
       external-secrets.yaml cluster-specific overrides (currently empty)
-      headlamp.yaml         hostname: headlamp.server3.home
+      headlamp.yaml         hostname: headlamp.server3.homelab.irha.cz
       traefik.yaml          dashboard hostname/IP, externalIPs, statusAddress.ip, OTLP tracing endpoint
       prometheus.yaml       server3 overrides (currently empty)
       grafana.yaml          server3 overrides: extraSecretMounts for influxdb2-grafana secret
@@ -125,7 +125,7 @@ gitops/
         RootDashboards.yaml    sync-wave: "2" — App-of-Apps → server3/apps/dashboards/ (OpenBao HTTPRoute)
         RootObservability.yaml sync-wave: "3" — App-of-Apps → server3/apps/observability/ (LGTM stack)
     apps/
-      infra/       ESO (AppSet, list generator), Reloader (AppSet, list generator)
+      infra/       ESO (AppSet, list generator), Reloader (AppSet, list generator), CertManager (AppSet, sync-wave: 2)
       gateway/     Traefik (AppSet), ExternalDNS (AppSet)
       observability/ K8sMonitoring (AppSet)
       iot/         InfluxDB2 (AppSet), EMQX (AppSet), Telegraf (AppSet), IotInfra (AppSet, sync-wave: -1)
@@ -134,30 +134,34 @@ gitops/
       apps/        MiotBridgeApi (AppSet), InteractiveMapFeederApi (AppSet), QrManagerApi (AppSet), QrManagerUi (AppSet)
     server3/
       apps/
-        dashboards/ OpenBao.yaml   App: vault.server3.home HTTPRoute
+        dashboards/ OpenBao.yaml   App: vault.server3.homelab.irha.cz HTTPRoute
         observability/ Prometheus.yaml, Grafana.yaml, Loki.yaml, Tempo.yaml
   k8s-manifests/
     server2/
-      cilium/              HTTPRoute: hubble.server2.home → hubble-dashboard:80
-      external-secrets/    ClusterSecretStore → remote server3 OpenBao at vault.server3.home
+      cilium/              HTTPRoute: hubble.server2.homelab.irha.cz → hubble-dashboard:80
+      cert-manager/        ExternalSecret (cloudflare-api-token), ClusterIssuer letsencrypt-staging + letsencrypt-prod (ACME DNS-01 via Cloudflare)
+      external-secrets/    ClusterSecretStore → remote server3 OpenBao at vault.server3.homelab.irha.cz
       iot/         ExternalSecret.provisioner-token.yaml (openbao-provision-token; sync-wave -1 via IotInfra)
       influxdb2/   ExternalSecret.yaml, HTTPRoute.yaml
       emqx/        ExternalSecret.yaml, HTTPRoute.yaml, IngressRouteTCP.yaml
       telegraf/    ExternalSecret.telegraf.influxdb2.yaml, ExternalSecret.telegraf.mqtt.yaml
-      external-dns/ ExternalSecret (unifi-credentials), DNSEndpoint
-      longhorn/    HTTPRoute: longhorn.server2.home → longhorn-frontend:80
+      external-dns/ ExternalSecret (unifi-credentials), DNSEndpoint server2-anchor (server2.homelab.irha.cz A record)
+      longhorn/    HTTPRoute: longhorn.server2.homelab.irha.cz → longhorn-frontend:80
       mongodb/     ExternalSecret, IngressRouteTCP, ExternalSecret.provisioner-token.yaml
       miot-bridge-api/ production/ and sandbox/ — ExternalSecret.mqtt.yaml, ExternalSecret.mongodb.yaml
       qr-manager-api/ production/ and sandbox/ — ExternalSecret.mongodb.yaml
       k8s-monitoring/ ExternalSecret.otel-auth-token.yaml (shared OTLP bearer token pulled from secret/otel-gateway/auth-token)
+      traefik/     Certificate.server2-tls.yaml → Secret server2-tls for the websecure listener
     server3/
-      cilium/              HTTPRoute: hubble.server3.home → hubble-dashboard:80
-      external-dns/        ExternalSecret (unifi-credentials), DNSEndpoint (server3.home A record)
+      cilium/              HTTPRoute: hubble.server3.homelab.irha.cz → hubble-dashboard:80
+      cert-manager/        ExternalSecret (cloudflare-api-token), ClusterIssuer letsencrypt-staging + letsencrypt-prod (ACME DNS-01 via Cloudflare)
+      external-dns/        ExternalSecret (unifi-credentials), DNSEndpoint server3-anchor (server3.homelab.irha.cz A record)
       external-secrets/    ClusterSecretStore → local OpenBao
-      longhorn/            HTTPRoute: longhorn.server3.home → longhorn-frontend:80
-      openbao/             HTTPRoute: vault.server3.home → openbao:8200
-      grafana/             ExternalSecret (grafana-admin), ExternalSecret (influxdb2-grafana), datasource ConfigMaps (prometheus/loki/tempo/influxdb2), dashboard ConfigMaps (traefik-opentelemetry, platform, loxone), HTTPRoute: grafana.server3.home
-      k8s-monitoring/      HTTPRoute: otel.server3.home → alloy-receiver:4318, IngressRouteTCP (otel gRPC :4317)
+      longhorn/            HTTPRoute: longhorn.server3.homelab.irha.cz → longhorn-frontend:80
+      openbao/             HTTPRoute: vault.server3.homelab.irha.cz → openbao:8200
+      grafana/             ExternalSecret (grafana-admin), ExternalSecret (influxdb2-grafana), datasource ConfigMaps (prometheus/loki/tempo/influxdb2), dashboard ConfigMaps (traefik-opentelemetry, platform, loxone), HTTPRoute: grafana.irha.cz
+      k8s-monitoring/      HTTPRoute: otel.server3.homelab.irha.cz → alloy-receiver:4318, IngressRouteTCP (otel gRPC :4317, plaintext)
+      traefik/             Certificate.server3-tls.yaml → Secret server3-tls for the websecure listener
 docs/             Architecture decisions, IaC guide, secrets guide, observability guide
 ```
 
@@ -209,7 +213,7 @@ kubectl apply -f gitops/argocd-manifests/Bootstrap.yaml   # meta App-of-Apps
 `Bootstrap.yaml` points at `gitops/argocd-manifests/roots/` with `directory.recurse: true` and manages every Root Application. Root Applications carry `argocd.argoproj.io/sync-wave` annotations that order them:
 
 - **wave 1** — `RootInfra` (ESO + CRDs; must precede any other app's ExternalSecret)
-- **wave 2** — `RootGateway` (Traefik + ExternalDNS) · `server3/RootDashboards` (OpenBao HTTPRoute — unblocks server2 ESO reaching `vault.server3.home`)
+- **wave 2** — `RootGateway` (Traefik + ExternalDNS) · `server3/RootDashboards` (OpenBao HTTPRoute — unblocks server2 ESO reaching `vault.server3.homelab.irha.cz`)
 - **wave 3** — `RootObservability` · `server3/RootObservability` · `RootIoT` · `RootDatabases` · `RootDashboards`
 - **wave 4** — `RootApps` (custom apps depending on MongoDB + EMQX)
 
@@ -219,7 +223,7 @@ Each Root Application discovers **ApplicationSets** in `gitops/argocd-manifests/
 
 Server3-specific singleton Applications live in `gitops/argocd-manifests/server3/apps/`:
 
-- `dashboards/OpenBao.yaml` — exposes OpenBao at `vault.server3.home` (managed by `roots/server3/RootDashboards.yaml`)
+- `dashboards/OpenBao.yaml` — exposes OpenBao at `vault.server3.homelab.irha.cz` (managed by `roots/server3/RootDashboards.yaml`)
 - `observability/` — Prometheus, Grafana, Loki, Tempo (managed by `roots/server3/RootObservability.yaml`)
 
 `ArgoCD.yaml` (self-management) lives at `gitops/argocd-manifests/ArgoCD.yaml` — not under any cluster subdirectory.

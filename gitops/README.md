@@ -23,7 +23,7 @@ gitops/
         RootDashboards.yaml    sync-wave: "2" — App-of-Apps → server3/apps/dashboards/ (OpenBao HTTPRoute)
         RootObservability.yaml sync-wave: "3" — App-of-Apps → server3/apps/observability/ (LGTM stack)
     apps/
-      infra/       ESO.yaml
+      infra/       ESO.yaml, CertManager.yaml
       gateway/     Traefik.yaml, ExternalDNS.yaml
       observability/ K8sMonitoring.yaml
       iot/         IotInfra.yaml, InfluxDB2.yaml, EMQX.yaml, Telegraf.yaml
@@ -35,6 +35,7 @@ gitops/
         dashboards/   OpenBao.yaml
         observability/ Prometheus.yaml, Grafana.yaml, Loki.yaml, Tempo.yaml
   helm-values/
+    cert-manager.yaml       shared: CRDs, DNS-01 recursive nameservers (public resolvers, bypassing the LAN split horizon)
     external-dns.yaml       shared: Unifi webhook provider, sources, policy
     external-secrets.yaml   shared: installCRDs: true
     emqx.yaml               shared: MQTT broker, Longhorn persistence, emqxConfig rules
@@ -43,36 +44,40 @@ gitops/
     mongodb.yaml            shared: standalone, existingSecret, Longhorn persistence 10Gi
     traefik.yaml            shared: hostNetwork, Gateway API provider, listeners, mqtt + mongodb entrypoints, bare-metal service
     server2/
-      external-dns.yaml     domainFilters, txtOwnerId
+      external-dns.yaml     domainFilters (irha.cz names only), txtOwnerId
       external-secrets.yaml cluster-specific overrides (currently empty)
       emqx.yaml             cluster-specific overrides (currently empty)
-      headlamp.yaml         hostname: headlamp.server2.home
+      headlamp.yaml         hostname: headlamp.server2.homelab.irha.cz
       influxdb2.yaml        cluster-specific overrides (currently empty)
       mongodb.yaml          cluster-specific overrides (currently empty)
-      traefik.yaml          dashboard hostname/IP, externalIPs, statusAddress.ip
+      traefik.yaml          dashboard hostname/IP (websecure only), websecure listener + certificateRefs, externalIPs, statusAddress.ip
     server3/
       argocd.yaml           ArgoCD helm overrides
-      external-dns.yaml     domainFilters, txtOwnerId
+      external-dns.yaml     domainFilters (irha.cz names only), txtOwnerId
       external-secrets.yaml cluster-specific overrides (currently empty)
-      headlamp.yaml         hostname: headlamp.server3.home
-      traefik.yaml          dashboard hostname/IP, externalIPs, statusAddress.ip
+      headlamp.yaml         hostname: headlamp.server3.homelab.irha.cz
+      traefik.yaml          dashboard hostname/IP (websecure only), websecure listener + certificateRefs, externalIPs, statusAddress.ip
   k8s-manifests/
     server2/
-      cilium/              HTTPRoute: hubble.server2.home → hubble-dashboard:80
-      external-dns/        ExternalSecret (unifi-credentials), DNSEndpoint (server2.home A record)
+      cilium/              HTTPRoute: hubble.server2.homelab.irha.cz → hubble-dashboard:80
+      cert-manager/        ExternalSecret (cloudflare-api-token), ClusterIssuer letsencrypt-staging + letsencrypt-prod (ACME DNS-01 via Cloudflare)
+      external-dns/        ExternalSecret (unifi-credentials), DNSEndpoint server2-anchor (server2.homelab.irha.cz A record)
       external-secrets/    ClusterSecretStore → OpenBao on server3
-      emqx/                ExternalSecret (emqx-credentials), HTTPRoute: mqtt.server2.home, IngressRouteTCP: port 1883
-      influxdb2/           ExternalSecret (admin creds from OpenBao), HTTPRoute: influx.server2.home
-      longhorn/            HTTPRoute: longhorn.server2.home → longhorn-frontend:80
+      emqx/                ExternalSecret (emqx-credentials), HTTPRoute: mqtt.server2.homelab.irha.cz, IngressRouteTCP: port 1883
+      influxdb2/           ExternalSecret (admin creds from OpenBao), HTTPRoute: influx.server2.homelab.irha.cz
+      longhorn/            HTTPRoute: longhorn.server2.homelab.irha.cz → longhorn-frontend:80
       mongodb/             ExternalSecret (root password from OpenBao), IngressRouteTCP: port 27017
+      traefik/             Certificate.server2-tls.yaml → Secret server2-tls, consumed by the websecure Gateway listener
     server3/
-      cilium/              HTTPRoute: hubble.server3.home → hubble-dashboard:80
-      external-dns/        ExternalSecret (unifi-credentials), DNSEndpoint (server3.home A record)
+      cilium/              HTTPRoute: hubble.server3.homelab.irha.cz → hubble-dashboard:80
+      cert-manager/        ExternalSecret (cloudflare-api-token), ClusterIssuer letsencrypt-staging + letsencrypt-prod (ACME DNS-01 via Cloudflare)
+      external-dns/        ExternalSecret (unifi-credentials), DNSEndpoint server3-anchor (server3.homelab.irha.cz A record)
       external-secrets/    ClusterSecretStore → local OpenBao
-      grafana/             ExternalSecret (grafana-admin), datasource ConfigMaps (prometheus/loki/tempo), HTTPRoute: grafana.server3.home
-      longhorn/            HTTPRoute: longhorn.server3.home → longhorn-frontend:80
-      openbao/             HTTPRoute: vault.server3.home → openbao:8200
-      k8s-monitoring/      HTTPRoute: otel.server3.home, IngressRouteTCP (otel gRPC :4317)
+      grafana/             ExternalSecret (grafana-admin), datasource ConfigMaps (prometheus/loki/tempo/influxdb2 ×2 over https), HTTPRoute: grafana.irha.cz
+      longhorn/            HTTPRoute: longhorn.server3.homelab.irha.cz → longhorn-frontend:80
+      openbao/             HTTPRoute: vault.server3.homelab.irha.cz → openbao:8200
+      k8s-monitoring/      HTTPRoute: otel.server3.homelab.irha.cz, IngressRouteTCP (otel gRPC :4317)
+      traefik/             Certificate.server3-tls.yaml → Secret server3-tls, consumed by the websecure Gateway listener
 ```
 
 ## App-of-apps pattern
@@ -85,7 +90,7 @@ Application-CRD health assessment is enabled by a Lua `resource.customizations` 
 |----|--------|-----|-------------|
 |1|`roots/RootInfra.yaml`|infra|ESO + CRDs — any other app's `ExternalSecret` fails to apply until these CRDs exist|
 |2|`roots/RootGateway.yaml`|gateway|Traefik installs the Gateway every HTTPRoute/TCPRoute in later waves references. ExternalDNS needs ESO (wave 1) for its Unifi secret|
-|2|`roots/server3/RootDashboards.yaml`|server3 singleton|OpenBao HTTPRoute at `vault.server3.home` — parallel with RootGateway; unblocks server2 ClusterSecretStore|
+|2|`roots/server3/RootDashboards.yaml`|server3 singleton|OpenBao HTTPRoute at `vault.server3.homelab.irha.cz` — parallel with RootGateway; unblocks server2 ClusterSecretStore|
 |3|`roots/RootObservability.yaml`|observability|k8s-monitoring — needs Traefik (wave 2) + ESO `otel-auth-token`|
 |3|`roots/server3/RootObservability.yaml`|server3 observability|Prometheus, Grafana (needs ESO admin secret), Loki, Tempo|
 |3|`roots/RootIoT.yaml`|iot|IotInfra, InfluxDB2, EMQX, Telegraf — Telegraf self-orders with resource-level sync-wave `"1"` to wait for InfluxDB2/EMQX post-sync provisioner Jobs|

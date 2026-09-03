@@ -23,9 +23,9 @@ graph LR
     end
 
     subgraph External["External endpoints<br/>via Traefik + ExternalDNS"]
-        OTelGrpc["otel.server3.home:4317<br/>(gRPC)"]
-        OTelHttp["otel.server3.home:4318<br/>(HTTP)"]
-        GrafanaExt["grafana.server3.home"]
+        OTelGrpc["otel.server3.homelab.irha.cz:4317<br/>(gRPC)"]
+        OTelHttp["otel.server3.homelab.irha.cz:4318<br/>(HTTP)"]
+        GrafanaExt["grafana.irha.cz"]
     end
 
     Traefik -->|OTLP gRPC| Alloy
@@ -173,11 +173,11 @@ Verified by POSTing a synthetic record to the live Loki 3.7.1 `/otlp/v1/logs` (H
 
 ### server1/server2 forwarding (OTLP to server3)
 
-All signals are forwarded via a single OTLP destination to `otel.server3.home:4317`. The connection is **unauthenticated plaintext gRPC**.
+All signals are forwarded via a single OTLP destination to `otel.server3.homelab.irha.cz:4317`. The connection is **unauthenticated plaintext gRPC**, and stayed that way through the TLS migration: the receiver is an `IngressRouteTCP` matching `HostSNI(*)` on its own 4317 entrypoint, so it terminates no TLS and the hostname is only ever a DNS lookup. Renaming it off `.home` did not encrypt the hop.
 
 > **Why there is no bearer token.** An earlier design sent one. It cannot work over this transport: gRPC refuses to attach per-RPC credentials to an insecure channel — `the credentials require transport level security` — so combining `tls.insecure: true` with `auth.type: bearerToken` stops the exporter from starting at all, and no telemetry leaves the cluster. Nothing is lost by dropping it, because server3's `alloy-receiver` never validated the token either: `k8s-monitoring` exposes no server-side OTLP auth. The endpoint has always relied on private-network isolation.
 >
-> To get real authentication, terminate TLS on `otel.server3.home` and then reinstate `tls.insecure: false` plus the `auth` block and `collectorCommon.alloy.envFrom`. The `otel-auth-token` ExternalSecret is left in place on server1/server2 for exactly that. Traefik ForwardAuth in front of `alloy-receiver` remains the alternative.
+> To get real authentication, terminate TLS on `otel.server3.homelab.irha.cz` and then reinstate `tls.insecure: false` plus the `auth` block and `collectorCommon.alloy.envFrom`. The `otel-auth-token` ExternalSecret is left in place on server1/server2 for exactly that. Traefik ForwardAuth in front of `alloy-receiver` remains the alternative.
 
 ## Prometheus — TSDB only
 
@@ -358,8 +358,8 @@ Two external endpoints are exposed via Traefik on server3:
 
 | Protocol | Endpoint | Traefik route |
 |----------|----------|---------------|
-| OTLP HTTP | `http://otel.server3.home` | HTTPRoute (Traefik port 80) → backend port 4318 |
-| OTLP gRPC | `otel.server3.home:4317` | IngressRouteTCP → backend port 4317 |
+| OTLP HTTP | `http://otel.server3.homelab.irha.cz` | HTTPRoute (Traefik port 80, plaintext — no 80 → 443 redirect exists) → backend port 4318 |
+| OTLP gRPC | `otel.server3.homelab.irha.cz:4317` | IngressRouteTCP → backend port 4317 |
 
 The gRPC endpoint uses raw TCP passthrough (`HostSNI(*)`), so no TLS is required from the client.
 

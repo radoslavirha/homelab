@@ -1,21 +1,26 @@
 ---
-# Prepends /r to every request arriving on the qr.home hostname.
+# Prepends /r to every request arriving on the qr.irha.cz hostname.
 #
-# PRINTED QR CODES DEPEND ON THIS OBJECT. A label reads `http://qr.home/x7k2` and is
+# PRINTED QR CODES DEPEND ON THIS OBJECT. A label reads `https://qr.irha.cz/x7k2` and is
 # resolvable only because this middleware turns that into `/r/x7k2`, which is where
 # qr-manager-api mounts its RedirectController. Delete it, rename it, or drop the
 # ExtensionRef in HTTPRoute.qr.yaml and every printed label 404s — and labels are stuck to
 # physical objects, so they cannot be reissued. This is the one thing in this directory
 # that must not be "cleaned up".
 #
+# Labels printed before 2026-09-03 encode `http://qr.home/<slug>` and are already dead:
+# stage 7 of the TLS migration retired `.home` and the record is NXDOMAIN. Nothing can be
+# done for those — the name never resolved off-LAN either. Codes minted since carry
+# qr.irha.cz, which does.
+#
 # Why the prefix lives here and not in the URL: the slug is short on purpose so the QR
 # prints tiny. Adding /r to the printed string would spend characters; adding it at the
 # gateway spends none.
 #
 # Second effect, equally deliberate: this route has no path matching of its own, so before
-# this middleware existed `qr.home/qr-codes` reached full unauthenticated CRUD and
-# `qr.home/api/docs` reached Swagger. Now every non-redirect path arrives at the app
-# prefixed (`/r/qr-codes`, `/r/api/docs`) and matches nothing — qr.home is a redirect-only
+# this middleware existed `qr.irha.cz/qr-codes` reached full unauthenticated CRUD and
+# `qr.irha.cz/api/docs` reached Swagger. Now every non-redirect path arrives at the app
+# prefixed (`/r/qr-codes`, `/r/api/docs`) and matches nothing — qr.irha.cz is a redirect-only
 # host. Admin access stays on the chart's api.<domain>/iot/qr-manager route.
 #
 # Why a rewrite and not a path match on the route itself — both alternatives were checked

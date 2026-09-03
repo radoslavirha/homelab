@@ -28,10 +28,10 @@ Every stage in `docs/iac.md` and `gitops/README.md` that requires secrets links 
 
 ## How to open an OpenBao session
 
-### When vault.server3.home is reachable (DNS + Traefik running)
+### When vault.server3.homelab.irha.cz is reachable (DNS + Traefik running)
 
 ```bash
-export BAO_ADDR=http://vault.server3.home
+export BAO_ADDR=https://vault.server3.homelab.irha.cz
 bao login <root-token>
 ```
 
@@ -246,7 +246,7 @@ See [provisioning.md](provisioning.md) for per-app scoped user provisioning via 
 
 **Required before:** observability stage on **any** cluster (k8s-monitoring on server1/server2 reads it via ESO).
 
-Shared OTLP bearer token. server1/server2 k8s-monitoring sends it as `Authorization: Bearer` on outbound OTLP to `otel.server3.home:4317`. Single value — must be identical across clusters, so the path is intentionally outside the `secret/<cluster>/…` tree.
+Shared OTLP bearer token. server1/server2 k8s-monitoring sends it as `Authorization: Bearer` on outbound OTLP to `otel.server3.homelab.irha.cz:4317`. Single value — must be identical across clusters, so the path is intentionally outside the `secret/<cluster>/…` tree.
 
 > **Note:** server3's `alloy-receiver` does **not** validate this token — the k8s-monitoring chart has no server-side OTLP auth. The endpoint is protected by private-network isolation only. See [observability.md](observability.md).
 
