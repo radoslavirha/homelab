@@ -10,7 +10,7 @@
 # expiry, and lands in the same Secret — Traefik watches it and reloads without a restart.
 #
 # SANs are per the naming decision in
-# docs/superpowers/specs/2026-09-01-tls-certificates.md#two-tiers-and-the-rule-that-separates-them.
+# docs/architecture.md#hostnames-and-tls.
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:

@@ -8,7 +8,7 @@
 # before it can apply. root-infra as a whole finishes before root-gateway (wave 2), which is
 # what the HTTPS listener on Traefik will depend on in stage 4.
 #
-# Design: docs/superpowers/specs/2026-09-01-tls-certificates.md
+# Design: docs/architecture.md -> "Hostnames and TLS"; renewal runbook in docs/observability.md
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:

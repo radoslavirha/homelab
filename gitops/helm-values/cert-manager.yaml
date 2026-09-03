@@ -1,7 +1,7 @@
 # cert-manager — shared Helm values (ACME DNS-01 via Cloudflare)
 # Upstream values.yaml: https://github.com/cert-manager/cert-manager/blob/master/deploy/charts/cert-manager/values.yaml
 # Cluster-specific overrides: gitops/helm-values/<cluster>/cert-manager.yaml
-# Design: docs/superpowers/specs/2026-09-01-tls-certificates.md
+# Design: docs/architecture.md -> "Hostnames and TLS"; renewal runbook in docs/observability.md
 
 # The chart does NOT install CRDs by default. Nothing else in this repo installs them,
 # and the ClusterIssuer in gitops/k8s-manifests/<cluster>/cert-manager/ needs them.

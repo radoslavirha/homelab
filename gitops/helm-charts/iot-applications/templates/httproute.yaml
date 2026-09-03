@@ -6,7 +6,7 @@
 {{- $refSvc := get ($application.services | default dict) $refSvcName | default dict -}}
 {{- $pathName := ternary (toString $application.ingress.pathName) $applicationName (hasKey $application.ingress "pathName") -}}
 {{/* Stage sits LEFT of the component: api.sandbox.<domain>, not sandbox.api.<domain>.
-     Three reasons, in full in docs/superpowers/specs/2026-09-01-tls-certificates.md:
+     Three reasons, summarised in docs/architecture.md -> "Hostnames and TLS":
        1. Otherwise sandbox is a subdomain of production. A cookie scoped to the
           production host api.<domain> is sent to sandbox.api.<domain>; reversed, the
           two share only the cluster parent and neither inherits from the other.
