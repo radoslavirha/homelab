@@ -1,9 +1,20 @@
 ---
 # Expose k8s-monitoring alloy-receiver gRPC (port 4317) via Traefik's otlp-grpc entrypoint.
-# Used by k8s-monitoring instances on other clusters (server1/server2) to forward
-# telemetry to the central server3 receiver over OTLP/gRPC.
-# DNS (otel.server3.homelab.irha.cz) is already registered by the sibling HTTPRoute.
-# HostSNI(*) is required for unencrypted TCP passthrough (no TLS).
+# Used by k8s-monitoring on server1 and server2 to forward telemetry to the central server3
+# receiver over OTLP/gRPC. DNS (otel.server3.homelab.irha.cz) is registered by the sibling
+# HTTPRoute.
+#
+# TLS is terminated here against server3-tls and forwarded to alloy-receiver as plaintext
+# h2c inside the cluster — gRPC without TLS *is* h2c, so the receiver needs no change and
+# holds no certificate.
+#
+# HostSNI is a real hostname, not `*`. TLS termination selects the router by the SNI the
+# client sends, and `*` also matches connections carrying no SNI — which is what a plaintext
+# connection looks like. Naming the host is what makes this endpoint encrypted-only.
+#
+# This closes the last unencrypted path on the LAN. It does NOT authenticate anyone: any
+# client that can reach 4317 and speak TLS can still inject telemetry. Real authentication
+# needs mTLS (a TLSOption with clientAuth and an internal CA) — tracked as step 9.2.
 apiVersion: traefik.io/v1alpha1
 kind: IngressRouteTCP
 metadata:
@@ -18,7 +29,9 @@ spec:
   entryPoints:
     - otlp-grpc
   routes:
-    - match: HostSNI(`*`)
+    - match: HostSNI(`otel.server3.homelab.irha.cz`)
       services:
         - name: k8s-monitoring-alloy-receiver
           port: 4317
+  tls:
+    secretName: server3-tls

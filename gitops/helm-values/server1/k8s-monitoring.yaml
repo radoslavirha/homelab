@@ -6,30 +6,31 @@ cluster:
 destinations:
   server3:
     type: otlp
-    # Plaintext gRPC, deliberately. The receiver is an IngressRouteTCP with
-    # HostSNI(`*`) on a dedicated 4317 entrypoint — it terminates no TLS, so the
-    # hostname here is a DNS lookup and nothing more. Renaming it does not make
-    # the hop encrypted; that is separate design work, see the note below.
-    url: http://otel.server3.homelab.irha.cz:4317
+    # TLS. Traefik terminates against server3-tls on the otlp-grpc entrypoint and
+    # forwards plaintext h2c to alloy-receiver inside the cluster.
+    #
+    # No scheme: Alloy's OTLP gRPC exporter takes host:port, and whether TLS is used is
+    # decided by the tls block below, not by the URL.
+    url: otel.server3.homelab.irha.cz:4317
     protocol: grpc
     tls:
-      insecure: true
+      # Verified against the public chain — the Alloy image carries the system roots and
+      # the certificate is a real Let's Encrypt one, so no ca_pem and no skip-verify.
+      insecure: false
     metrics:
       enabled: true
     logs:
       enabled: true
     traces:
       enabled: true
-    # NO auth block. gRPC refuses to attach per-RPC credentials to a plaintext
-    # channel — "the credentials require transport level security" — so
-    # tls.insecure: true and auth.type: bearerToken cannot be combined. The
-    # exporter fails to start entirely and no telemetry leaves the cluster.
+    # STILL NO auth block, and the reason has changed. The old blocker was the plaintext
+    # channel: gRPC refuses to attach per-RPC credentials to one. That is gone now.
     #
-    # Nothing is lost by dropping it: server3's alloy-receiver never validated
-    # the token (k8s-monitoring has no server-side OTLP auth), so the endpoint
-    # was always protected by private-network isolation alone.
+    # The remaining blocker is the receiving end. server3's alloy-receiver has never
+    # validated a bearer token — k8s-monitoring exposes no server-side OTLP auth — so
+    # sending one would authenticate nothing and only look like it did.
     #
-    # To have real auth, terminate TLS on otel.server3.homelab.irha.cz and reinstate:
-    #   tls: { insecure: false, ca: ... }
-    #   auth: { type: bearerToken, bearerTokenFrom: env("OTEL_AUTH_TOKEN") }
-    # plus collectorCommon.alloy.envFrom to inject the otel-auth-token secret.
+    # Real authentication here means mTLS: a Traefik TLSOption with clientAuth against an
+    # internal CA, and a client certificate for each cluster's Alloy (the destination
+    # supports tls.cert/tls.key). Tracked as step 9.2 in the TLS spec. The otel-auth-token
+    # ExternalSecret stays in place for whichever approach wins.
