@@ -39,7 +39,7 @@ apps:
       serviceRef: http
 ```
 
-deploys to: `{{ SUBDOMAIN if defined }}.{{ component }}.{{ VAR_PUBLIC_DOMAIN }}/{{ partOf }}/{{ app-name }}`
+deploys to: `{{ component }}.{{ SUBDOMAIN if defined }}.{{ VAR_PUBLIC_DOMAIN }}/{{ partOf }}/{{ app-name }}`
 
 Services are named: `{component}-{partOf}-{app}-{serviceName}` (e.g. `api-iot-my-app-http`).
 

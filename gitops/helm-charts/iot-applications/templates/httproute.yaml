@@ -5,7 +5,17 @@
 {{- $refSvcName := $application.ingress.serviceRef | default "" -}}
 {{- $refSvc := get ($application.services | default dict) $refSvcName | default dict -}}
 {{- $pathName := ternary (toString $application.ingress.pathName) $applicationName (hasKey $application.ingress "pathName") -}}
-{{- $computedHostname := printf "%s%s.%s" (include "iot-applications.subdomain" $.Values.VAR_SUBDOMAIN) $application.labels.component $.Values.VAR_PUBLIC_DOMAIN -}}
+{{/* Stage sits LEFT of the component: api.sandbox.<domain>, not sandbox.api.<domain>.
+     Three reasons, in full in docs/superpowers/specs/2026-09-01-tls-certificates.md:
+       1. Otherwise sandbox is a subdomain of production. A cookie scoped to the
+          production host api.<domain> is sent to sandbox.api.<domain>; reversed, the
+          two share only the cluster parent and neither inherits from the other.
+       2. One wildcard per STAGE (*.sandbox.<domain>) instead of one per COMPONENT.
+          Adding an app then costs nothing; before, it cost a new SAN and a reissue.
+       3. Stage is a namespace holding many components, not a property of one.
+     The subdomain helper already emits a trailing dot, and an empty VAR_SUBDOMAIN
+     still yields api.<domain> — production stays implicit. */}}
+{{- $computedHostname := printf "%s.%s%s" $application.labels.component (include "iot-applications.subdomain" $.Values.VAR_SUBDOMAIN) $.Values.VAR_PUBLIC_DOMAIN -}}
 {{- $hostname := $application.ingress.hostname | default $computedHostname -}}
 ---
 apiVersion: gateway.networking.k8s.io/v1

@@ -12,6 +12,6 @@ apps:
       config:
         content: |
           {
-              "apiBaseURL": "{{ VAR_PROTOCOL }}://{{ VAR_SUBDOMAIN }}.api.{{ VAR_PUBLIC_DOMAIN }}/iot/qr-manager",
+              "apiBaseURL": "{{ VAR_PROTOCOL }}://api.{{ VAR_SUBDOMAIN }}.{{ VAR_PUBLIC_DOMAIN }}/iot/qr-manager",
               "basePath": "/qr-manager"
           }

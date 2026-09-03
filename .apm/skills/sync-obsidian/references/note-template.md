@@ -44,7 +44,7 @@ tags: [homelab, iot]
 | Image | radoslavirha/miot-bridge:<tag> |
 | Production HTTP | http://api.server2.home/iot/miot-bridge |
 | Production UDP | 192.168.1.201:4000 |
-| Sandbox HTTP | http://sandbox.api.server2.home/iot/miot-bridge |
+| Sandbox HTTP | http://api.sandbox.server2.home/iot/miot-bridge |
 | Sandbox UDP | 192.168.1.201:4001 |
 
 ### interactive-map-feeder-api
@@ -53,7 +53,7 @@ tags: [homelab, iot]
 |-|-|
 | Image | radoslavirha/interactive-map-feeder:<tag> |
 | Production HTTP | http://api.server2.home/iot/interactive-map-feeder |
-| Sandbox HTTP | http://sandbox.api.server2.home/iot/interactive-map-feeder |
+| Sandbox HTTP | http://api.sandbox.server2.home/iot/interactive-map-feeder |
 
 ### qr-manager-api
 
@@ -61,7 +61,7 @@ tags: [homelab, iot]
 |-|-|
 | Image | ghcr.io/radoslavirha/qr-manager-api:<tag> |
 | Production HTTP | http://api.server2.home/iot/qr-manager |
-| Sandbox HTTP | http://sandbox.api.server2.home/iot/qr-manager |
+| Sandbox HTTP | http://api.sandbox.server2.home/iot/qr-manager |
 | Short URL | http://qr.home (→ production) |
 
 ### qr-manager-ui
@@ -70,7 +70,7 @@ tags: [homelab, iot]
 |-|-|
 | Image | ghcr.io/radoslavirha/qr-manager-ui:<tag> |
 | Production HTTP | http://apps.server2.home/qr-manager |
-| Sandbox HTTP | http://sandbox.apps.server2.home/qr-manager |
+| Sandbox HTTP | http://apps.sandbox.server2.home/qr-manager |
 ```
 
 ## Notes on Populating

@@ -80,7 +80,7 @@ Worked examples:
 
 ```
 production  server2  http://api.server2.home/iot/interactive-map-feeder/v1/data-sources/list
-sandbox     server2  http://sandbox.api.server2.home/iot/interactive-map-feeder/v1/data-sources/list
+sandbox     server2  http://api.sandbox.server2.home/iot/interactive-map-feeder/v1/data-sources/list
 production  server1  http://api.server1.home/iot/qr-manager/<slug>
 production  server2  http://apps.server2.home/qr-manager/
 ```

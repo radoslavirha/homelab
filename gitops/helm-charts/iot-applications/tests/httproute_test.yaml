@@ -43,7 +43,7 @@ tests:
           path: spec.hostnames[0]
           value: api.example.com
 
-  - it: should prepend subdomain when VAR_SUBDOMAIN set
+  - it: should place the stage subdomain left of the component when VAR_SUBDOMAIN set
     set:
       VAR_PUBLIC_DOMAIN: example.com
       VAR_SUBDOMAIN: staging
@@ -58,7 +58,7 @@ tests:
     asserts:
       - equal:
           path: spec.hostnames[0]
-          value: staging.api.example.com
+          value: api.staging.example.com
 
   - it: should add stripPrefix filter by default
     set:

@@ -108,13 +108,13 @@ apps:
               "dashboard.home",
               "qr.home",
               "api.server1.home",
-              "sandbox.api.server1.home",
+              "api.sandbox.server1.home",
               "apps.server1.home",
-              "sandbox.apps.server1.home",
+              "apps.sandbox.server1.home",
               "api.server2.home",
-              "sandbox.api.server2.home",
+              "api.sandbox.server2.home",
               "apps.server2.home",
-              "sandbox.apps.server2.home",
+              "apps.sandbox.server2.home",
               "otel.server3.home"
             ],
             "paths": {
