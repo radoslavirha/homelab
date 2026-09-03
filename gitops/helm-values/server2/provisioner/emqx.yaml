@@ -1,6 +1,6 @@
 global:
   cluster: server2
-  baoHost: "http://vault.server3.home"
+  baoHost: "https://vault.server3.homelab.irha.cz"
   baoTokenSecret: openbao-provision-token
 
 emqx:
