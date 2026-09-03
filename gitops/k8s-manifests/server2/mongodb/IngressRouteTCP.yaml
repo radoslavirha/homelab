@@ -10,11 +10,26 @@ metadata:
     app.kubernetes.io/part-of: mongodb
   annotations:
     argocd.argoproj.io/sync-wave: "100"
+    # traefik-proxy source resolves the target from status.loadBalancer.ingress, which is
+    # always empty for a ClusterIP Service. Give it the node IP explicitly.
+    external-dns.alpha.kubernetes.io/target: "192.168.1.201"
 spec:
   entryPoints:
     - mongodb
   routes:
-    - match: HostSNI(`*`)
+    # A real HostSNI, not `*`. TLS termination needs one: the router is selected by the SNI
+    # the client sends, and `*` matches connections that carry no SNI at all — which is what
+    # a plaintext connection looks like. Naming the host is what makes this route TLS-only.
+    - match: HostSNI(`mongodb.server2.homelab.irha.cz`)
       services:
         - name: mongodb
           port: 27017
+  # Traefik terminates TLS here and speaks plaintext to mongod inside the cluster. mongod
+  # itself is unchanged — no tlsMode, no certificate to manage on the StatefulSet.
+  #
+  # This makes 27017 TLS-only from the LAN. Compass connects with ?tls=true; a client that
+  # cannot do TLS with SNI can no longer reach MongoDB from outside the cluster. In-cluster
+  # workloads are unaffected — they use mongodb.mongodb.svc.cluster.local:27017 directly and
+  # never pass through Traefik.
+  tls:
+    secretName: server2-tls

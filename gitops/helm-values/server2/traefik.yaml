@@ -60,6 +60,19 @@ ports:
     expose:
       default: true
     exposedPort: 1883
+  # MQTT over TLS, alongside 1883 rather than replacing it. Terminated at Traefik against
+  # the cluster certificate; EMQX keeps listening plaintext behind it.
+  #
+  # Both stay open deliberately. A TLS client must send SNI for the route to match, and it
+  # is not yet established that the Loxone Miniserver and the ESP32 devices can do MQTT over
+  # TLS at all — several ESPHome/Arduino MQTT clients cannot, or cannot send SNI. Closing
+  # 1883 before that is known would take the IoT estate offline.
+  mqtts:
+    port: 8883
+    protocol: TCP
+    expose:
+      default: true
+    exposedPort: 8883
   mongodb:
     port: 27017
     protocol: TCP

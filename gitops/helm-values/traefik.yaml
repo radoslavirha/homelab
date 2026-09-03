@@ -52,7 +52,15 @@ ports:
 
 api:
   dashboard: true
-  insecure: true
+  # insecure: true would publish the API and dashboard on the `traefik` entrypoint (:8080)
+  # with no authentication. Under hostNetwork that is :8080 on every node IP — it bypasses
+  # the dashboard IngressRoute entirely, so the websecure-only route and its certificate
+  # would protect nothing while it is on. /api/http/routers hands out every hostname,
+  # backend and middleware in the cluster to anyone on the LAN.
+  #
+  # The dashboard keeps working: its IngressRoute routes to the internal `api@internal`
+  # service, which `dashboard: true` provides regardless of this switch.
+  insecure: false
 
 service:
   # ClusterIP + externalIPs is the correct pattern for bare metal.
