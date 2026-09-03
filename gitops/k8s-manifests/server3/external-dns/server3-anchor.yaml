@@ -1,0 +1,17 @@
+# Bare A record for server3.homelab.irha.cz → 192.168.1.202
+# Consumers reach server3 by bare host plus their own port — local development against the
+# MQTT broker and MongoDB, and the homelab-dashboard's cluster anchors — so no HTTPRoute
+# or IngressRoute is involved. Nothing generates this record from cluster state; it exists
+# only because this DNSEndpoint declares it.
+apiVersion: externaldns.k8s.io/v1alpha1
+kind: DNSEndpoint
+metadata:
+  name: server3-anchor
+  namespace: external-dns
+spec:
+  endpoints:
+    - dnsName: server3.homelab.irha.cz
+      recordType: A
+      recordTTL: 180
+      targets:
+        - 192.168.1.202

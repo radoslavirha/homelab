@@ -1,21 +1,15 @@
 # ExternalDNS — server3 cluster overrides
 # Shared base values: gitops/helm-values/external-dns.yaml
 
-# Manage records under server3.home and top-level .home entries (e.g. dashboard.home),
-# plus the irha.cz names this cluster owns.
+# A hostname missing from this list is ignored SILENTLY by ExternalDNS — no error, no
+# event, just a record that never appears. Apex names are listed individually; a bare
+# `irha.cz` would have all three clusters claiming the whole zone, leaving the TXT registry
+# as the only thing keeping three writers off each other's records.
 #
-# ADDITIVE, deliberately. Both name sets are live through the migration: routes carry the
-# .home and irha.cz hostnames side by side, consumers move over one at a time, and the .home
-# entries come out at stage 7. A filter that does not list a hostname makes ExternalDNS
-# ignore that hostname **silently** — no error, no event — so this has to land before any
-# route carries an irha.cz name.
-#
-# Apex names are listed individually. A bare `irha.cz` here would have all three clusters
-# claiming the whole zone, leaving the TXT registry as the only thing keeping three writers
-# off each other's records.
+# The .home entries were removed at stage 7. That stops ExternalDNS managing those names;
+# it does NOT delete the records it already wrote, because policy is upsert-only. They are
+# deleted by hand in UniFi.
 domainFilters:
-  - server3.home
-  - home
   - server3.homelab.irha.cz
   # Apex tier, per the naming decision. grafana is on the exposure spec's public list;
   # auth is Zitadel, which does not exist yet — listed now because it is already a SAN on

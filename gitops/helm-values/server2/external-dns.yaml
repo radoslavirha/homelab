@@ -1,12 +1,15 @@
 # ExternalDNS — server2 cluster overrides
 # Shared base values: gitops/helm-values/external-dns.yaml
 
-# ADDITIVE through the migration — routes carry .home and irha.cz side by side, and a
-# hostname missing from this list is ignored SILENTLY by ExternalDNS. Must land before any
-# route on this cluster carries an irha.cz name. Apex names are listed individually; a bare
-# `irha.cz` would have all three clusters claiming the whole zone.
+# A hostname missing from this list is ignored SILENTLY by ExternalDNS — no error, no
+# event, just a record that never appears. Apex names are listed individually; a bare
+# `irha.cz` would have all three clusters claiming the whole zone, leaving the TXT registry
+# as the only thing keeping three writers off each other's records.
+#
+# The .home entries were removed at stage 7. That stops ExternalDNS managing those names;
+# it does NOT delete the records it already wrote, because policy is upsert-only. They are
+# deleted by hand in UniFi.
 domainFilters:
-  - server2.home
   - server2.homelab.irha.cz
 
 # TXT registry owner ID — must be unique per cluster to avoid record conflicts

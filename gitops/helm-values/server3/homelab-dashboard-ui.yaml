@@ -29,7 +29,7 @@ apps:
     ingress:
       enabled: true
       serviceRef: http
-      hostname: dashboard.home
+      hostname: dashboard.server3.homelab.irha.cz
       pathName: ""
       stripPrefix: false
     # The Unifi host and credential are server-side only — see
@@ -102,20 +102,20 @@ apps:
             "unifi": {
               "site": "default"
             },
-            "serverPattern": "^server(\\d+)\\.home$",
-            "scheme": "http",
+            "serverPattern": "^server(\\d+)\\.homelab\\.irha\\.cz$",
+            "scheme": "https",
             "exclude": [
-              "dashboard.home",
-              "qr.home",
-              "api.server1.home",
-              "api.sandbox.server1.home",
-              "apps.server1.home",
-              "apps.sandbox.server1.home",
-              "api.server2.home",
-              "api.sandbox.server2.home",
-              "apps.server2.home",
-              "apps.sandbox.server2.home",
-              "otel.server3.home"
+              "dashboard.server3.homelab.irha.cz",
+              "qr.irha.cz",
+              "api.server1.homelab.irha.cz",
+              "api.sandbox.server1.homelab.irha.cz",
+              "apps.server1.homelab.irha.cz",
+              "apps.sandbox.server1.homelab.irha.cz",
+              "api.server2.homelab.irha.cz",
+              "api.sandbox.server2.homelab.irha.cz",
+              "apps.server2.homelab.irha.cz",
+              "apps.sandbox.server2.homelab.irha.cz",
+              "otel.server3.homelab.irha.cz"
             ],
             "paths": {
               "traefik": "/dashboard/"

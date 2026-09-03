@@ -177,8 +177,6 @@ server:
         group: gateway.networking.k8s.io
         kind: Gateway
     hostnames:
-      # Both names through the migration; the .home entry comes out at stage 7.
-      - argocd.server3.home
       - argocd.server3.homelab.irha.cz
     rules:
       - matches:
