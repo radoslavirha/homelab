@@ -3,12 +3,15 @@
 # Suffix shared by every generated hostname.
 domain: homelab.irha.cz
 
-# Scope mappings attached to every provider. These are Authentik's shipped ones —
-# `groups` arrives inside `profile`, so no custom mapping is needed.
+# Authentik's shipped scope mappings attached to every provider, used as-is.
+#
+# `profile` is NOT here: its shipped version emits `groups` -- EVERY group the user
+# belongs to, unfiltered by application, so a sandbox token names the user's
+# production groups on other clusters. The template binds a local replacement
+# instead, plus a `roles` mapping. See the mapping entries in templates/configmap.yaml.
 scopes:
   - openid
   - email
-  - profile
 
 # Name of the signing certificate. "authentik Self-signed Certificate" is created
 # by Authentik on first boot.

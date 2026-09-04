@@ -30,6 +30,78 @@ data:
     metadata:
       name: homelab - applications, groups and access bindings
     entries:
+
+      # ---------- shared scope mappings ----------
+      # Two hand-written mappings, bound to every provider below. Both exist because
+      # Authentik's shipped `profile` mapping emits a claim we cannot use as-is.
+
+      # Upstream `profile`, minus `groups`.
+      #
+      # The shipped version ends with
+      #   "groups": [group.name for group in request.user.groups.all()]
+      # -- EVERY group the user is in, unfiltered by application. Measured 2026-09-04:
+      # a qr-manager-server1-sandbox token listed the user's
+      # qr-manager-server2-production-admin membership. So the sandbox SPA is told
+      # which other clusters and stages the user can reach. Nothing needs that, and
+      # the roles mapping below supplies the same information scoped correctly.
+      #
+      # Cost of owning a copy: if Authentik adds a claim to `profile` upstream, we do
+      # not get it until someone updates this. Everything here is from OIDC Core 5.1
+      # and does not move.
+      - model: authentik_providers_oauth2.scopemapping
+        id: pm-profile
+        identifiers:
+          name: homelab profile
+        attrs:
+          scope_name: profile
+          description: "Standard profile claims. Local copy of the shipped mapping with the unfiltered `groups` claim removed."
+          expression: |
+            return delete_none_values({
+                "name": request.user.name,
+                "given_name": ak_obj_attr(request.user, "given_name", "name"),
+                "family_name": ak_obj_attr(request.user, "family_name"),
+                "preferred_username": request.user.username,
+                "nickname": request.user.username,
+                "picture": request.user.avatar,
+            })
+
+      # `roles` -- what the APIs authorize on.
+      #
+      # Groups are named <client_id>-<role>, because Authentik group names are GLOBALLY
+      # unique (verified: creating `admin` under two different parents is rejected), so
+      # the environment has to be in the name to keep the objects apart. None of that
+      # belongs in the token: an API must not authorize on "server1" or "sandbox".
+      #
+      # So this strips the client_id prefix and re-prefixes with the application's short
+      # name, taken from Application.group -- set below from the values matrix, which is
+      # the single source of truth for that spelling. Result: `qr-manager.admin`, the
+      # SAME string in every cluster and stage. Environment is enforced by aud and iss,
+      # which the verifier checks once per request, long before a route reads a role.
+      #
+      # The filter is what keeps one application's roles out of another's token.
+      #
+      # Claim name: `roles` is the name RFC 9068 (JWT Profile for OAuth 2.0 Access
+      # Tokens) uses for exactly this, borrowing it from SCIM. Not binding, but it is
+      # the closest thing to a standard spelling, so a future move to another IdP is a
+      # remapping rather than a rename.
+      - model: authentik_providers_oauth2.scopemapping
+        id: pm-roles
+        identifiers:
+          name: homelab roles
+        attrs:
+          scope_name: roles
+          description: "Application-scoped roles as <app>.<role>. Requested explicitly: scope=openid profile email roles."
+          expression: |
+            prefix = f"{provider.client_id}-"
+            app = provider.application.group or provider.client_id
+            return {
+                "roles": sorted(
+                    f"{app}.{group.name[len(prefix):]}"
+                    for group in request.user.all_groups()
+                    if group.name.startswith(prefix)
+                ),
+            }
+
     {{- range $app := .Values.applications }}
       {{- if not $app.roles }}
         {{- fail (printf "application %q has no roles: it would render an Application with no policy binding, which is open to every user" $app.name) }}
@@ -60,9 +132,29 @@ data:
         attrs:
           authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-implicit-consent]]
           invalidation_flow: !Find [authentik_flows.flow, [slug, default-provider-invalidation-flow]]
-          # global, not the per_provider default: otherwise every application issues
-          # under its own iss and each needs a trusted-issuer row in packages/auth.
-          issuer_mode: global
+          # per_provider (the model default), reversing the earlier choice of global.
+          #
+          # Every provider signs with the SAME key -- measured 2026-09-04: identical kid,
+          # and a token minted for one application verifies cleanly against another's
+          # JWKS URL. So a valid signature says "this IdP" and nothing about which
+          # application. Under `global` the only claim separating the applications is
+          # `aud`, and `aud` is an optional argument in every JWT library: omit it and
+          # nothing complains. Under `per_provider` the iss differs too --
+          # https://auth.irha.cz/application/o/<client_id>/ -- and a verifier built from
+          # a discovery document pins iss structurally, because the client IS the issuer.
+          # That makes the lazy implementation app-scoped instead of IdP-scoped.
+          #
+          # Nothing else moves: the authorize and token endpoints stay shared, and the
+          # signing key stays shared. This is a second belt, not a fix for the key --
+          # that is per-provider signing certificates, deferred.
+          #
+          # The rejected reasoning was "each application then needs its own trusted-issuer
+          # row in packages/auth". True but small: it is ONE row per deployment carrying a
+          # per-environment value, exactly like apiBaseURL already does -- not N rows per
+          # API. Landed before any verifier existed, when the cost was zero; afterwards it
+          # would mean updating every deployment's config and breaking live tokens until
+          # their next renewal.
+          issuer_mode: per_provider
           # SPA: public client, PKCE, no secret to store or rotate.
           client_type: public
           client_id: {{ $slug }}
@@ -86,6 +178,9 @@ data:
             {{- range $scope := $root.Values.scopes }}
             - !Find [authentik_providers_oauth2.scopemapping, [managed, goauthentik.io/providers/oauth2/scope-{{ $scope }}]]
             {{- end }}
+            # Local, not the shipped ones -- see the entries at the top of this blueprint.
+            - !KeyOf pm-profile
+            - !KeyOf pm-roles
           signing_key: !Find [authentik_crypto.certificatekeypair, [name, {{ $root.Values.signingKeyName }}]]
 
       - model: authentik_core.application
@@ -95,6 +190,12 @@ data:
         attrs:
           name: {{ $app.title }} ({{ $env.cluster }}/{{ $env.stage }})
           provider: !KeyOf prov-{{ $slug }}
+          # Authentik's application-grouping field, doing double duty: it groups the
+          # environments together in the user portal, AND the roles mapping reads it for
+          # the short name it puts in the claim. One spelling, from the values matrix --
+          # deriving it by stripping "-<cluster>-<stage>" off the client_id would break
+          # the day a cluster is added.
+          group: {{ $app.name }}
           # any: membership of ANY bound group grants access. Role groups ARE the
           # access groups, so there is no separate access group to keep in sync.
           policy_engine_mode: any
