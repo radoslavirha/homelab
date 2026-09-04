@@ -12,7 +12,7 @@
 domainFilters:
   - server3.homelab.irha.cz
   # Apex tier, per the naming decision. grafana is on the exposure spec's public list;
-  # auth is Zitadel, which does not exist yet — listed now because it is already a SAN on
+  # auth is Authentik, which does not exist yet — listed now because it is already a SAN on
   # server3-tls, and a missing filter entry fails silently rather than loudly.
   - grafana.irha.cz
   - auth.irha.cz

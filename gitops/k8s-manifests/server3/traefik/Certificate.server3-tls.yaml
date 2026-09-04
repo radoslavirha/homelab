@@ -41,7 +41,7 @@ spec:
     - "*.server3.homelab.irha.cz"
     # Apex tier. Listed individually and never via *.irha.cz — an apex wildcard would make
     # this one cluster's certificate valid for every name in the zone.
-    #   auth    — Zitadel. Not deployed yet; the SAN costs nothing and the iss claim is
+    #   auth    — Authentik. Not deployed yet; the SAN costs nothing and the iss claim is
     #             permanent, so it is worth having before anything depends on it.
     #   grafana — on the exposure spec's Public list.
     - auth.irha.cz

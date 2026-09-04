@@ -1,6 +1,6 @@
 # Spec — Telegraf: automatic restart on credential rotation
 
-**Status:** open · **Raised by:** `docs/superpowers/plans/2026-08-05-stakater-reloader.md` (step 4f) · **Blocks:** nothing, Telegraf works — rotation is manual
+**Status:** open · **Raised by:** the Stakater Reloader rollout (that plan has since been deleted as complete; Reloader itself is deployed on all three clusters and described in `docs/architecture.md`) · **Blocks:** nothing, Telegraf works — rotation is manual
 
 ## Problem
 

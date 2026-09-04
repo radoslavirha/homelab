@@ -153,7 +153,7 @@ device already on a trusted LAN.
    - a guest or IoT VLAN with routing to the cluster subnet
    - any exposure of this endpoint beyond the LAN
    - a second homelab site sending telemetry over a link you do not control
-3. Revisit whichever is chosen when Zitadel lands — if a service-identity story arrives with it,
+3. Revisit whichever is chosen when Authentik lands — if a service-identity story arrives with it,
    the answer for machine-to-machine auth may change shape entirely, and this endpoint should
    follow that rather than grow its own parallel scheme.
 

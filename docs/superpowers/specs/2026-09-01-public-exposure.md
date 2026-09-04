@@ -4,7 +4,7 @@
 2026-09-02 during the TLS spec's stages 0–1 — see [The trap, stated first](#the-trap-stated-first);
 they rule Option B out for now.
 
-**Gate:** nothing here happens before Zitadel **T5** — the phase where the APIs actually verify
+**Gate:** nothing here happens before Authentik **A5** — the phase where the APIs actually verify
 tokens. See [Publishing a frontend publishes its API](#publishing-a-frontend-publishes-its-api)
 for why that is a hard gate and not a preference.
 
@@ -13,7 +13,7 @@ every internal service. That work is independent, unblocked, and comes first. **
 the hostnames, permanently.** This document exists so that decision is made with the endgame in
 view, not so any of it gets built now.
 
-**Upstream:** [`iot-miniservers/…/2026-08-30-zitadel-tenancy-topology.md`](../../../../iot-miniservers/docs/superpowers/specs/2026-08-30-zitadel-tenancy-topology.md)
+**Upstream:** [`2026-09-04-authentik-tenancy-topology.md`](./2026-09-04-authentik-tenancy-topology.md)
 for the T-phases.
 
 ---
@@ -92,19 +92,19 @@ asks — which is exactly what split horizon provides.
         └──────────► same Traefik ◄─────────┘
                      same certificate
                      same HTTPRoute
-                     same Zitadel client
+                     same Authentik client
 ```
 
 The rule is not stylistic. Three things break the moment a service has two hostnames:
 
 | Breaks | Why |
 | --- | --- |
-| **Zitadel** | One `ExternalDomain` per instance, baked into the discovery document, every endpoint URL, and the **`iss` claim of every token**. Reach it at two names and the browser starts at A while discovery and tokens say B. Multiple external domains per instance are unsupported — that is what *instances* are for, and per the tenancy spec those are System-API-only |
+| **Authentik** | Absolute URLs are built from the request, so `X-Forwarded-Proto` and `Host` must arrive intact or redirects come back as `http://`. The **`iss` claim** is anchored to one external name; reach it at two and discovery disagrees with the browser. Set `issuer_mode: global` on every provider so `iss` is the host, not a per-application path |
 | **Any SPA** | Two hostnames are two **origins**. Cookies, `localStorage` and session state are per-origin, so logged in at A is not logged in at B. Both must be registered as redirect URIs, and the app must still pick one consistently |
 | **Certificates** | A second name is a second SAN on every affected certificate, for no benefit |
 
 Consequence: promoting a service from LAN-only to public becomes **one line of exposure config**.
-No rename, no new certificate, no Zitadel change, no HTTPRoute change.
+No rename, no new certificate, no Authentik change, no HTTPRoute change.
 
 ### Three clusters, and only one WAN `:443`
 
@@ -130,7 +130,7 @@ So exposing `qr-manager-ui` necessarily exposes `qr-manager-api`, which today an
 
 > **No frontend goes public before T5.**
 
-Zitadel itself may be published earlier — it authenticates its own traffic. This reverses the
+Authentik itself may be published earlier — it authenticates its own traffic. This reverses the
 naive ordering in which "TLS, then publish" precedes the auth work.
 
 ---
@@ -140,7 +140,7 @@ naive ordering in which "TLS, then publish" precedes the auth work.
 | Tier | Hostname shape | UniFi record | Public record | Services |
 | --- | --- | --- | --- | --- |
 | **LAN-only** | `<svc>.<cluster>.homelab.irha.cz` | yes | **no** | OpenBao, ArgoCD, Longhorn, Headlamp, Hubble, Traefik dashboards, EMQX, InfluxDB2, OTLP, the homelab dashboard |
-| **Public** | `<svc>.irha.cz` — apex | yes — the fast path | yes | Zitadel (`auth.`), `qr.`, Grafana, frontends **and their APIs, after T5** |
+| **Public** | `<svc>.irha.cz` — apex | yes — the fast path | yes | Authentik (`auth.`), `qr.`, Grafana, frontends **and their APIs, after A5** |
 
 **As of 2026-09-02 the tier is visible in the hostname.** The TLS spec's
 [naming decision](../../architecture.md#hostnames-and-tls)
@@ -175,9 +175,9 @@ rules.
   matter what DNS says. Opt-in by construction.
 - One tunnel per cluster solves the three-cluster problem outright.
 - Cloudflare edge brings DDoS protection, and Cloudflare Access could gate a route *in front of*
-  Zitadel if that is ever wanted.
+  Authentik if that is ever wanted.
 - **Cost:** another component to run and upgrade, and Cloudflare terminates TLS and therefore
-  sees plaintext — including Zitadel's auth traffic. Reasonable for a homelab, but it should be
+  sees plaintext — including Authentik's auth traffic. Reasonable for a homelab, but it should be
   a conscious trade.
 - It does **not** replace cert-manager. LAN traffic still terminates on Traefik and still needs
   the certificates from the TLS spec.
@@ -293,9 +293,9 @@ purpose.
 
 Not scheduled. Recorded so the TLS spec's naming decisions can be checked against it.
 
-1. Zitadel T0–T3 on LAN-resolvable HTTPS hostnames — unblocked by the TLS spec's stage 4
-2. Publish **Zitadel and `qr.irha.cz` only**. The DDNS wildcard is already gone as of 2026-09-02
-3. Zitadel T5 — the APIs verify tokens
+1. Authentik A1–A4 on LAN-resolvable HTTPS hostnames — unblocked by the TLS spec's stage 4
+2. Publish **Authentik and `qr.irha.cz` only**. The DDNS wildcard is already gone as of 2026-09-02
+3. Authentik A5 — the APIs verify tokens
 4. Publish the frontends **and the APIs they call**. Not before step 3
 
 ---
@@ -306,7 +306,7 @@ Not scheduled. Recorded so the TLS spec's naming decisions can be checked agains
       **Partially answered 2026-09-02:** the zone shows the client currently maintaining *both*
       `irha.cz` and `*.irha.cz`, so it writes at least two targets. Whether it can be narrowed to
       a specific hostname is still unread — that has to come from the UniFi UI, not the zone
-- [ ] **Cloudflare Tunnel and Zitadel forwarded headers.** Zitadel builds absolute URLs from the request; `X-Forwarded-Proto` and `Host` must arrive intact or redirects come back as `http://`
+- [ ] **Cloudflare Tunnel and Authentik forwarded headers.** Authentik builds absolute URLs from the request; `X-Forwarded-Proto` and `Host` must arrive intact or redirects come back as `http://`
 - [ ] **Tunnel → Traefik over HTTPS with `originServerName`.** Confirm Traefik serves the right certificate by SNI on that path and that the hop validates
 - [ ] **Whether Cloudflare terminating TLS on auth traffic is acceptable.** A judgement call, not a technical one, but it should be made explicitly rather than by default
 - [ ] **Grafana `root_url` / `domain`** before publishing it, or deep links and the image renderer break
