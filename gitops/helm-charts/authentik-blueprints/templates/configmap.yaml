@@ -63,6 +63,8 @@ data:
                 "preferred_username": request.user.username,
                 "nickname": request.user.username,
                 "picture": request.user.avatar,
+                # Deliberately duplicated in the roles mapping below -- see the note there.
+                "aud": [provider.client_id],
             })
 
       # `roles` -- what the APIs authorize on.
@@ -100,6 +102,21 @@ data:
                     for group in request.user.all_groups()
                     if group.name.startswith(prefix)
                 ),
+                # `aud` as a one-element ARRAY, not the bare string Authentik defaults to.
+                #
+                # Both forms are valid -- OIDC Core calls the array the general case and a
+                # bare string the permitted special case -- but the shape must not CHANGE
+                # later. It would, the day one login is allowed to call several APIs
+                # (see the `accesses` design), and code written as `aud === "<client_id>"`
+                # would have worked for months before breaking. Emitting the array from
+                # the start makes that mistake fail on the very first request instead.
+                #
+                # Duplicated into the profile mapping above on purpose: a scope mapping
+                # only runs when its scope was requested, so setting this in one place
+                # would make the SHAPE depend on the requested scope -- the same
+                # inconsistency, somewhere harder to find. Both write the same value, so
+                # the merge is idempotent.
+                "aud": [provider.client_id],
             }
 
     {{- range $app := .Values.applications }}
