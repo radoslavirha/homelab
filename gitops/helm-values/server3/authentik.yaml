@@ -1,0 +1,113 @@
+# Authentik — server3 Helm values (server3-only singleton, so no shared file;
+# same layout as homelab-dashboard-ui).
+# Upstream values.yaml: https://github.com/goauthentik/helm/blob/main/charts/authentik/values.yaml
+# ArgoCD Application: gitops/argocd-manifests/server3/apps/identity/Authentik.yaml
+# Per-cluster k8s manifests (ExternalSecret, HTTPRoute): gitops/k8s-manifests/server3/authentik/
+#
+# NOTE: authentik dropped Redis entirely in 2025.10 — tasks, caching, the embedded
+# outpost and WebSocket all moved to PostgreSQL. There is no redis key in this chart.
+# The trade is ~50% more Postgres connections, which is why the bundled Postgres
+# ships max_connections=500.
+
+# The `authentik:` block is flattened into AUTHENTIK_<KEY>__<SUBKEY> env vars and
+# written to a chart-generated Secret. Anything sensitive is layered on top of that
+# via global.envFrom below — NOT via authentik.existingSecret, which is all-or-nothing
+# and would silently discard every value in this file.
+authentik:
+  # Gunicorn sizing. Measured on this node: the chart/app default of 2 workers costs
+  # ~356Mi on the server pod against ~526Mi when left to scale with CPU count.
+  web:
+    workers: 2
+    threads: 4
+
+  postgresql:
+    # Host defaults to "{{ .Release.Name }}-postgresql" -> authentik-postgresql.
+    name: authentik
+    user: authentik
+    # password comes from the ESO secret via global.envFrom.
+
+  error_reporting:
+    enabled: false
+
+# Layer the OpenBao-backed secret over the chart's generated one. envFrom entries are
+# evaluated in order and the later wins on key collision, so this overrides the chart's
+# empty values without replacing the whole config.
+# Applies to server AND worker — the worker runs the bootstrap task and needs them too.
+global:
+  envFrom:
+    - secretRef:
+        name: authentik-secrets
+
+  # The image runs as UID 1000, so this satisfies PodSecurity `restricted` even though
+  # this cluster only enforces `baseline`. readOnlyRootFilesystem is deliberately NOT
+  # set — gunicorn needs a writable tmp, and the chart's own comment warns the
+  # containerSecurityContext block is not fully tested upstream.
+  # If pods fail to start, this block is the first thing to remove.
+  securityContext:
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+
+server:
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
+  # The chart can render a Gateway API HTTPRoute itself (server.route.main), but its
+  # own values mark that "an early beta ... subject to change". This repo hand-writes
+  # all 14 of its HTTPRoutes, so Authentik's lives in k8s-manifests alongside them.
+  ingress:
+    enabled: false
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      memory: 1Gi
+
+worker:
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
+  # Measured floor is ~467Mi and it does not respond to AUTHENTIK_WORKER__PROCESSES —
+  # that setting caps task consumers, not the supervisor processes. Do not size below this.
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      memory: 1Gi
+
+# Bundled Bitnami PostgreSQL. Off by default upstream; enabled here because every
+# datastore in this repo is chart-managed (there is not one hand-written StatefulSet
+# in gitops/k8s-manifests), and this keeps Authentik and its database on one
+# lifecycle and one targetRevision.
+# The chart overrides the image to upstream postgres:17-bookworm, which is what
+# global.security.allowInsecureImages is for — it is Bitnami's guard, not a warning
+# about the image.
+postgresql:
+  enabled: true
+  auth:
+    username: authentik
+    database: authentik
+    existingSecret: authentik-postgresql
+    secretKeys:
+      adminPasswordKey: postgres-password
+      userPasswordKey: password
+  primary:
+    persistence:
+      enabled: true
+      size: 10Gi
+      storageClass: longhorn
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        memory: 1Gi

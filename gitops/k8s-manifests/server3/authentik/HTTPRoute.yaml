@@ -1,0 +1,28 @@
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: authentik
+  namespace: authentik
+  labels:
+    app.kubernetes.io/name: authentik
+    app.kubernetes.io/component: identity-provider
+  annotations:
+    # Wave 200: after the ESO ClusterSecretStore (wave 100), like the OpenBao route.
+    argocd.argoproj.io/sync-wave: "200"
+spec:
+  parentRefs:
+    - name: traefik-gateway
+      namespace: traefik
+  # Apex tier. Already a SAN on server3-tls and already in external-dns domainFilters,
+  # so this route is the only thing needed to publish the name — ExternalDNS has
+  # gateway-httproute as a source and writes the A record from the Gateway status.
+  # NOTE: external-dns policy is upsert-only, so removing this route does NOT delete
+  # the record. Deleting auth.irha.cz by hand in UniFi is part of any rollback.
+  hostnames:
+    - auth.irha.cz
+  rules:
+    - backendRefs:
+        - name: authentik-server
+          namespace: authentik
+          port: 80

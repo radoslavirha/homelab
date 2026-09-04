@@ -1,0 +1,42 @@
+# Authentik — the homelab identity provider, serving auth.irha.cz.
+# Topology and naming: docs/superpowers/specs/2026-09-04-authentik-tenancy-topology.md
+# Staged rollout:      docs/superpowers/plans/2026-09-04-authentik-deployment.md
+#
+# Chart version and app version are 1:1 upstream, so targetRevision pins both.
+# Renovate tracks it like every other chart here.
+#
+# No ServerSideApply: the chart ships no oversized CRDs, and enabling it would
+# require ServerSideDiff=true as well or the ExternalSecrets sit OutOfSync forever
+# (see apps/infra/CertManager.yaml for that story).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: authentik-server3
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  sources:
+    - repoURL: https://charts.goauthentik.io
+      chart: authentik
+      targetRevision: 2026.8.1
+      helm:
+        releaseName: authentik
+        valueFiles:
+          - $values/gitops/helm-values/server3/authentik.yaml
+    - repoURL: https://github.com/radoslavirha/homelab
+      targetRevision: HEAD
+      ref: values
+    - repoURL: https://github.com/radoslavirha/homelab
+      targetRevision: HEAD
+      path: gitops/k8s-manifests/server3/authentik
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: authentik
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
+    automated:
+      selfHeal: true
+      prune: true
