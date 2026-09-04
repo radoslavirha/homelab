@@ -3,7 +3,8 @@
 # Staged rollout:      docs/superpowers/plans/2026-09-04-authentik-deployment.md
 #
 # Chart version and app version are 1:1 upstream, so targetRevision pins both.
-# Renovate tracks it like every other chart here.
+# Renovate is not configured in this repo yet (see plans/2026-09-03-renovate-dependency-automation.md);
+# until it is, this pin is bumped by hand like every other chart here.
 #
 # No ServerSideApply: the chart ships no oversized CRDs, and enabling it would
 # require ServerSideDiff=true as well or the ExternalSecrets sit OutOfSync forever
