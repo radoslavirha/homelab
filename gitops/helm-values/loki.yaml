@@ -57,3 +57,31 @@ lokiCanary:
 
 test:
   enabled: false
+
+# Memcached caches — sized for this homelab rather than left on datacenter defaults.
+#
+# The chart requests `allocatedMemory * 1.2` per cache pod. Upstream defaults are
+# chunksCache 8192 and resultsCache 1024, so these two pods alone reserved
+# 9830Mi + 1229Mi = 11059Mi — 88% of every memory request on server3 — against
+# 15230Mi allocatable. Measured actual usage was 1492Mi and 27Mi. Nearly 9.5Gi was
+# reserved for nothing, and the node sat at 82% requested with no room to deploy
+# anything new.
+#
+# Sizes below are set from observed working set, not guessed: chunks gets ~35% headroom
+# over the 1492Mi it had accumulated, results gets ~10x its 27Mi. Both are generous for a
+# 20Gi filesystem store on one node.
+#
+# The chunk cache matters less here than the defaults assume — `storage.type: filesystem`
+# means chunks come off local Longhorn rather than remote object storage, and the kernel
+# page cache already covers much of that. The results cache is the one that earns its keep
+# on repeated Grafana dashboard refreshes, and it is the one that was oversized 40x.
+#
+# allocatedCPU is also dropped from the 500m default on each. memcached is idle almost
+# always; 1000m of reservation across the pair was 46% of this node's CPU requests.
+chunksCache:
+  allocatedMemory: 2048
+  allocatedCPU: 100m
+
+resultsCache:
+  allocatedMemory: 256
+  allocatedCPU: 100m
