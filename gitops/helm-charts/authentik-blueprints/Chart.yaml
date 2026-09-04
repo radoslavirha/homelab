@@ -1,0 +1,9 @@
+apiVersion: v2
+name: authentik-blueprints
+description: >-
+  Renders the Authentik configuration graph — applications, OAuth2 providers, role
+  groups and access bindings — as a blueprint ConfigMap mounted by the Authentik
+  worker. The whole graph is expressed as a short matrix in values; this chart is
+  what turns it into the repetitive YAML Authentik wants.
+type: application
+version: 0.1.0

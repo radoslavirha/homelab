@@ -84,6 +84,17 @@ worker:
     limits:
       memory: 1Gi
 
+# Blueprints: the org/application/group/binding graph, declared in git and applied by
+# authentik itself. This is what replaced the provisioner-Job-vs-Terraform question the
+# Zitadel topology carried — the product reconciles its own declarative config, and
+# deletion is expressible with `state: absent` rather than being a known gap.
+#
+# Mounted at /blueprints/mounted/cm-authentik-blueprints on the WORKER only; the server
+# templates reference nothing. Source: gitops/k8s-manifests/server3/authentik/ConfigMap.blueprints.yaml
+blueprints:
+  configMaps:
+    - authentik-blueprints
+
 # Bundled Bitnami PostgreSQL. Off by default upstream; enabled here because every
 # datastore in this repo is chart-managed (there is not one hand-written StatefulSet
 # in gitops/k8s-manifests), and this keeps Authentik and its database on one

@@ -32,6 +32,16 @@ spec:
     - repoURL: https://github.com/radoslavirha/homelab
       targetRevision: HEAD
       path: gitops/k8s-manifests/server3/authentik
+    # The configuration graph — applications, providers, role groups, bindings.
+    # Rendered from a short matrix so adding an app is a few lines of values rather
+    # than ~70 lines of blueprint YAML. Same in-repo-chart pattern as the provisioner.
+    - repoURL: https://github.com/radoslavirha/homelab
+      targetRevision: HEAD
+      path: gitops/helm-charts/authentik-blueprints
+      helm:
+        releaseName: authentik-blueprints
+        valueFiles:
+          - $values/gitops/helm-values/server3/authentik-blueprints.yaml
   destination:
     server: https://kubernetes.default.svc
     namespace: authentik

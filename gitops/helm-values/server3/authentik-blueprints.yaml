@@ -1,0 +1,40 @@
+# Authentik configuration graph — THE FILE YOU EDIT.
+#
+# Rendered into a blueprint ConfigMap by gitops/helm-charts/authentik-blueprints,
+# mounted by the Authentik worker, and applied by Authentik itself. Adding an
+# application or a role is a few lines here; the chart produces the repetitive YAML.
+#
+# Topology: docs/superpowers/specs/2026-09-04-authentik-tenancy-topology.md
+#
+# Hostnames are derived as:
+#   production -> <hostPrefix>.<cluster>.homelab.irha.cz
+#   sandbox    -> <hostPrefix>.<stage>.<cluster>.homelab.irha.cz
+# unless `host` is set explicitly.
+#
+# Devices and other machine identities are NOT here: they need client secrets, which
+# do not belong in git. They arrive at A5, sourced from OpenBao via the !Env tag.
+
+applications:
+  - name: qr-manager
+    title: QR Manager
+    hostPrefix: apps
+    # qr-manager-ui is served under a path prefix, not at the host root.
+    basePath: /qr-manager
+    roles:
+      - admin
+      - reader
+    environments:
+      - { cluster: server1, stage: sandbox }
+      - { cluster: server1, stage: production }
+      - { cluster: server2, stage: sandbox }
+      - { cluster: server2, stage: production }
+
+  - name: homelab-dashboard
+    title: Homelab Dashboard
+    # Explicit host: server3 is the control cluster and does not follow the
+    # apps.<cluster> convention.
+    host: dashboard.server3.homelab.irha.cz
+    roles:
+      - viewer
+    environments:
+      - { cluster: server3, stage: production }
