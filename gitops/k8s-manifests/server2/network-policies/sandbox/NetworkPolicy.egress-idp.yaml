@@ -1,0 +1,43 @@
+# Outbound access to the identity provider (Authentik on server3).
+#
+# ── Why this needs its own rule ──────────────────────────────────────────────
+# auth.irha.cz resolves, inside the cluster, to 192.168.1.202 — server3's
+# Traefik LoadBalancer on the LAN, not a public address. NetworkPolicy.egress-internet
+# is 0.0.0.0/0 MINUS 192.168.0.0/16, so the IdP sits on the wrong side of the one
+# exclusion that rule makes. Verified 2026-09-04 from api-iot-qr-manager-api in
+# sandbox on server1: DNS resolved to 192.168.1.202 and the JWKS fetch timed out.
+#
+# The failure mode is what makes this worth a rule rather than a workaround: a
+# blocked JWKS fetch is a *hang*, not a refusal. An API that cannot reach the IdP
+# does not log "forbidden" — it stalls until whatever timeout the HTTP client
+# happens to carry, and the first place anyone looks is the token, not the firewall.
+#
+# ── Why podSelector is empty ─────────────────────────────────────────────────
+# Same argument NetworkPolicy.egress-internet.yaml makes at length: a per-app
+# selector puts the constraint in a repo the developer adding auth to an app is
+# not editing. Every API here will verify tokens against this host eventually,
+# so scoping it per app buys nothing and costs one silent timeout per new app.
+#
+# ── What it does not open ────────────────────────────────────────────────────
+# One address, one port. The rest of 192.168.0.0/16 stays denied by
+# egress-internet, and the miot devices keep their own narrow rule
+# (NetworkPolicy.egress-lan-miio.yaml, UDP/54321).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-egress-idp
+  namespace: sandbox
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - ipBlock:
+            # server3 Traefik — auth.irha.cz. Pinned by address because the
+            # cluster's DNS answer for that name IS this address; a CIDR wider
+            # than /32 would re-open the LAN this policy set deliberately closes.
+            cidr: 192.168.1.202/32
+      ports:
+        - protocol: TCP
+          port: 443
