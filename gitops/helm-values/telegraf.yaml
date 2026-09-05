@@ -62,7 +62,12 @@ config:
   processors:
     - enum:
         mapping:
-          field: "status"
+          # 'fields' (a list, globs accepted), not the singular 'field'. The singular was
+          # deprecated in Telegraf 1.35.0 and is REMOVED in 1.40.0 -- a config using it
+          # fails to load, which would take MQTT->InfluxDB2 ingest down on what looks like
+          # a routine chart patch. Upstream:
+          # https://github.com/influxdata/telegraf/blob/master/plugins/processors/enum/README.md
+          fields: ["status"]
           dest: "status_code"
           value_mappings:
             healthy: 1
