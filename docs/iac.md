@@ -394,8 +394,9 @@ When upgrading across all clusters, update each cluster's `main.tf` separately.
 
 ## State backend migration to MinIO
 
-MinIO runs on the server3 cluster, deployed by ArgoCD. The server3 cluster's own Terraform state starts
-as local files and is migrated after MinIO is live.
+**MinIO is not deployed** — there is no manifest and no ArgoCD Application for it, so nothing below has been
+performed and all clusters still keep Terraform state as local files. The plan, once MinIO exists on the
+server3 cluster: the server3 cluster's own state starts local and is migrated after MinIO is live.
 
 ### Server3 cluster migration (one-time, after MinIO is running)
 
