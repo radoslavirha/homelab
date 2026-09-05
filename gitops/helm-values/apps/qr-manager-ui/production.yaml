@@ -3,7 +3,7 @@
 apps:
   qr-manager-ui:
     image:
-      tag: "0.9.0"
+      tag: "0.10.0"
     templates:
       config:
         # Production carries the auth block BEFORE it runs an image that requires it.
