@@ -18,7 +18,18 @@ scopes:
 signingKeyName: authentik Self-signed Certificate
 
 # Token lifetimes for interactive (SPA) providers.
+#
+# accessTokenValidity was minutes=5, chosen when renewal was expected to be an
+# invisible hidden-iframe request. It is not: Authentik sets X-Frame-Options:
+# DENY, so renewal is a TOP-LEVEL navigation that reloads the SPA and loses any
+# unsaved form state. At 5 minutes that is unusable.
+#
+# 30 minutes is the contract's own "cheaper first move" (open decision 3),
+# preferred over binding offline_access because a refresh token would put a
+# long-lived credential in the one place JavaScript can reach. The cost is
+# revocation latency: removing someone from a group takes up to this long to
+# bite. For a homelab admin UI that is the right side of the trade.
 accessCodeValidity: minutes=1
-accessTokenValidity: minutes=5
+accessTokenValidity: minutes=30
 
 applications: []
