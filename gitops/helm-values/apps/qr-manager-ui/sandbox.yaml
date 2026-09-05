@@ -7,11 +7,35 @@
 apps:
   qr-manager-ui:
     image:
-      tag: "0.8.0"
+      tag: "0.7.2"
     templates:
       config:
+        # The auth block is templated, not spelled out. The ApplicationSet is a
+        # cluster x env matrix and this file is shared by server1 and server2, so a
+        # literal client_id here would hand server2 server1's Authentik application
+        # and a redirect URI for a host it is not served on — a Redirect URI Error at
+        # /authorize, on the cluster nobody was looking at.
+        #
+        # The auth design doc says "spelled out, never derived", and that rule stands:
+        # it forbids deriving the redirect URI from window.location IN THE BROWSER,
+        # where it can disagree with what the IdP registered. This is deploy-time Jinja
+        # over the same VAR_* that produce the HTTPRoute hostname, so the redirect URI
+        # cannot drift from the host the app is actually served on. apiBaseURL directly
+        # above already works this way.
+        #
+        # NAMESPACE is the release namespace, which is the stage. VAR_CLUSTER lives in
+        # gitops/helm-values/<cluster>/apps/common/values.yaml. Renders to:
+        #   qr-manager-server1-sandbox @ apps.sandbox.server1.homelab.irha.cz
+        #   qr-manager-server2-sandbox @ apps.sandbox.server2.homelab.irha.cz
         content: |
           {
               "apiBaseURL": "{{ VAR_PROTOCOL }}://api.{{ VAR_SUBDOMAIN }}.{{ VAR_PUBLIC_DOMAIN }}/iot/qr-manager",
-              "basePath": "/qr-manager"
+              "basePath": "/qr-manager",
+              "auth": {
+                  "issuer": "https://auth.irha.cz/application/o/qr-manager-{{ VAR_CLUSTER }}-{{ NAMESPACE }}/",
+                  "clientId": "qr-manager-{{ VAR_CLUSTER }}-{{ NAMESPACE }}",
+                  "scope": "openid profile email roles",
+                  "redirectUri": "{{ VAR_PROTOCOL }}://{{ COMPONENT }}.{{ VAR_SUBDOMAIN }}.{{ VAR_PUBLIC_DOMAIN }}/{{ PATH_NAME }}/callback",
+                  "postLogoutRedirectUri": "{{ VAR_PROTOCOL }}://{{ COMPONENT }}.{{ VAR_SUBDOMAIN }}.{{ VAR_PUBLIC_DOMAIN }}/{{ PATH_NAME }}/"
+              }
           }

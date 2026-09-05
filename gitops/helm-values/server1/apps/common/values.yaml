@@ -4,3 +4,8 @@
 # per route, so the .home names stop answering the moment this syncs. Covered by
 # the *.server1.homelab.irha.cz and *.sandbox.server1.homelab.irha.cz SANs on server1-tls.
 VAR_PUBLIC_DOMAIN: server1.homelab.irha.cz
+# The cluster's own name. The ApplicationSet is a cluster x env matrix and the
+# per-env values files are shared by both clusters, so this is the only thing that
+# tells an app which cluster it landed on. qr-manager-ui needs it to name its
+# Authentik application: the client_id is qr-manager-<cluster>-<stage>.
+VAR_CLUSTER: server1

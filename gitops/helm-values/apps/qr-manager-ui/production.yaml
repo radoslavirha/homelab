@@ -6,8 +6,28 @@ apps:
       tag: "0.7.2"
     templates:
       config:
+        # Production carries the auth block BEFORE it runs an image that requires it.
+        # Safe in this direction, unsafe in the other: RuntimeConfigSchema is a z.object,
+        # which strips unknown keys, so the 0.7.2 validator deployed today accepts this
+        # block and ignores it. Leaving it out is the risk — auth is required from the
+        # next release onward, so the next production image bump, on either cluster and
+        # for whatever reason, would CrashLoop the initContainer with nothing to connect
+        # it to the change that caused it.
+        #
+        # Templated for the same reason as sandbox.yaml — see the note there. Production
+        # has no VAR_SUBDOMAIN, so the hostname omits that segment entirely rather than
+        # substituting an empty one, exactly as apiBaseURL does. Renders to:
+        #   qr-manager-server1-production @ apps.server1.homelab.irha.cz
+        #   qr-manager-server2-production @ apps.server2.homelab.irha.cz
         content: |
           {
               "apiBaseURL": "{{ VAR_PROTOCOL }}://api.{{ VAR_PUBLIC_DOMAIN }}/iot/qr-manager",
-              "basePath": "/qr-manager"
+              "basePath": "/qr-manager",
+              "auth": {
+                  "issuer": "https://auth.irha.cz/application/o/qr-manager-{{ VAR_CLUSTER }}-{{ NAMESPACE }}/",
+                  "clientId": "qr-manager-{{ VAR_CLUSTER }}-{{ NAMESPACE }}",
+                  "scope": "openid profile email roles",
+                  "redirectUri": "{{ VAR_PROTOCOL }}://{{ COMPONENT }}.{{ VAR_PUBLIC_DOMAIN }}/{{ PATH_NAME }}/callback",
+                  "postLogoutRedirectUri": "{{ VAR_PROTOCOL }}://{{ COMPONENT }}.{{ VAR_PUBLIC_DOMAIN }}/{{ PATH_NAME }}/"
+              }
           }
