@@ -26,7 +26,12 @@ module "platform" {
   kubeconfig_path = "${path.root}/../credentials/kubeconfig"
   cilium_version      = "1.19.2"
   longhorn_version    = "1.11.1"
-  gateway_api_version = "1.2.1"
+  # 1.4.0, not 1.2.1: Cilium 1.19.2 installed the standard-channel CRDs at v1.4.0
+  # underneath Terraform, so the old pin no longer described any cluster. Kept on the
+  # EXPERIMENTAL channel because server3's Traefik sets providers.kubernetesGateway
+  # .experimentalChannel, which makes the chart grant it watch on tcproutes/tlsroutes --
+  # deleting those CRDs breaks its informers. Do not "tidy up" to standard-install.
+  gateway_api_version = "1.4.0"
 
   cilium_values = [
     file("${path.root}/../../helm-values/cilium.yaml"),
