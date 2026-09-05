@@ -202,6 +202,26 @@ data:
             - matching_mode: strict
               url: {{ $base }}/
               redirect_uri_type: logout
+            {{- if eq $env.stage "sandbox" }}
+            # Local development, sandbox applications only.
+            #
+            # Not a bypass: localhost is a secure context so PKCE works, the flow is
+            # the real one against the real IdP, and the token is the same token. It
+            # is the difference between developing the login and guessing at it —
+            # without this, `pnpm dev` cannot complete a login at all, because
+            # redirect matching is strict and the only registered URI is the
+            # deployed host.
+            #
+            # Deliberately absent from production: a registered loopback URI on a
+            # production client lets anything running on a developer's machine
+            # complete a production login.
+            - matching_mode: strict
+              url: http://localhost:5173/callback
+              redirect_uri_type: authorization
+            - matching_mode: strict
+              url: http://localhost:5173/
+              redirect_uri_type: logout
+            {{- end }}
           property_mappings:
             {{- range $scope := $root.Values.scopes }}
             - !Find [authentik_providers_oauth2.scopemapping, [managed, goauthentik.io/providers/oauth2/scope-{{ $scope }}]]
