@@ -108,12 +108,21 @@ tests:
           value: 4000
 
   - it: should render workload annotations on Deployment metadata for Reloader
+    # Nested form, not dotted paths: helm-unittest v1.x no longer honours backslash-escaped
+    # dots in `set` keys, and silently sets nothing instead of failing. Nested YAML sidesteps
+    # path parsing entirely -- the annotation name is a literal key. See the note at the top.
     set:
-      apps.my-app.image.repository: ghcr.io/example/my-app
-      apps.my-app.labels.component: api
-      apps.my-app.labels.partOf: iot
-      apps.my-app.ingress.enabled: false
-      apps.my-app.annotations.reloader\.stakater\.com/auto: "true"
+      apps:
+        my-app:
+          image:
+            repository: ghcr.io/example/my-app
+          labels:
+            component: api
+            partOf: iot
+          ingress:
+            enabled: false
+          annotations:
+            reloader.stakater.com/auto: "true"
     asserts:
       - equal:
           path: metadata.annotations["reloader.stakater.com/auto"]
@@ -196,13 +205,20 @@ tests:
           value: "1.24"
 
   - it: should let podAnnotations override the OTel resource attributes
+    # Nested form -- see the note on the Reloader test above.
     set:
-      apps.my-app.image.repository: ghcr.io/example/my-app
-      apps.my-app.image.tag: "1.2.3"
-      apps.my-app.labels.component: api
-      apps.my-app.labels.partOf: iot
-      apps.my-app.ingress.enabled: false
-      apps.my-app.podAnnotations.resource\.opentelemetry\.io/service\.name: overridden
+      apps:
+        my-app:
+          image:
+            repository: ghcr.io/example/my-app
+            tag: "1.2.3"
+          labels:
+            component: api
+            partOf: iot
+          ingress:
+            enabled: false
+          podAnnotations:
+            resource.opentelemetry.io/service.name: overridden
     asserts:
       - equal:
           path: spec.template.metadata.annotations["resource.opentelemetry.io/service.name"]

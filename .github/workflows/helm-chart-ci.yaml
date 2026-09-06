@@ -19,16 +19,23 @@ jobs:
         chart:
           - iot-applications
           - provisioner
+          # authentik-blueprints was missing from this matrix and had never been linted.
+          # It has no tests; the unittest step below skips charts without a tests/ directory.
+          - authentik-blueprints
     steps:
       - uses: actions/checkout@v7
 
       - name: Set up Helm
         uses: azure/setup-helm@v5
         with:
-          version: "3.13.3"
+          version: "4.2.4"
 
       - name: Install helm-unittest plugin
-        run: helm plugin install https://github.com/helm-unittest/helm-unittest --version v0.4.4
+        # --verify=false is required on Helm 4: it verifies plugin sources by default and
+        # this one publishes no signature, so the install fails without it.
+        run: |
+          helm plugin install https://github.com/helm-unittest/helm-unittest \
+            --version v1.1.2 --verify=false
 
       - name: Lint ${{ matrix.chart }}
         run: helm lint gitops/helm-charts/${{ matrix.chart }}

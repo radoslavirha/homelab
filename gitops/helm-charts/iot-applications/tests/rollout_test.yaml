@@ -131,15 +131,24 @@ tests:
           count: 1
 
   - it: should render the OTel resource annotations on the pod, workload annotations on the Rollout
+    # Nested form: helm-unittest v1.x ignores backslash-escaped dots in `set` keys and sets
+    # nothing, silently. A literal YAML key avoids path parsing altogether.
     set:
-      apps.my-app.image.repository: ghcr.io/example/my-app
-      apps.my-app.image.tag: "1.2.3"
-      apps.my-app.labels.component: api
-      apps.my-app.labels.partOf: iot
-      apps.my-app.ingress.enabled: false
-      apps.my-app.rollout.enabled: true
-      apps.my-app.rollout.strategy: canary
-      apps.my-app.annotations.reloader\.stakater\.com/auto: "true"
+      apps:
+        my-app:
+          image:
+            repository: ghcr.io/example/my-app
+            tag: "1.2.3"
+          labels:
+            component: api
+            partOf: iot
+          ingress:
+            enabled: false
+          rollout:
+            enabled: true
+            strategy: canary
+          annotations:
+            reloader.stakater.com/auto: "true"
     asserts:
       - equal:
           path: metadata.annotations["reloader.stakater.com/auto"]
