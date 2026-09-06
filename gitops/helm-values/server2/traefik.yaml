@@ -32,11 +32,8 @@ gateway:
         - name: server2-tls
 
 service:
-  # Under `spec` since chart 41.x -- see the note in gitops/helm-values/traefik.yaml.
-  # `service.externalIPs` at the old level is silently ignored, not rejected.
-  spec:
-    externalIPs:
-      - 192.168.1.201
+  externalIPs:
+    - 192.168.1.201
 
 providers:
   kubernetesGateway:
