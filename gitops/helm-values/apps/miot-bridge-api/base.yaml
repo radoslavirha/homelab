@@ -9,7 +9,7 @@ apps:
       reloader.stakater.com/auto: "true"
     image:
       repository: ghcr.io/radoslavirha/miot-bridge-api
-      tag: "0.17.0"
+      tag: "0.23.2"
       pullPolicy: Always
     replicas: 1
     serviceAccount:

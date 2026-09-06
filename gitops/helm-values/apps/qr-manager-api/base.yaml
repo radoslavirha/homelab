@@ -9,7 +9,7 @@ apps:
       reloader.stakater.com/auto: "true"
     image:
       repository: ghcr.io/radoslavirha/qr-manager-api
-      tag: "0.2.1"
+      tag: "0.6.0"
       pullPolicy: Always
     replicas: 1
     serviceAccount:
