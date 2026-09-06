@@ -52,6 +52,19 @@ minio:
 # (30k+ restarts, HTTP 404 on /loki/api/v1/status/buildinfo) before kubelet's prober_*
 # metrics made it visible. `monitoring.selfMonitoring` was dead for the same reason;
 # that feature no longer exists in the chart, so it is simply dropped.
+gateway:
+  # The chart defaults gateway.affinity to HARD pod anti-affinity on
+  # kubernetes.io/hostname. Every cluster here is single-node, so a replacement
+  # gateway pod can never be scheduled while the old one still holds the node:
+  # the RollingUpdate deadlocks with the new pod Pending/Unschedulable and the old
+  # one serving forever. That is not hypothetical -- it happened on the 13.2.0 ->
+  # 18.12.1 upgrade on 2026-09-06, and it would happen on ANY change to the
+  # gateway pod template. With replicas: 1 the anti-affinity protects nothing.
+  # `null`, not `{}` -- Helm DEEP-MERGES values, so an empty map merges over the
+  # chart's default affinity map and leaves it fully intact. Only an explicit null
+  # removes it.
+  affinity: null
+
 lokiCanary:
   enabled: false
 
