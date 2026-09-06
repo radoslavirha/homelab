@@ -69,7 +69,7 @@ module "apps" {
 
   # Check latest: helm search repo argo/argo-cd --versions
   # renovate: datasource=helm registryUrl=https://argoproj.github.io/argo-helm depName=argo-cd
-  argocd_chart_version = "9.5.2"
+  argocd_chart_version = "10.7.2"
 
   argocd_values = file("${path.root}/../../../../gitops/helm-values/server3/argocd.yaml")
 

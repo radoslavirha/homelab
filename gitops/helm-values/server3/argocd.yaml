@@ -3,6 +3,19 @@ global:
   # deliberately NOT apex tier. See the naming decision in the TLS spec.
   domain: argocd.server3.homelab.irha.cz
 
+  networkPolicy:
+    # Chart 10.0.0 flipped this default from false to true. Left at the new default it
+    # renders SIX NetworkPolicies into a namespace that currently has none — the
+    # default-deny policies in gitops/k8s-manifests/<cluster>/network-policies/ cover the
+    # production and sandbox namespaces, never argocd. Two sources of truth on the control
+    # plane is the single most likely way to lock yourself out of the tool you would need
+    # to fix it with, so this keeps the existing model: network policy stays something this
+    # repo declares explicitly, not something a chart default turns on during an upgrade.
+    #
+    # If ArgoCD should be network-policied, add it to the network-policies app deliberately
+    # and flip this in a separate, standalone change — never bundled with a version bump.
+    create: false
+
 notifications:
   argocdUrl: https://argocd.server3.homelab.irha.cz
   metrics:
