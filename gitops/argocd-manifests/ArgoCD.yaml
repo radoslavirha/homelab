@@ -1,8 +1,24 @@
 # ArgoCD self-management Application.
-# Terraform applies this once; ArgoCD owns it from then on.
-# To upgrade ArgoCD: update targetRevision below and commit — ArgoCD self-heals.
+# Terraform applies this once; ArgoCD owns the Helm release from then on.
 #
-# Chart version must match argocd_chart_version in iac/clusters/server3/apps/main.tf.
+# UPGRADING ARGOCD NEEDS THREE THINGS, and committing is only the first.
+# Corrected 2026-09-06 — this header used to say "update targetRevision below and commit —
+# ArgoCD self-heals", which is false and cost a confused debugging round.
+#
+#   1. Bump targetRevision below AND argocd_chart_version in
+#      iac/clusters/server3/apps/main.tf. They must match, or a later terraform apply
+#      reinstalls the old chart.
+#   2. Apply THIS file by hand:
+#        kubectl -n argocd apply -f gitops/argocd-manifests/ArgoCD.yaml
+#      Nothing reconciles it otherwise. No Application sources this directory — `bootstrap`
+#      watches gitops/argocd-manifests/roots/ only — and the Terraform resource that created
+#      it carries `lifecycle { ignore_changes = [yaml_body] }`
+#      (iac/modules/apps/argocd-self-manage.tf), so terraform apply will not update it
+#      either. Until this apply happens, the live Application still names the old chart and
+#      ArgoCD keeps self-healing to it, no matter what git says.
+#   3. ArgoCD then self-heals the Helm release to the new chart. Watch it with kubectl, not
+#      the UI, since the UI is restarting underneath you.
+#
 # Check latest: helm search repo argo/argo-cd --versions
 apiVersion: argoproj.io/v1alpha1
 kind: Application

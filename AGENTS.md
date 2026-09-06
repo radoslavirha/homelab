@@ -270,6 +270,7 @@ everywhere and must stay off.
 |------|---------------------------|-----------------|
 | `gitops/` | Changes `targetRevision` in git | Hard Refresh → **one** Sync in ArgoCD. There is no periodic reconciliation |
 | `iac/` | Changes a string in a `.tf` file. **Nothing else.** | `terraform apply` in that cluster's module — which for `talos_version` / `kubernetes_version` **reboots a single-control-plane node** |
+| `gitops/argocd-manifests/ArgoCD.yaml` | Changes a file **nothing reconciles** | `kubectl -n argocd apply -f` it by hand. No Application sources that directory (`bootstrap` watches `roots/` only) and the Terraform resource has `ignore_changes = [yaml_body]`, so neither GitOps nor `terraform apply` will pick it up |
 
 **The inverse is also true and catches people out: one Hard Refresh is not a contained action.**
 Refreshing any app invalidates the repo cache for the whole `repoURL`, so *every* app tracking
