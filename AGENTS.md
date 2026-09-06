@@ -271,6 +271,12 @@ everywhere and must stay off.
 | `gitops/` | Changes `targetRevision` in git | Hard Refresh → **one** Sync in ArgoCD. There is no periodic reconciliation |
 | `iac/` | Changes a string in a `.tf` file. **Nothing else.** | `terraform apply` in that cluster's module — which for `talos_version` / `kubernetes_version` **reboots a single-control-plane node** |
 
+**The inverse is also true and catches people out: one Hard Refresh is not a contained action.**
+Refreshing any app invalidates the repo cache for the whole `repoURL`, so *every* app tracking
+`HEAD` that has unsynced commits behind it will reconcile at once. On 2026-09-06 a refresh intended
+for `root-databases` alone synced nine apps and deployed a change committed days earlier. Before
+refreshing, know what is sitting unsynced: `git log` since the revision the apps report.
+
 An updated `talos_version` sitting merged in git is not installed, and only `terraform plan` will
 tell you. The same applies to `cilium_version`, `longhorn_version`, `openbao_version` and
 `gateway_api_version`. This exact drift was found live on 2026-09-05: Terraform claimed Gateway API
@@ -292,6 +298,22 @@ up to date. Add the annotation whenever you add a version variable.
 5. Upstream `values.yaml` links in `docs/architecture.md` point to the `main` branch — no link update needed on upgrade
 6. **Verify against the cluster, not the Synced badge.** A values-only change hits a stale
    multi-source cache and reads `Synced` while serving the old values — hard refresh first.
+7. **Check that the chart version actually pins the image.** Usually it does — loki `18.12.1`
+   renders `grafana/loki:3.7.7`, traefik `39.0.7` renders `traefik:v3.6.12` — so one pin covers
+   both the templates and the binary. **`mongodb` is the exception and the only Bitnami chart
+   here.** Its image block is `bitnami/mongodb:latest` in every chart version, so `targetRevision`
+   pins the YAML and says nothing about which mongod runs; the chart's advertised app version is a
+   `Chart.yaml` label that moves no binary. Confirm with:
+   `helm show values <repo>/<chart> --version <NEW> | sed -n '/^image:/,/^[a-z]/p'`
+
+   Bitnami retired its public catalog in Aug 2025: `bitnami/mongodb` now publishes only `latest`,
+   and the versioned tags moved to `bitnamilegacy/`, frozen at 8.0.9. There is no version tag to
+   pin to — a digest is the only option, and it is **deliberately not used** (upstream `latest` is
+   trusted). The practical consequence: the engine moves on the next *fresh* pull, not on a chart
+   bump. `pullPolicy: IfNotPresent` plus the node's cached layer is what holds it steady, so
+   **a node rebuild or Talos upgrade is what will move MongoDB across a release boundary**, and
+   that upgrades the on-disk data files irreversibly. Check `mongod --version` against the image
+   `latest` currently resolves to before any node-level work.
 
 ## Vault
 
