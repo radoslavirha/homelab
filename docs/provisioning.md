@@ -92,9 +92,12 @@ gitops/k8s-manifests/server2/iot/ExternalSecret.provisioner-token.yaml
 
 **One-time setup (per cluster):**
 ```bash
+# `read` and `patch` are not optional: the Jobs call `bao kv get` to decide whether a
+# credential already exists before rotating it. A create/update-only token authenticates
+# fine and then fails partway through a run.
 bao policy write server2-provisioner - <<'EOF'
-path "secret/data/server2/*" { capabilities = ["create", "update"] }
-path "secret/data/server3/influxdb2-grafana" { capabilities = ["create", "update"] }
+path "secret/data/server2/*"     { capabilities = ["create", "read", "update", "patch"] }
+path "secret/metadata/server2/*" { capabilities = ["read", "list"] }
 EOF
 
 # -orphan is mandatory: a child token is revoked together with the login/root token that
@@ -109,7 +112,7 @@ TOKEN=$(bao token create \
 bao kv put secret/server2/provisioner-token token="${TOKEN}"
 ```
 
-> **Consumer-scoped paths:** Secrets are organised by who reads them, not who writes them. The `server3/influxdb2-grafana` path is written by the server2 provisioner but lives under `server3/` because it is consumed by server3 ESO. The policy grants exactly this one cross-cluster write path — no broader access.
+> **There is no cross-cluster write path, and there never was a working one.** Earlier revisions of this document granted `secret/data/server3/<cluster>-influxdb2-grafana` so the InfluxDB2 provisioner could write the Grafana datasource token into server3's tree. No provisioner token has ever been allowed to write there — each is scoped to `secret/data/<own cluster>/*` — so every run 403'd silently while Grafana kept working off a value seeded at bootstrap. The token is now written to the provisioner's **own** cluster tree as `influxdb2-grafana`, and server3's ESO reads it from there (`key: server1/influxdb2-grafana`). See [`gitops/helm-values/server1/provisioner/influxdb2.yaml`](../gitops/helm-values/server1/provisioner/influxdb2.yaml). Do not re-add the grant.
 
 ---
 
@@ -137,11 +140,11 @@ Declared in [`gitops/helm-values/server2/provisioner/influxdb2.yaml`](../gitops/
 1. Ensures `loxone` bucket exists (14-day retention)
 2. Ensures `loxone_downsample` bucket exists (infinite retention)
 3. Ensures Flux task `Downsample Loxone` exists (10m aggregation loxone → loxone_downsample)
-4. Checks if token `grafana-read` already exists in OpenBao at `secret/server3/influxdb2-grafana` → skip if yes
+4. Checks if token `server2-grafana-read` already exists in OpenBao at `secret/server2/influxdb2-grafana` → skip if yes
 5. Creates a read-only token scoped to `loxone` + `loxone_downsample` buckets (`readBuckets`)
-6. Writes `token` to OpenBao: `secret/server3/influxdb2-grafana` (consumed by server3 Grafana)
+6. Writes `token` to OpenBao: `secret/server2/influxdb2-grafana` — this cluster's **own** tree
 
-Note: token written to a server3 path using `baoCluster: server3` in the provisioner values — see provisioner template `baoCluster` field.
+Note: this used to target `secret/server3/server2-influxdb2-grafana` via a `baoCluster: server3` override, which **no provisioner token has ever been allowed to write** — each is scoped to `secret/data/<own cluster>/*`. Every run 403'd silently while Grafana kept working off a value seeded at bootstrap. server3's ESO reads `key: server2/influxdb2-grafana` ([`ExternalSecret.server2.influxdb2.yaml`](../gitops/k8s-manifests/server3/grafana/ExternalSecret.server2.influxdb2.yaml)), so consuming it from the writer's own tree works identically. Do not reintroduce `baoCluster` here.
 
 **Job `influxdb2-provision-telegraf`** (wave 1, after loxone):
 
@@ -357,7 +360,12 @@ TOKEN=$(kubectl --context admin@<cluster> get secret openbao-provision-token -n 
 curl -s -H "X-Vault-Token: $TOKEN" https://vault.server3.homelab.irha.cz/v1/auth/token/lookup-self
 ```
 
-`{"errors":["permission denied"]}` means the token stored at `secret/<cluster>/provisioner-token` is dead. The usual cause is a token created **without `-orphan`** — it is revoked along with the login/root token that minted it.
+`{"errors":["permission denied"]}` means the token stored at `secret/<cluster>/provisioner-token` is dead. Note this test cannot tell you *why*: OpenBao answers `permission denied` for an expired token, a revoked one, and no token at all. There are two causes, and the second is the more likely one:
+
+1. **The token expired.** `-period=8760h` is **silently clamped** by the token auth mount's `max_lease_ttl`, which defaults to `768h` — so a token you asked to live a year actually dies in **32 days**, and nothing renews it. Check `expire_time` on a freshly minted token: if it is ~32 days out rather than a year, raise the mount's Maximum Lease TTL to `8760h` and re-mint. Measured on 2026-09-06: `period=31536000`, `ttl=2764553` (= 768h exactly).
+2. **The token was created without `-orphan`** — it is revoked along with the login/root token that minted it.
+
+Longer term this manual token should go away entirely; see [`superpowers/specs/2026-09-06-provisioner-token-lifecycle.md`](superpowers/specs/2026-09-06-provisioner-token-lifecycle.md).
 
 **Recovery:**
 

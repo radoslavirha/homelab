@@ -219,6 +219,10 @@ path "secret/metadata/<cluster>/*" { capabilities = ["read", "list"] }
 EOF
 
 # -orphan is mandatory — a child token dies with its parent (your login/root token).
+# -period is NOT enough on its own: it is silently clamped by the token auth mount's
+# max_lease_ttl, which defaults to 768h — so the token dies in 32 DAYS, not a year, and
+# nothing renews it. Raise the mount's Maximum Lease TTL to 8760h first, then confirm
+# `expire_time` on the new token is a year out. This caused an outage on 2026-09-06.
 PROVISIONER_TOKEN=$(bao token create \
   -policy=<cluster>-provisioner \
   -period=8760h \

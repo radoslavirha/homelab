@@ -163,7 +163,8 @@ After Terraform + OpenBao setup + `argocd cluster add` (see `docs/iac.md`):
    - `secret/<cluster>/influxdb2` (admin-password, admin-token)
    - `secret/<cluster>/emqx` (dashboard-username, dashboard-password)
    - `secret/<cluster>/mongodb` (root-password)
-   - `secret/<cluster>/provisioner-token` (long-lived write token)
+   - `secret/<cluster>/provisioner-token` (long-lived write token — mint with `-orphan`, and
+     raise the token mount's `max_lease_ttl` to `8760h` first or it silently expires in 32 days)
 
    See `docs/secrets.md` for exact `bao kv put` commands.
 
