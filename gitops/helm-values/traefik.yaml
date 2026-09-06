@@ -66,7 +66,15 @@ service:
   # ClusterIP + externalIPs is the correct pattern for bare metal.
   # LoadBalancer (default) waits for status.loadBalancer.ingress which a bare metal cluster
   # never populates, causing ArgoCD to mark the Service as Progressing forever.
-  type: ClusterIP
+  #
+  # Chart 41.x moved `type` and `externalIPs` under `service.spec`, and this rename is
+  # SILENT: unlike the root of the values file, `service` carries no
+  # additionalProperties:false, so the old spelling passes schema validation and is then
+  # discarded. Rendered against 41.4.0 with the old keys, the Service came back as
+  # LoadBalancer with no externalIPs -- i.e. exactly the failure this comment warns about,
+  # with a clean `helm template` and a green ArgoCD diff preview. Keep both under `spec`.
+  spec:
+    type: ClusterIP
 
 ingressClass:
   enabled: false
@@ -92,35 +100,43 @@ gateway:
       namespacePolicy:
         from: All
 
-logs:
-  general:
-    level: INFO
-  access:
-    enabled: true
-    # The chart default is `common` (CLF) — a plain text line. Every log panel of the
-    # Traefik dashboard runs `| json` over the line and reads Traefik's own field names
-    # (OriginStatus, RequestMethod, RequestPath, ServiceAddr), so with CLF they render
-    # empty while metrics and traces look healthy. JSON also emits `"level":"info"`,
-    # which is what makes detected_level something other than `unknown` for these lines.
-    #
-    # JSON is what carries TraceId/SpanId as well: with tracing enabled Traefik writes
-    # them into every access log record, but only in the structured formats. Those two
-    # fields are lifted into Loki structured metadata by the Traefik-scoped stage in
-    # gitops/helm-values/k8s-monitoring.yaml — that is what links an access log line to
-    # its Tempo trace, the same correlation the Winston-instrumented APIs get.
-    format: json
-    fields:
-      headers:
-        # Headers are dropped wholesale by default. The dashboard reads three of them.
-        # Loki's `| json` rewrites `-` to `_`, so `request_X-Real-Ip` is queried as
-        # `request_X_Real_Ip`. The Cf-* pair only ever populates behind Cloudflare —
-        # kept so the client-country panels work if this is ever fronted by it, and
-        # simply absent on the private network.
-        defaultmode: drop
-        names:
-          X-Real-Ip: keep
-          Cf-Connecting-Ip: keep
-          Cf-Ipcountry: keep
+# Renamed in chart 41.0.0: `logs.general` -> `log`, and `logs.access` -> a top-level
+# `accessLog`. The chart ships values.schema.json with additionalProperties:false, so the old
+# spelling is REJECTED at render time rather than silently ignored -- an unmigrated bump fails
+# the ArgoCD sync and leaves Traefik untouched, which is the safe direction.
+log:
+  level: INFO
+
+accessLog:
+  enabled: true
+  # The chart default is `common` (CLF) — a plain text line. Every log panel of the
+  # Traefik dashboard runs `| json` over the line and reads Traefik's own field names
+  # (OriginStatus, RequestMethod, RequestPath, ServiceAddr), so with CLF they render
+  # empty while metrics and traces look healthy. JSON also emits `"level":"info"`,
+  # which is what makes detected_level something other than `unknown` for these lines.
+  #
+  # JSON is what carries TraceId/SpanId as well: with tracing enabled Traefik writes
+  # them into every access log record, but only in the structured formats. Those two
+  # fields are lifted into Loki structured metadata by the Traefik-scoped stage in
+  # gitops/helm-values/k8s-monitoring.yaml — that is what links an access log line to
+  # its Tempo trace, the same correlation the Winston-instrumented APIs get.
+  format: json
+  fields:
+    headers:
+      # Headers are dropped wholesale by default. The dashboard reads three of them.
+      # Loki's `| json` rewrites `-` to `_`, so `request_X-Real-Ip` is queried as
+      # `request_X_Real_Ip`. The Cf-* pair only ever populates behind Cloudflare —
+      # kept so the client-country panels work if this is ever fronted by it, and
+      # simply absent on the private network.
+      #
+      # `defaultMode`, capital M. Chart 41.0.0 also recased this key -- 39.x spelled it
+      # `defaultmode`. It is caught by the schema rather than ignored, but the two renames
+      # travel together and only one of them is in the changelog.
+      defaultMode: drop
+      names:
+        X-Real-Ip: keep
+        Cf-Connecting-Ip: keep
+        Cf-Ipcountry: keep
 
 tracing:
   otlp:
