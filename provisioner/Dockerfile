@@ -8,6 +8,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # influx CLI — InfluxData GitHub release
+# renovate: datasource=github-releases depName=influxdata/influx-cli extractVersion=^v(?<version>.*)$
 ARG INFLUX_VERSION=2.8.0
 RUN curl -sLo /tmp/influx.tar.gz \
     "https://dl.influxdata.com/influxdb/releases/influxdb2-client-${INFLUX_VERSION}-linux-amd64.tar.gz" \
@@ -16,6 +17,7 @@ RUN curl -sLo /tmp/influx.tar.gz \
     && chmod +x /usr/local/bin/influx
 
 # bao CLI — OpenBao GitHub release
+# renovate: datasource=github-releases depName=openbao/openbao extractVersion=^v(?<version>.*)$
 ARG BAO_VERSION=2.5.3
 RUN curl -sLo /tmp/bao.tar.gz \
     "https://github.com/openbao/openbao/releases/download/v${BAO_VERSION}/bao_${BAO_VERSION}_Linux_x86_64.tar.gz" \

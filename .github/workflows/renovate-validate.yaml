@@ -1,0 +1,18 @@
+# Guards against a config edit that silently disables a manager. A manager that
+# matches nothing looks identical to "everything is up to date", which is how
+# 19 components drifted unnoticed before Renovate existed.
+name: Validate Renovate config
+
+on:
+  pull_request:
+    paths:
+      - "renovate.json5"
+      - ".github/workflows/renovate*.yaml"
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: npx --yes --package renovate -- renovate-config-validator --strict

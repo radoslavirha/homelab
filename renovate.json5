@@ -1,0 +1,134 @@
+{
+  $schema: "https://docs.renovatebot.com/renovate-schema.json",
+  extends: [
+    "config:recommended",
+    ":dependencyDashboard",
+    ":semanticCommits",
+  ],
+  timezone: "Europe/Prague",
+  schedule: ["before 06:00 on monday"],
+
+  // NOTHING gets a PR until it is ticked on the Dependency Dashboard.
+  // Renovate is a monitor here, not an author-on-sight: it lists what has moved
+  // and waits. Set repo-wide on purpose -- see the two notes below for why a
+  // merged PR is not a deployment in either half of this repo.
+  dependencyDashboardApproval: true,
+
+  // A merged PR is NOT a deployment, and this is true twice over:
+  //
+  //   gitops/  ArgoCD has no periodic reconciliation. A targetRevision bump
+  //            reaches a cluster only when a human does Hard Refresh -> Sync.
+  //
+  //   iac/     Worse: a Terraform version bump changes a string in a .tf file
+  //            and nothing else. An updated talos_version or kubernetes_version
+  //            is NOT installed by merging -- it needs `terraform apply` in that
+  //            cluster's module, which reboots a single-control-plane node. The
+  //            same goes for cilium_version, longhorn_version, openbao_version
+  //            and gateway_api_version.
+  //
+  // Automerge would turn either of those into silent git/cluster drift, which is
+  // worse than a stale version because it looks done. Never enable it.
+  automerge: false,
+  prConcurrentLimit: 6,
+  prHourlyLimit: 0,
+  rebaseWhen: "conflicted",
+  dependencyDashboard: true,
+  dependencyDashboardTitle: "Dependency Dashboard — homelab",
+
+  // Security fixes must not wait for the weekly window.
+  // Security findings are surfaced immediately and labelled, but still require a
+  // tick like everything else -- "everything must be approved" was a deliberate
+  // choice. The cost: a security fix waits for a human. Watch the dashboard.
+  vulnerabilityAlerts: {
+    enabled: true,
+    schedule: ["at any time"],
+    labels: ["security"],
+    dependencyDashboardApproval: true,
+  },
+  osvVulnerabilityAlerts: true,
+
+  // The argocd manager ships NO default file patterns. Without this it silently
+  // finds nothing, which looks identical to "everything is up to date".
+  argocd: {
+    managerFilePatterns: ["/gitops/argocd-manifests/.+\\.ya?ml$/"],
+  },
+
+  // App image tags live in base/production/sandbox.yaml, not values.yaml.
+  "helm-values": {
+    managerFilePatterns: ["/gitops/helm-values/.+\\.ya?ml$/"],
+  },
+
+  customManagers: [
+    {
+      customType: "regex",
+      description: "Terraform version variables annotated with a renovate comment",
+      managerFilePatterns: ["/iac/.+\\.tf$/"],
+      matchStrings: [
+        "#\\s*renovate:\\s*datasource=(?<datasource>[a-z-]+?)(?:\\s+registryUrl=(?<registryUrl>\\S+))?\\s+depName=(?<depName>\\S+)(?:\\s+extractVersion=(?<extractVersion>\\S+))?\\s+\\S+\\s*=\\s*\"(?<currentValue>[^\"]+)\"",
+      ],
+    },
+    {
+      customType: "regex",
+      description: "Dockerfile ARG *_VERSION annotated with a renovate comment",
+      managerFilePatterns: ["/(^|/)Dockerfile$/"],
+      matchStrings: [
+        "#\\s*renovate:\\s*datasource=(?<datasource>[a-z-]+?)\\s+depName=(?<depName>\\S+)(?:\\s+extractVersion=(?<extractVersion>\\S+))?\\s+ARG \\S+_VERSION=(?<currentValue>\\S+)",
+      ],
+    },
+  ],
+
+  packageRules: [
+    {
+      description: "Ignore this repo's own git sources — most ArgoCD Applications carry extra sources pointing at github.com/radoslavirha/homelab with targetRevision HEAD",
+      matchDatasources: ["git-tags", "git-refs"],
+      matchPackageNames: ["**radoslavirha/homelab**"],
+      enabled: false,
+    },
+    {
+      description: "The argo-cd chart version lives in ArgoCD.yaml AND server3/apps/main.tf. If they diverge, a later terraform apply silently downgrades ArgoCD. Always one PR.",
+      matchPackageNames: ["argo-cd"],
+      groupName: "argo-cd (manifest + terraform)",
+    },
+    {
+      description: "Cluster-critical: needs the wave runbooks, never a drive-by merge. Waves 3-5 are additionally blocked on backups that do not exist (2026-09-05). Approval is repo-wide now, so this rule exists for the label -- keep it, so these stay visually separable on the dashboard even if the global gate is ever relaxed.",
+      matchPackageNames: [
+        "siderolabs/talos",
+        "kubernetes/kubernetes",
+        "kubernetes-sigs/gateway-api",
+        "cilium",
+        "longhorn",
+        "openbao",
+      ],
+      dependencyDashboardApproval: true,
+      labels: ["cluster-critical"],
+    },
+    {
+      description: "Majors are a reading task, not a bump. Never grouped with anything else.",
+      matchUpdateTypes: ["major"],
+      labels: ["major-upgrade"],
+      dependencyDashboardApproval: true,
+    },
+    {
+      description: "Observability charts move together — they are verified with one probe-traffic run",
+      matchPackageNames: ["loki", "tempo", "grafana", "prometheus", "k8s-monitoring"],
+      matchUpdateTypes: ["minor", "patch"],
+      groupName: "observability stack",
+    },
+    {
+      description: "Terraform providers are low risk in isolation and verified by a single terraform plan",
+      matchManagers: ["terraform"],
+      matchUpdateTypes: ["minor", "patch"],
+      groupName: "terraform providers",
+    },
+    {
+      description: "GitHub Actions: group them",
+      matchManagers: ["github-actions"],
+      groupName: "github actions",
+    },
+    {
+      description: "telegraf 1.40 REMOVES the processors.enum 'field' option. gitops/helm-values/telegraf.yaml was migrated to 'fields' in 7f7ec2a, so this is informational -- but re-check that file before merging a 1.40 bump.",
+      matchPackageNames: ["telegraf"],
+      labels: ["check-values"],
+    },
+  ],
+}

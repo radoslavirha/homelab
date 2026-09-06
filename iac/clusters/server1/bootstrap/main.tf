@@ -41,7 +41,9 @@ module "bootstrap" {
   # cluster_vip    = ""    # set when adding a second controlplane for HA
 
   # ── Talos ──────────────────────────────────────────────────────────────────
+  # renovate: datasource=github-releases depName=siderolabs/talos
   talos_version      = "v1.12.6"
+  # renovate: datasource=github-releases depName=kubernetes/kubernetes extractVersion=^v(?<version>.*)$
   kubernetes_version = "1.35.2"
 
   # Schematic includes: siderolabs/iscsi-tools + siderolabs/util-linux-tools
