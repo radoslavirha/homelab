@@ -10,6 +10,15 @@ Personal Kubernetes homelab — three Talos Linux clusters managed as Infrastruc
 | `server2` | Experimentation | server2 — 32 GB RAM / 6 cores / 500 GB SSD |
 | `server3` | Platform services — OpenBao, ArgoCD, Authentik | server3 — 16 GB RAM / 4 cores / 256 GB SSD |
 
+## Dependency updates
+
+Renovate (Mend GitHub App) watches every pinned chart, provider, image and CLI version and lists
+what has moved on a **Dependency Dashboard** issue. It opens no pull request until an update is
+approved there, and never automerges.
+
+Merging is not deploying: `gitops/` changes need a Hard Refresh and Sync in ArgoCD, and `iac/`
+changes need `terraform apply`. See [AGENTS.md](AGENTS.md) → "Dependency monitoring (Renovate)".
+
 ## Repository structure
 
 ```

@@ -254,12 +254,44 @@ When changing any component version:
 - If an app is removed from all clusters, remove its row from the table.
 - Apps with per-cluster helm overrides must list all local values files in one row as `shared · server3` or `server1 · server2 · server3`.
 
+## Dependency monitoring (Renovate)
+
+Renovate (Mend hosted GitHub App) watches every pinned version in this repo and reports to a
+**Dependency Dashboard** issue. Config: [`renovate.json5`](renovate.json5), validated in CI by
+[`renovate-validate.yaml`](.github/workflows/renovate-validate.yaml).
+
+**It opens nothing on its own.** `dependencyDashboardApproval` is set repo-wide, so every update —
+including security ones — waits on the dashboard until a human ticks it. `automerge` is off
+everywhere and must stay off.
+
+**A merged Renovate PR is not a deployment. This is true twice, and the second is worse:**
+
+| Path | What merging actually does | What deploys it |
+|------|---------------------------|-----------------|
+| `gitops/` | Changes `targetRevision` in git | Hard Refresh → **one** Sync in ArgoCD. There is no periodic reconciliation |
+| `iac/` | Changes a string in a `.tf` file. **Nothing else.** | `terraform apply` in that cluster's module — which for `talos_version` / `kubernetes_version` **reboots a single-control-plane node** |
+
+An updated `talos_version` sitting merged in git is not installed, and only `terraform plan` will
+tell you. The same applies to `cilium_version`, `longhorn_version`, `openbao_version` and
+`gateway_api_version`. This exact drift was found live on 2026-09-05: Terraform claimed Gateway API
+`1.2.1` while all three clusters ran `1.4.0`.
+
+Terraform version variables are matched by a custom manager via `# renovate:` comment annotations
+directly above each variable — see [`iac/clusters/server1/platform/main.tf`](iac/clusters/server1/platform/main.tf).
+**A variable without its annotation is invisible to Renovate**, which looks exactly like being
+up to date. Add the annotation whenever you add a version variable.
+
 ## Upgrading a chart
 
 1. **ArgoCD-managed**: update `targetRevision` in the Application CRD under `gitops/argocd-manifests/<cluster>/apps/<stage>/<Name>.yaml`
 2. **Terraform-managed**: update the `*_version` variable in `iac/clusters/<cluster>/<stage>/main.tf`, then run `terraform apply -auto-approve`
 3. Review the diff between old and new upstream `values.yaml` against local override files to catch removed or renamed keys
-4. Upstream `values.yaml` links in `docs/architecture.md` point to the `main` branch — no link update needed on upgrade
+4. Render both versions against **this repo's** values and diff the output, not just the upstream defaults:
+   `helm template <rel> <repo>/<chart> --version <OLD|NEW> -f gitops/helm-values/<chart>.yaml -f gitops/helm-values/<cluster>/<chart>.yaml`
+   This is what catches a renamed StatefulSet orphaning a PVC, or a dropped Service port.
+5. Upstream `values.yaml` links in `docs/architecture.md` point to the `main` branch — no link update needed on upgrade
+6. **Verify against the cluster, not the Synced badge.** A values-only change hits a stale
+   multi-source cache and reads `Synced` while serving the old values — hard refresh first.
 
 ## Vault
 

@@ -379,9 +379,37 @@ Terraform reads the ArgoCD values during initial bootstrap via a relative `file(
 
 1. Update the version variable in `iac/clusters/<cluster>/<stage>/main.tf`
 2. Review the diff between old and new upstream `values.yaml` against the local override file
-3. Apply: `cd iac/clusters/<cluster>/<stage> && terraform apply -auto-approve`
+3. `terraform plan` **first**. A version bump should touch only the resource you changed — if the
+   plan wants to replace, recreate or taint anything else, stop and investigate. A provider-driven
+   replacement of a Talos machine config or a `helm_release` is a cluster outage.
+4. Apply: `cd iac/clusters/<cluster>/<stage> && terraform apply`
+5. Re-run `terraform plan` afterwards; it must come back clean, or state and reality disagree.
 
-When upgrading across all clusters, update each cluster's `main.tf` separately.
+When upgrading across all clusters, update each cluster's `main.tf` separately, in the order
+**server1 → server2 → server3**, verifying between each. server3 runs ArgoCD and the whole
+observability stack — breaking it blinds you for every other step.
+
+### Version variables are Renovate-annotated
+
+Each version variable carries a `# renovate:` comment directly above it so Renovate's custom manager
+can find it. **A variable without its annotation is invisible**, which is indistinguishable from
+being up to date. Add one whenever you add a version variable:
+
+```hcl
+# renovate: datasource=helm registryUrl=https://helm.cilium.io depName=cilium
+cilium_version = "1.19.2"
+```
+
+### Terraform state can silently stop describing reality
+
+A version variable is only a string until someone applies it, and nothing re-checks it. Found live
+on 2026-09-05: `gateway_api_version` was pinned to `1.2.1` on all three clusters while every cluster
+actually ran Gateway API `1.4.0`, installed underneath Terraform. Because the CRD install is a
+`null_resource` keyed on the variable, a taint or a lost state file would have re-applied the old
+`1.2.1` bundle over live `1.4.0` CRDs and stripped fields from Gateways and HTTPRoutes.
+
+Treat a clean `terraform plan` as the only evidence that a pinned version is real. See
+[AGENTS.md](../AGENTS.md) → "Dependency monitoring (Renovate)".
 
 ## Adding a new cluster
 
