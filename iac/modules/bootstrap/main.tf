@@ -6,11 +6,24 @@ locals {
   api_endpoint = var.cluster_vip != "" ? var.cluster_vip : var.controlplane_ips[0]
 
   installer_image = "factory.talos.dev/metal-installer/${var.talos_schematic_id}:${var.talos_version}"
+
+  # Per-node Longhorn disk, resolved positionally so the config patches below stay
+  # readable. null for a node with no dedicated disk.
+  controlplane_longhorn = [for ip in var.controlplane_ips : lookup(var.longhorn_disks, ip, null)]
+  worker_longhorn       = [for ip in var.worker_ips : lookup(var.longhorn_disks, ip, null)]
 }
 
 # ── 1. Machine secrets (CA, bootstrap token, etc.) ──────────────────────────
 resource "talos_machine_secrets" "this" {
-  talos_version = var.talos_version
+  talos_version = var.talos_secrets_contract
+
+  # Second line of defence. Even if talos_secrets_contract is edited by mistake,
+  # Terraform will not plan an update against this resource — the provider drops
+  # machine_secrets on any update, which on a single-controlplane node means
+  # losing the Talos API and etcd at once.
+  lifecycle {
+    ignore_changes = [talos_version]
+  }
 }
 
 # ── 2. Client configuration (talosconfig) ───────────────────────────────────
@@ -49,17 +62,17 @@ data "talos_machine_configuration" "controlplane" {
         }
       }),
       # Optional: mount dedicated Longhorn disk on nodes that have one.
-      lookup(var.longhorn_disks, var.controlplane_ips[count.index], "") != "" ? yamlencode({
+      local.controlplane_longhorn[count.index] != null ? yamlencode({
         machine = {
           disks = [{
-            device     = lookup(var.longhorn_disks, var.controlplane_ips[count.index], "")
-            partitions = [{ mountpoint = "/var/lib/longhorn" }]
+            device     = local.controlplane_longhorn[count.index].device
+            partitions = [{ mountpoint = local.controlplane_longhorn[count.index].mountpoint }]
           }]
           kubelet = {
             extraMounts = [{
-              destination = "/var/lib/longhorn"
+              destination = local.controlplane_longhorn[count.index].mountpoint
               type        = "bind"
-              source      = "/var/lib/longhorn"
+              source      = local.controlplane_longhorn[count.index].mountpoint
               options     = ["bind", "rshared", "rw"]
             }]
           }
@@ -93,17 +106,17 @@ data "talos_machine_configuration" "worker" {
         }
       }
     }),
-    lookup(var.longhorn_disks, var.worker_ips[count.index], "") != "" ? yamlencode({
+    local.worker_longhorn[count.index] != null ? yamlencode({
       machine = {
         disks = [{
-          device     = lookup(var.longhorn_disks, var.worker_ips[count.index], "")
-          partitions = [{ mountpoint = "/var/lib/longhorn" }]
+          device     = local.worker_longhorn[count.index].device
+          partitions = [{ mountpoint = local.worker_longhorn[count.index].mountpoint }]
         }]
         kubelet = {
           extraMounts = [{
-            destination = "/var/lib/longhorn"
+            destination = local.worker_longhorn[count.index].mountpoint
             type        = "bind"
-            source      = "/var/lib/longhorn"
+            source      = local.worker_longhorn[count.index].mountpoint
             options     = ["bind", "rshared", "rw"]
           }]
         }

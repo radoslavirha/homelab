@@ -41,8 +41,11 @@ module "bootstrap" {
   # cluster_vip    = ""    # set when adding a second controlplane for HA
 
   # ── Talos ──────────────────────────────────────────────────────────────────
+  # Frozen at the bootstrap value. NOT bumped by Renovate, NOT bumped on upgrade.
+  talos_secrets_contract = "v1.12.6"
+
   # renovate: datasource=github-releases depName=siderolabs/talos
-  talos_version      = "v1.12.6"
+  talos_version = "v1.12.6"
   # renovate: datasource=github-releases depName=kubernetes/kubernetes extractVersion=^v(?<version>.*)$
   kubernetes_version = "1.35.2"
 
@@ -58,7 +61,7 @@ module "bootstrap" {
   # ── Longhorn data disks ────────────────────────────────────────────────────
   # KINGSTON SHFS37A — dedicated SATA SSD mounted at /var/lib/longhorn
   longhorn_disks = {
-    "192.168.1.201" = "/dev/disk/by-id/wwn-0x50026b725b05e218"
+    "192.168.1.201" = { device = "/dev/disk/by-id/wwn-0x50026b725b05e218" }
   }
 
   # ── Credentials output ─────────────────────────────────────────────────────

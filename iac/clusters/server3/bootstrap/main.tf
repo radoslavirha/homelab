@@ -43,8 +43,11 @@ module "bootstrap" {
   # cluster_vip    = ""    # set when adding a second controlplane for HA
 
   # ── Talos ──────────────────────────────────────────────────────────────────
+  # Frozen at the bootstrap value. NOT bumped by Renovate, NOT bumped on upgrade.
+  talos_secrets_contract = "v1.12.6"
+
   # renovate: datasource=github-releases depName=siderolabs/talos
-  talos_version      = "v1.12.6"  # keep in sync with other clusters
+  talos_version = "v1.12.6" # keep in sync with other clusters
   # renovate: datasource=github-releases depName=kubernetes/kubernetes extractVersion=^v(?<version>.*)$
   kubernetes_version = "1.35.2"
 
@@ -57,8 +60,19 @@ module "bootstrap" {
   install_disk_selector = { wwid = "eui.0025388391b1e82e" }
 
   # ── Longhorn data disks ────────────────────────────────────────────────────
+  # No dedicated disk yet, so /var/lib/longhorn lives on the OS nvme above. That is
+  # why machine.install.wipe is dangerous on this node specifically.
+  #
+  # An SSD has been bought for this node but is not installed. When it is, it MUST
+  # NOT mount at /var/lib/longhorn — that path already holds live replica data, and
+  # mounting over it hides the data rather than migrating it. Register the new path
+  # as a second Longhorn disk, evict replicas onto it, then retire the OS-disk one.
+  #
   # longhorn_disks = {
-  #   "192.168.1.202" = ""
+  #   "192.168.1.202" = {
+  #     device     = "/dev/disk/by-id/..."   # talosctl get disks -n 192.168.1.202
+  #     mountpoint = "/var/mnt/longhorn-ssd"
+  #   }
   # }
 
   # ── Credentials output ─────────────────────────────────────────────────────

@@ -33,7 +33,7 @@ module "bootstrap" {
   source = "../../../modules/bootstrap"
 
   # ── Cluster identity ──────────────────────────────────────────────────────
-  cluster_name     = "server1"
+  cluster_name = "server1"
 
   # ── Node network ─────────────────────────────────────────────────────────
   controlplane_ips = ["192.168.1.200"]
@@ -41,8 +41,11 @@ module "bootstrap" {
   # cluster_vip    = ""    # set when adding a second controlplane for HA
 
   # ── Talos ──────────────────────────────────────────────────────────────────
+  # Frozen at the bootstrap value. NOT bumped by Renovate, NOT bumped on upgrade.
+  talos_secrets_contract = "v1.12.6"
+
   # renovate: datasource=github-releases depName=siderolabs/talos
-  talos_version      = "v1.12.6"
+  talos_version = "v1.12.6"
   # renovate: datasource=github-releases depName=kubernetes/kubernetes extractVersion=^v(?<version>.*)$
   kubernetes_version = "1.35.2"
 
@@ -57,8 +60,8 @@ module "bootstrap" {
 
   # ── Longhorn data disks ────────────────────────────────────────────────────
   # Micron MTFDDAK25 — dedicated SATA SSD mounted at /var/lib/longhorn
-  longhorn_disks  = {
-    "192.168.1.200" = "/dev/disk/by-id/wwn-0x500a0751265f9efe"
+  longhorn_disks = {
+    "192.168.1.200" = { device = "/dev/disk/by-id/wwn-0x500a0751265f9efe" }
   }
 
   # ── Credentials output ─────────────────────────────────────────────────────
