@@ -306,11 +306,13 @@ argocd cluster list   # note the SERVER URL; matches clusterServer in Applicatio
 | `controlplane_ips` | list(string) | Control-plane node IPs |
 | `worker_ips` | list(string) | Worker node IPs (empty = single-node) |
 | `cluster_vip` | string | Virtual IP for HA clusters (optional) |
-| `talos_version` | string | Talos Linux version (e.g. `v1.12.6`) |
+| `talos_secrets_contract` | string | Version contract used to **generate machine secrets**. Frozen at the bootstrap value; never bump it to upgrade Talos. Guarded by `ignore_changes` |
+| `talos_version` | string | Talos Linux version for the **installer image** (e.g. `v1.12.6`). Safe to bump; Renovate manages it |
 | `kubernetes_version` | string | Kubernetes version (e.g. `1.35.2`) |
 | `talos_schematic_id` | string | Image Factory schematic ID — controls system extensions |
 | `install_disk_selector` | map(string) | Talos `diskSelector` for OS disk (e.g. `{ wwid = "..." }`) |
-| `longhorn_disks` | map(string) | Per-node dedicated Longhorn disk paths (optional) |
+| `install_wipe` | bool | Wipe the install disk during install **and upgrade**. Default `false`; set `true` only for a deliberate clean reprovision |
+| `longhorn_disks` | map(object) | Per-node dedicated Longhorn disk: `{ device, mountpoint }`. `mountpoint` defaults to `/var/lib/longhorn` — override it on a node that already stores replicas there (optional) |
 | `credentials_dir` | string | Where to write kubeconfig + talosconfig (pass `"${path.root}/../credentials"`) |
 
 Outputs: `kubeconfig_path`, `talosconfig_path`, `cluster_endpoint`, `controlplane_nodes`, `worker_nodes`

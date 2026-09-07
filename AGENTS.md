@@ -269,7 +269,7 @@ everywhere and must stay off.
 | Path | What merging actually does | What deploys it |
 |------|---------------------------|-----------------|
 | `gitops/` | Changes `targetRevision` in git | Hard Refresh → **one** Sync in ArgoCD. There is no periodic reconciliation |
-| `iac/` | Changes a string in a `.tf` file. **Nothing else.** | `terraform apply` in that cluster's module — which for `talos_version` / `kubernetes_version` **reboots a single-control-plane node** |
+| `iac/` | Changes a string in a `.tf` file. **Nothing else.** | `terraform apply` in that cluster's module. **For `talos_version` this still does not upgrade anything** — see below |
 | `gitops/argocd-manifests/ArgoCD.yaml` | Changes a file **nothing reconciles** | `kubectl -n argocd apply -f` it by hand. No Application sources that directory (`bootstrap` watches `roots/` only) and the Terraform resource has `ignore_changes = [yaml_body]`, so neither GitOps nor `terraform apply` will pick it up |
 
 **The inverse is also true and catches people out: one Hard Refresh is not a contained action.**
@@ -282,6 +282,21 @@ An updated `talos_version` sitting merged in git is not installed, and only `ter
 tell you. The same applies to `cilium_version`, `longhorn_version`, `openbao_version` and
 `gateway_api_version`. This exact drift was found live on 2026-09-05: Terraform claimed Gateway API
 `1.2.1` while all three clusters ran `1.4.0`.
+
+**`talos_version` is worse than the others: even `terraform apply` does not install it.** The
+variable feeds exactly one place, `machine.install.image`, which the *installer* reads at install
+time. Applying a new machine config changes what a future install would use and leaves the running
+Talos version untouched — no reboot, no upgrade, and `talosctl version` still reports the old one.
+Upgrading a running node is out-of-band:
+
+```sh
+talosctl upgrade --preserve --nodes <ip> \
+  --image factory.talos.dev/metal-installer/<schematic>:<version>
+```
+
+Do **not** bump `talos_secrets_contract` to do it. That variable exists precisely so the OS version
+and the PKI generation contract can no longer move together; it is additionally protected by
+`ignore_changes`.
 
 Terraform version variables are matched by a custom manager via `# renovate:` comment annotations
 directly above each variable — see [`iac/clusters/server1/platform/main.tf`](iac/clusters/server1/platform/main.tf).
