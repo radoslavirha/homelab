@@ -62,6 +62,16 @@ apps:
                   }
               },
               "logger": {
+                  "requests": {
+                      "headers": {
+                          "redactPaths": [
+                              "authorization",
+                              "cookie",
+                              "[\"proxy-authorization\"]",
+                              "[\"x-api-key\"]"
+                          ]
+                      }
+                  },
                   "enabled": true,
                   "level": "info"
               },
