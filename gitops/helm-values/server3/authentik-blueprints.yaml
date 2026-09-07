@@ -11,6 +11,13 @@
 #   sandbox    -> <hostPrefix>.<stage>.<cluster>.homelab.irha.cz
 # unless `host` is set explicitly.
 #
+# `{ stage: local }` (no cluster) is the developer-machine environment: slug
+# <app>-local, redirect URIs on http://localhost:5173 (override with `localPort`).
+# It is a full application — own client_id, own issuer, own role groups — so local
+# development mimics a deployment instead of borrowing sandbox's client. Sandbox
+# clients therefore carry no loopback URI. A local application is revocable on its
+# own, and its token reaches only an API that explicitly trusts it.
+#
 # Devices and other machine identities are NOT here: they need client secrets, which
 # do not belong in git. They arrive at A5, sourced from OpenBao via the !Env tag.
 
@@ -28,6 +35,26 @@ applications:
       - { cluster: server1, stage: production }
       - { cluster: server2, stage: sandbox }
       - { cluster: server2, stage: production }
+      - { stage: local }
+
+  - name: miot-bridge
+    title: MIoT Bridge
+    hostPrefix: apps
+    basePath: /miot-bridge
+    # No UI today: the REST surface is operated by hand and may get a frontend
+    # later. The application exists so a caller can hold a token addressed to this
+    # API — without it there is no audience to mint for, and the API can trust
+    # nothing. `admin` is the only role because nothing yet distinguishes reading
+    # the device registry from actuating a device; that split is authorization
+    # work, not an IdP concern.
+    roles:
+      - admin
+    environments:
+      - { cluster: server1, stage: sandbox }
+      - { cluster: server1, stage: production }
+      - { cluster: server2, stage: sandbox }
+      - { cluster: server2, stage: production }
+      - { stage: local }
 
   - name: homelab-dashboard
     title: Homelab Dashboard
@@ -38,3 +65,4 @@ applications:
       - viewer
     environments:
       - { cluster: server3, stage: production }
+      - { stage: local }

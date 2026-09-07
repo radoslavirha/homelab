@@ -123,15 +123,26 @@ data:
         {{- fail (printf "application %q has no roles: it would render an Application with no policy binding, which is open to every user" $app.name) }}
       {{- end }}
       {{- range $env := $app.environments }}
-        {{- $slug := printf "%s-%s-%s" $app.name $env.cluster $env.stage }}
-        {{- $host := $app.host }}
-        {{- if not $host }}
-          {{- $host = ternary
-                (printf "%s.%s.%s" $app.hostPrefix $env.cluster $root.Values.domain)
-                (printf "%s.%s.%s.%s" $app.hostPrefix $env.stage $env.cluster $root.Values.domain)
-                (eq $env.stage "production") }}
+        {{- $isLocal := eq $env.stage "local" }}
+        {{- $slug := "" }}
+        {{- $base := "" }}
+        {{- if $isLocal }}
+          {{- if $env.cluster }}
+            {{- fail (printf "application %q has a local environment with a cluster: a developer machine is not a cluster, and the slug would be wrong" $app.name) }}
+          {{- end }}
+          {{- $slug = printf "%s-local" $app.name }}
+          {{- $base = printf "http://localhost:%v" (default 5173 $app.localPort) }}
+        {{- else }}
+          {{- $slug = printf "%s-%s-%s" $app.name $env.cluster $env.stage }}
+          {{- $host := $app.host }}
+          {{- if not $host }}
+            {{- $host = ternary
+                  (printf "%s.%s.%s" $app.hostPrefix $env.cluster $root.Values.domain)
+                  (printf "%s.%s.%s.%s" $app.hostPrefix $env.stage $env.cluster $root.Values.domain)
+                  (eq $env.stage "production") }}
+          {{- end }}
+          {{- $base = printf "https://%s%s" $host (default "" $app.basePath) }}
         {{- end }}
-        {{- $base := printf "https://%s%s" $host (default "" $app.basePath) }}
 
       # ---------- {{ $slug }} ----------
         {{- range $role := $app.roles }}
@@ -195,6 +206,23 @@ data:
             - refresh_token
           access_code_validity: {{ $root.Values.accessCodeValidity }}
           access_token_validity: {{ $root.Values.accessTokenValidity }}
+          # For a `local` environment $base is http://localhost:<port>, so these are
+          # the loopback URIs and there is no separate special case below.
+          #
+          # Local development used to be a pair of loopback URIs bolted onto every
+          # *sandbox* application. That worked, and it meant a developer machine could
+          # complete a login as a real sandbox client — the same client_id, the same
+          # audience, the same groups as the deployed sandbox. A `local` environment
+          # is its own application instead: its own client_id, its own issuer, its own
+          # role groups, revocable on its own. Sandbox clients now register only their
+          # deployed host, and a loopback URI exists on exactly the client whose entire
+          # purpose is a developer machine.
+          #
+          # Not a bypass: localhost is a secure context so PKCE works, the flow is the
+          # real one against the real IdP, and the token is a real RS256 token. What it
+          # is not is a *sandbox* token — an API that wants to accept it needs the local
+          # application as a trusted issuer row, which is exactly the point: that row
+          # lives in the developer's own config and never ships.
           redirect_uris:
             - matching_mode: strict
               url: {{ $base }}/callback
@@ -202,26 +230,6 @@ data:
             - matching_mode: strict
               url: {{ $base }}/
               redirect_uri_type: logout
-            {{- if eq $env.stage "sandbox" }}
-            # Local development, sandbox applications only.
-            #
-            # Not a bypass: localhost is a secure context so PKCE works, the flow is
-            # the real one against the real IdP, and the token is the same token. It
-            # is the difference between developing the login and guessing at it —
-            # without this, `pnpm dev` cannot complete a login at all, because
-            # redirect matching is strict and the only registered URI is the
-            # deployed host.
-            #
-            # Deliberately absent from production: a registered loopback URI on a
-            # production client lets anything running on a developer's machine
-            # complete a production login.
-            - matching_mode: strict
-              url: http://localhost:5173/callback
-              redirect_uri_type: authorization
-            - matching_mode: strict
-              url: http://localhost:5173/
-              redirect_uri_type: logout
-            {{- end }}
           property_mappings:
             {{- range $scope := $root.Values.scopes }}
             - !Find [authentik_providers_oauth2.scopemapping, [managed, goauthentik.io/providers/oauth2/scope-{{ $scope }}]]
@@ -236,7 +244,7 @@ data:
         identifiers:
           slug: {{ $slug }}
         attrs:
-          name: {{ $app.title }} ({{ $env.cluster }}/{{ $env.stage }})
+          name: {{ $app.title }} ({{ if $isLocal }}local{{ else }}{{ $env.cluster }}/{{ $env.stage }}{{ end }})
           provider: !KeyOf prov-{{ $slug }}
           # Authentik's application-grouping field, doing double duty: it groups the
           # environments together in the user portal, AND the roles mapping reads it for
