@@ -68,6 +68,24 @@ variable "talos_schematic_id" {
   description = "Talos Image Factory schematic ID (controls which system extensions are baked in)."
 }
 
+# ── OS install behaviour ─────────────────────────────────────────────────────
+# machine.install.wipe tells the installer to wipe the target disk. Talos applies
+# .machine.install "during install/upgrade" -- it is NOT dormant until a manual
+# reinstall, so this fires on an upgrade, a node replacement or a recovery too.
+#
+# A wipe takes STATE and EPHEMERAL on the install disk: etcd, the machine identity
+# and the image cache, on every node. On server3 it also takes /var/lib/longhorn,
+# which has no dedicated disk yet.
+#
+# Default false, deliberately. Wiping only matters when installing onto a disk that
+# already holds something; on a genuinely empty disk it changes nothing. Set it true
+# explicitly, for one apply, when intentionally reprovisioning a node from scratch.
+variable "install_wipe" {
+  type        = bool
+  description = "Wipe the install disk during install/upgrade. Leave false on any node holding data you want to keep; set true only for a deliberate clean reprovision."
+  default     = false
+}
+
 # ── OS install disk ──────────────────────────────────────────────────────────
 # Selector passed to machine.install.diskSelector in the Talos machine config.
 # Keys map directly to Talos diskSelector fields (type, model, wwid, etc.).

@@ -57,7 +57,7 @@ data "talos_machine_configuration" "controlplane" {
           install = {
             image        = local.installer_image
             diskSelector = var.install_disk_selector
-            wipe         = true
+            wipe         = var.install_wipe
           }
         }
       }),
@@ -102,7 +102,7 @@ data "talos_machine_configuration" "worker" {
         install = {
           image        = local.installer_image
           diskSelector = var.install_disk_selector
-          wipe         = true
+          wipe         = var.install_wipe
         }
       }
     }),
