@@ -28,3 +28,4 @@ apm_modules/
 .github/skills
 
 docs/superpowers/plans
+.env
