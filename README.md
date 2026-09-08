@@ -30,6 +30,7 @@ docs/         Architecture decisions and operational guides
 See [docs/iac.md](docs/iac.md) for Terraform module usage, bootstrap sequence, and state backend migration.
 See [docs/architecture.md](docs/architecture.md) for multi-cluster decisions and the future roadmap.
 See [docs/observability.md](docs/observability.md) for the LGTM stack architecture, OTel pipeline, and Grafana datasource correlations.
+See [docs/identity.md](docs/identity.md) for the Authentik object model, the application/role matrix, and token claims.
 
 ## Quick start
 

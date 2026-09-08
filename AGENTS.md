@@ -37,6 +37,12 @@ iac/
     server3/      bootstrap/ platform/ vault/ apps/ helm-values/
 gitops/
   helm-charts/
+    authentik-blueprints/   renders the Authentik configuration graph (applications, OAuth2 providers,
+                            role groups, policy bindings) from the matrix in
+                            helm-values/server3/authentik-blueprints.yaml. Roles are a LADDER:
+                            `{ name: admin, inherits: editor }` becomes Authentik group parentage, and
+                            membership flows UPWARD, so admin is the CHILD of editor and an admin-only
+                            member gets all three roles in the claim. See docs/identity.md.
     provisioner/            reusable PostSync provisioner Jobs chart (InfluxDB2, EMQX, MongoDB)
     iot-applications/       reusable chart for custom apps (Deployment/Rollout, Services, HTTPRoute,
                             Jinja2 config ConfigMap). Per-app `annotations` land on the WORKLOAD
@@ -444,6 +450,29 @@ For other apps (manual):
 3. Add raw manifests to `gitops/k8s-manifests/<cluster>/<name>/` if needed
 4. Add a row to the technology stack table in `docs/architecture.md` with all required columns (see App documentation rules above)
 5. Update `docs/iot-miniservers-setup/CLAUDE-app-template.md` is not needed for non-iot-miniservers apps
+
+## Adding an Authentik application or role
+
+Applications, providers, role groups and policy bindings are **generated**, never clicked together in
+the UI. Edit the matrix only:
+
+1. Add or edit an entry in `gitops/helm-values/server3/authentik-blueprints.yaml` — `name`, `title`,
+   `hostPrefix`/`host`, optional `basePath`, `roles`, and one `environments` entry per cluster+stage
+   (plus `{ stage: local }` for a developer machine).
+2. Roles are a ladder, written most-privileged first:
+   `- name: admin` / `inherits: editor`, `- name: editor` / `inherits: reader`, `- name: reader`.
+   A bare string is a role with no parent. The chart `fail`s on a dangling `inherits`, a cycle, a
+   self-inheriting role, a duplicate name, or an application with no roles at all.
+3. `helm template gitops/helm-charts/authentik-blueprints -f gitops/helm-values/server3/authentik-blueprints.yaml`
+   to check it renders before pushing.
+4. Hard Refresh + Sync `authentik-server3` in ArgoCD, then wait ~45s for the worker to apply the
+   blueprint.
+5. Add users to the new groups in the Authentik UI — memberships are deliberately not in git.
+
+**Blueprints do not prune.** A role removed or renamed in values leaves its group, its members and its
+policy binding in place; delete the old group in the UI or it keeps granting access.
+
+Full model, token claims and gotchas: [docs/identity.md](docs/identity.md).
 
 ## State backend migration (MinIO)
 

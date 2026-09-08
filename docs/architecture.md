@@ -20,6 +20,8 @@ Multi-cluster Kubernetes homelab: three Talos Linux nodes managed with a shared 
 | [Longhorn](https://longhorn.io/) | Distributed block storage | all | Terraform `platform` | [longhorn](https://artifacthub.io/packages/helm/longhorn/longhorn) | [shared](../iac/clusters/helm-values/longhorn.yaml) · [server1](../iac/clusters/server1/helm-values/longhorn.yaml) · [server2](../iac/clusters/server2/helm-values/longhorn.yaml) · [server3](../iac/clusters/server3/helm-values/longhorn.yaml) | [values.yaml](https://github.com/longhorn/longhorn/blob/master/chart/values.yaml) |
 | [OpenBao](https://openbao.org/) | Secrets management; central backend for all clusters | server3 | Terraform `vault` | [openbao](https://artifacthub.io/packages/helm/openbao/openbao) | [server3](../iac/clusters/server3/helm-values/openbao.yaml) | [values.yaml](https://github.com/openbao/openbao-helm/blob/main/charts/openbao/values.yaml) |
 | [ArgoCD](https://argoproj.github.io/cd/) | GitOps CD; manages workloads on all three clusters | server3 | Terraform `apps` | [argo-cd](https://artifacthub.io/packages/helm/argo/argo-cd) | [server3](../gitops/helm-values/server3/argocd.yaml) | [values.yaml](https://github.com/argoproj/argo-helm/blob/main/charts/argo-cd/values.yaml) |
+| [Authentik](https://goauthentik.io/) | Identity provider serving `auth.irha.cz`; OIDC for every homelab application, human and machine; groups carry the roles APIs authorize on | server3 | ArgoCD `identity` | [authentik](https://artifacthub.io/packages/helm/goauthentik/authentik) | [server3](../gitops/helm-values/server3/authentik.yaml) | [values.yaml](https://github.com/goauthentik/helm/blob/main/charts/authentik/values.yaml) |
+| authentik-blueprints | In-repo chart rendering the Authentik configuration graph — applications, providers, role groups, policy bindings — from one values matrix; applied by Authentik's own worker | server3 | ArgoCD `identity` | — | [chart](../gitops/helm-charts/authentik-blueprints/) · [matrix](../gitops/helm-values/server3/authentik-blueprints.yaml) | — |
 | [External Secrets Operator](https://external-secrets.io/) | Sync secrets from OpenBao; ClusterSecretStore per cluster | all | ArgoCD | [external-secrets](https://artifacthub.io/packages/helm/external-secrets-operator/external-secrets) | [shared](../gitops/helm-values/external-secrets.yaml) · [server3](../gitops/helm-values/server3/external-secrets.yaml) · [server2](../gitops/helm-values/server2/external-secrets.yaml) · [server1](../gitops/helm-values/server1/external-secrets.yaml) | [values.yaml](https://github.com/external-secrets/external-secrets/blob/main/deploy/charts/external-secrets/values.yaml) |
 | [cert-manager](https://cert-manager.io/) | Issues the per-cluster wildcard TLS certificate from Let's Encrypt; ACME DNS-01 solved against Cloudflare, so a name needs no public reachability to be certified | all | ArgoCD | [cert-manager](https://artifacthub.io/packages/helm/cert-manager/cert-manager) | [shared](../gitops/helm-values/cert-manager.yaml) · [server1](../gitops/helm-values/server1/cert-manager.yaml) · [server2](../gitops/helm-values/server2/cert-manager.yaml) · [server3](../gitops/helm-values/server3/cert-manager.yaml) | [values.yaml](https://github.com/cert-manager/cert-manager/blob/master/deploy/charts/cert-manager/values.yaml) |
 | [Stakater Reloader](https://github.com/stakater/Reloader) | Restart workloads annotated `reloader.stakater.com/auto` when a referenced ConfigMap/Secret changes (ESO credential rotation) | all | ArgoCD | [reloader](https://artifacthub.io/packages/helm/stakater/reloader) | [shared](../gitops/helm-values/reloader.yaml) · [server3](../gitops/helm-values/server3/reloader.yaml) · [server2](../gitops/helm-values/server2/reloader.yaml) · [server1](../gitops/helm-values/server1/reloader.yaml) | [values.yaml](https://github.com/stakater/Reloader/blob/master/deployments/kubernetes/chart/reloader/values.yaml) |
@@ -241,6 +243,24 @@ ArgoCD runs only on the server3 cluster and manages workloads on all three clust
 Post-bootstrap steps for each new cluster:
 1. Register its kubeconfig in server3 ArgoCD (`argocd cluster add`)
 2. Apply the cluster's ApplicationSets / Application manifests from `gitops/`
+
+## Identity and access
+
+Authentik on server3 is the single identity provider — `auth.irha.cz`. Every human login and every
+machine identity goes through it, and every API authorizes on the `roles` claim of a token it minted.
+
+The whole configuration graph is generated, not clicked: one values matrix at
+[`gitops/helm-values/server3/authentik-blueprints.yaml`](../gitops/helm-values/server3/authentik-blueprints.yaml)
+renders an Application, an OAuth2 provider, one group per role and one policy binding per group, for
+every application **in every environment** — including a `local` environment whose redirect URIs are
+loopback, so a developer machine mimics a deployment instead of borrowing sandbox's client.
+
+Roles form a per-application ladder (`admin` → `editor` → `reader`) expressed as Authentik group
+parentage, so a user in the `-admin` group alone receives all three roles in the claim and an API can
+set one role as a class-level floor.
+
+See [docs/identity.md](identity.md) for the object model, naming, token shape, the role ladder, and
+how to add an application or a role.
 
 ## Observability
 

@@ -103,6 +103,16 @@ bao kv put secret/server3/grafana \
   admin-user=admin \
   admin-password=<strong-password>
 bao kv put secret/server3/external-dns api-key=<unifi-api-key>
+# Authentik — identity provider. secret-key encrypts stored tokens and is a FIRST-CLASS BACKUP
+# ARTEFACT: a Postgres restore without the identical key yields credentials that do not decrypt.
+# Never rotate it. The three bootstrap values create `akadmin` on first startup ONLY.
+bao kv put secret/server3/authentik \
+  secret-key=$(openssl rand -base64 60 | tr -d '\n') \
+  postgres-password=<strong-password> \
+  bootstrap-password=<strong-password> \
+  bootstrap-token=$(openssl rand -base64 32 | tr -d '=+/') \
+  bootstrap-email=<admin-email>
+
 
 # cert-manager — Cloudflare API token for ACME DNS-01 challenges on the irha.cz zone.
 # Scope: Zone:DNS:Edit + Zone:Zone:Read, specific zone irha.cz. One token per cluster.

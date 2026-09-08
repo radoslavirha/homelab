@@ -20,6 +20,28 @@
 #
 # Devices and other machine identities are NOT here: they need client secrets, which
 # do not belong in git. They arrive at A5, sourced from OpenBao via the !Env tag.
+#
+# ROLES form a ladder, written most-privileged first:
+#
+#   roles:
+#     - name: admin
+#       inherits: editor
+#     - name: editor
+#       inherits: reader
+#     - name: reader
+#
+# `inherits` is Authentik group parentage, and Authentik membership flows UPWARD, so
+# `admin` is the CHILD of `editor`. A user in `<app>-<env>-admin` alone is an effective
+# member of the two groups above it and their token carries all three roles:
+#
+#   "roles": ["qr-manager.admin", "qr-manager.editor", "qr-manager.reader"]
+#
+# That is what lets an API say `@RequireRoles('qr-manager.reader')` once on a controller
+# and narrow individual routes to `admin`, instead of listing every role on every route.
+# A bare string is still accepted and means a role with no parent. Ladders are per
+# application: `qr-manager.admin` implies nothing about `miot-bridge`.
+#
+# Design: docs/superpowers/specs/2026-09-08-role-hierarchy.md
 
 applications:
   - name: qr-manager
@@ -28,8 +50,11 @@ applications:
     # qr-manager-ui is served under a path prefix, not at the host root.
     basePath: /qr-manager
     roles:
-      - admin
-      - reader
+      - name: admin
+        inherits: editor
+      - name: editor
+        inherits: reader
+      - name: reader
     environments:
       - { cluster: server1, stage: sandbox }
       - { cluster: server1, stage: production }
@@ -44,11 +69,18 @@ applications:
     # No UI today: the REST surface is operated by hand and may get a frontend
     # later. The application exists so a caller can hold a token addressed to this
     # API — without it there is no audience to mint for, and the API can trust
-    # nothing. `admin` is the only role because nothing yet distinguishes reading
-    # the device registry from actuating a device; that split is authorization
-    # work, not an IdP concern.
+    # nothing.
+    #
+    # `/command` is `admin` and stays `admin`. The two rungs below it exist ahead of
+    # the routes that will use them: reading the device registry is not actuating a
+    # device, and the ladder is what lets that split land as a class-level floor
+    # rather than a role repeated on every route.
     roles:
-      - admin
+      - name: admin
+        inherits: editor
+      - name: editor
+        inherits: reader
+      - name: reader
     environments:
       - { cluster: server1, stage: sandbox }
       - { cluster: server1, stage: production }
@@ -66,9 +98,16 @@ applications:
     # here because it needs a client secret. See "Devices" in
     # docs/superpowers/specs/2026-09-04-authentik-tenancy-topology.md.
     #
-    # `reader` and nothing else: every route is a read of public CHMU data.
+    # Every route is a read of public CHMU data, so `reader` is the only rung with
+    # anything behind it today. `editor` and `admin` are declared so the feeder is
+    # shaped like every other application here — and so the first write route does
+    # not have to reissue everyone's groups.
     roles:
-      - reader
+      - name: admin
+        inherits: editor
+      - name: editor
+        inherits: reader
+      - name: reader
     environments:
       - { cluster: server1, stage: sandbox }
       - { cluster: server1, stage: production }
@@ -81,8 +120,16 @@ applications:
     # Explicit host: server3 is the control cluster and does not follow the
     # apps.<cluster> convention.
     host: dashboard.server3.homelab.irha.cz
+    # `viewer` was RENAMED to `reader` on 2026-09-08, when the ladder went uniform.
+    # Blueprints do not prune: the old homelab-dashboard-*-viewer groups and their
+    # bindings survive this change and must be deleted in the Authentik UI by hand,
+    # or a member of one keeps both the access and a `homelab-dashboard.viewer` claim.
     roles:
-      - viewer
+      - name: admin
+        inherits: editor
+      - name: editor
+        inherits: reader
+      - name: reader
     environments:
       - { cluster: server3, stage: production }
       - { stage: local }

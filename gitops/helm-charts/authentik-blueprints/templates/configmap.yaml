@@ -122,6 +122,82 @@ data:
       {{- if not $app.roles }}
         {{- fail (printf "application %q has no roles: it would render an Application with no policy binding, which is open to every user" $app.name) }}
       {{- end }}
+
+      {{- /*
+      The role ladder -- normalised, validated, ordered.
+
+      A role is either a bare string (no parent) or `{ name: admin, inherits: editor }`.
+      `inherits` becomes Authentik group parentage. Membership flows UPWARD, so the
+      ladder is written most-privileged first and `admin` is the CHILD of `editor`: a
+      member of `-admin` is an effective member of `-editor` and `-reader`, and the roles
+      mapping above -- which already calls all_groups() -- puts all three in the claim.
+      That is what lets an API set one role as a class-level floor instead of repeating
+      every role on every route.
+
+      Design: docs/superpowers/specs/2026-09-08-role-hierarchy.md
+      */ -}}
+      {{- $roles := list }}
+      {{- $names := list }}
+      {{- range $r := $app.roles }}
+        {{- if kindIs "string" $r }}
+          {{- $roles = append $roles (dict "name" $r "inherits" "") }}
+          {{- $names = append $names $r }}
+        {{- else }}
+          {{- if not $r.name }}
+            {{- fail (printf "application %q has a role entry with no `name`" $app.name) }}
+          {{- end }}
+          {{- $roles = append $roles (dict "name" $r.name "inherits" (default "" $r.inherits)) }}
+          {{- $names = append $names $r.name }}
+        {{- end }}
+      {{- end }}
+      {{- if ne (len $names) (len (uniq $names)) }}
+        {{- fail (printf "application %q declares the same role twice: both entries render the same group name, and the second would silently overwrite the first" $app.name) }}
+      {{- end }}
+      {{- range $r := $roles }}
+        {{- if $r.inherits }}
+          {{- if eq $r.inherits $r.name }}
+            {{- fail (printf "application %q: role %q inherits itself" $app.name $r.name) }}
+          {{- end }}
+          {{- if not (has $r.inherits $names) }}
+            {{- fail (printf "application %q: role %q inherits %q, which this application does not declare -- a dangling parent renders a group nobody is in, and a privilege that never arrives" $app.name $r.name $r.inherits) }}
+          {{- end }}
+        {{- end }}
+      {{- end }}
+
+      {{- /*
+      Binding order comes from DECLARATION order and is written as an attr, not an
+      identifier. Rungs get inserted in the middle; an order that is part of the identity
+      would make every role below the new one look like a binding that does not exist yet,
+      creating a second binding beside the one it already had.
+      */ -}}
+      {{- $order := dict }}
+      {{- range $i, $r := $roles }}
+        {{- $_ := set $order $r.name $i }}
+      {{- end }}
+
+      {{- /*
+      Parents must be APPLIED before their children: !KeyOf resolves only against entries
+      that already have a model instance, so a child emitted first fails its entry with
+      "failed to find entry with `id` ... and a model instance". Emit the parentless roles,
+      then whatever became emittable, N passes deep. A ladder of N roles is at most N deep,
+      so a role still unemitted after N passes is in a cycle -- which Authentik itself does
+      not reject: GroupSerializer.parents has no cycle validation.
+      */ -}}
+      {{- $ordered := list }}
+      {{- $emitted := list }}
+      {{- range $pass := until (len $roles) }}
+        {{- range $r := $roles }}
+          {{- if not (has $r.name $emitted) }}
+            {{- if or (not $r.inherits) (has $r.inherits $emitted) }}
+              {{- $ordered = append $ordered $r }}
+              {{- $emitted = append $emitted $r.name }}
+            {{- end }}
+          {{- end }}
+        {{- end }}
+      {{- end }}
+      {{- if ne (len $ordered) (len $roles) }}
+        {{- fail (printf "application %q has a cycle in `inherits`: %v could not be ordered parent-first" $app.name (without $names $emitted)) }}
+      {{- end }}
       {{- range $env := $app.environments }}
         {{- $isLocal := eq $env.stage "local" }}
         {{- $slug := "" }}
@@ -145,11 +221,21 @@ data:
         {{- end }}
 
       # ---------- {{ $slug }} ----------
-        {{- range $role := $app.roles }}
+        {{- range $role := $ordered }}
       - model: authentik_core.group
-        id: grp-{{ $slug }}-{{ $role }}
+        id: grp-{{ $slug }}-{{ $role.name }}
         identifiers:
-          name: {{ $slug }}-{{ $role }}
+          name: {{ $slug }}-{{ $role.name }}
+        attrs:
+          # Emitted on EVERY role, empty list included. A blueprint leaves a field it does
+          # not mention exactly as it found it, so a role that loses its `inherits` in
+          # values would otherwise keep granting its parent forever.
+        {{- if $role.inherits }}
+          parents:
+            - !KeyOf grp-{{ $slug }}-{{ $role.inherits }}
+        {{- else }}
+          parents: []
+        {{- end }}
         {{- end }}
 
       - model: authentik_providers_oauth2.oauth2provider
@@ -256,14 +342,18 @@ data:
           # access groups, so there is no separate access group to keep in sync.
           policy_engine_mode: any
           meta_launch_url: {{ $base }}/
-        {{- range $i, $role := $app.roles }}
+        {{- range $role := $ordered }}
 
+      # One binding per role, parentage notwithstanding: an `-admin`-only member is
+      # already admitted through the `-reader` binding they effectively hold
+      # (PolicyBinding.passes -> Group.is_member -> user.all_groups()), but binding every
+      # role group keeps access legible in the UI and survives a ladder being flattened.
       - model: authentik_policies.policybinding
         identifiers:
           target: !KeyOf app-{{ $slug }}
-          group: !KeyOf grp-{{ $slug }}-{{ $role }}
-          order: {{ $i }}
+          group: !KeyOf grp-{{ $slug }}-{{ $role.name }}
         attrs:
+          order: {{ index $order $role.name }}
           enabled: true
         {{- end }}
       {{- end }}
