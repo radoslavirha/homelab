@@ -8,8 +8,8 @@ work correctly or securely against its current threat model.
 **The gap:** the OTLP receiver is encrypted but does not know who is talking to it.
 
 **Parent:** [`../plans/2026-09-03-tls-remaining-work.md`](../plans/2026-09-03-tls-remaining-work.md).
-**Related:** [`../plans/2026-08-25-network-default-deny.md`](../plans/2026-08-25-network-default-deny.md) —
-the same question asked at the network layer.
+**Related:** `../plans/2026-08-25-network-default-deny.md` — the same question asked at the network
+layer. Deleted once the default-deny policies shipped; `gitops/` is what records them now.
 
 ---
 

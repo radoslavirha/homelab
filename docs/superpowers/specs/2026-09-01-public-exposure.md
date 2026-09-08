@@ -13,7 +13,7 @@ every internal service. That work is independent, unblocked, and comes first. **
 the hostnames, permanently.** This document exists so that decision is made with the endgame in
 view, not so any of it gets built now.
 
-**Upstream:** [`2026-09-04-authentik-tenancy-topology.md`](./2026-09-04-authentik-tenancy-topology.md)
+**Upstream:** [`2026-09-04-authentik-tenancy-topology.md`](archive/2026-09-04-authentik-tenancy-topology.md)
 for the T-phases.
 
 ---
@@ -99,7 +99,7 @@ The rule is not stylistic. Three things break the moment a service has two hostn
 
 | Breaks | Why |
 | --- | --- |
-| **Authentik** | Absolute URLs are built from the request, so `X-Forwarded-Proto` and `Host` must arrive intact or redirects come back as `http://`. The **`iss` claim** is anchored to one external name; reach it at two and discovery disagrees with the browser. Set `issuer_mode: global` on every provider so `iss` is the host, not a per-application path |
+| **Authentik** | Absolute URLs are built from the request, so `X-Forwarded-Proto` and `Host` must arrive intact or redirects come back as `http://`. The **`iss` claim** is anchored to one external name; reach it at two and discovery disagrees with the browser. The per-application path in `iss` (`issuer_mode: per_provider`, settled 2026-09-04) does not change that — it is the **host** that must stay single |
 | **Any SPA** | Two hostnames are two **origins**. Cookies, `localStorage` and session state are per-origin, so logged in at A is not logged in at B. Both must be registered as redirect URIs, and the app must still pick one consistently |
 | **Certificates** | A second name is a second SAN on every affected certificate, for no benefit |
 
