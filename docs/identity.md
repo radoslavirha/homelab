@@ -270,6 +270,12 @@ and its binding. Delete the old group in the UI and re-add its members.
 
 - **ArgoCD does not auto-deploy here.** Pushing is not deploying — Hard Refresh, then Sync, then wait
   for the worker.
+- **A blueprint takes ~15 minutes to land, not seconds** (measured 2026-09-08). ConfigMap propagation
+  into the worker's volume is ~1 min, Authentik's discovery timer is the long pole at ~10 min, and the
+  import itself ran ~5 min for this matrix. The import is **one transaction**, so the objects appear
+  all at once at the end — an empty query midway means "still running", not "failed". `ak
+  apply_blueprint <path>` forces a run but is no faster, and it contends on row locks with the
+  scheduled apply if both are in flight.
 - **Group parentage is a materialized view** (`authentik_core_groupancestry`), refreshed by a Postgres
   trigger on every parentage change. Nothing to configure, but if a claim looks stale after a
   parentage change, suspect that view rather than the mapping.

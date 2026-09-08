@@ -468,8 +468,13 @@ the UI. Edit the matrix only:
    self-inheriting role, a duplicate name, or an application with no roles at all.
 3. `helm template gitops/helm-charts/authentik-blueprints -f gitops/helm-values/server3/authentik-blueprints.yaml`
    to check it renders before pushing.
-4. Hard Refresh + Sync `authentik-server3` in ArgoCD, then wait ~45s for the worker to apply the
-   blueprint.
+4. Hard Refresh + Sync `authentik-server3` in ArgoCD, then wait — **~15 minutes**, measured
+   2026-09-08, not the ~45s this used to claim. Three delays stack: kubelet propagating the ConfigMap
+   into the worker's volume (~1 min), Authentik's blueprint discovery timer noticing the changed file
+   (~10 min), and the import itself (~4-6 min for this matrix — one transaction, so nothing appears
+   until it commits). `kubectl exec deploy/authentik-worker -- ak apply_blueprint
+   /blueprints/mounted/cm-authentik-blueprints/homelab-applications.yaml` forces it, but it does not
+   finish faster and it will queue behind (or ahead of) the scheduled apply on row locks.
 5. Add users to the new groups in the Authentik UI — memberships are deliberately not in git.
 
 A **client-only** entry (something that calls other applications' APIs rather than serving one) adds
