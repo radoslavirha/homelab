@@ -123,7 +123,7 @@ data:
 
     An application carrying `accesses` is a CLIENT-ONLY application: something a human
     drives -- Postman today -- that calls other applications' APIs instead of serving one
-    of its own. Design: docs/superpowers/specs/2026-09-08-multi-audience-tokens.md.
+    of its own. Design: docs/superpowers/specs/archive/2026-09-08-multi-audience-tokens.md.
 
     It gets its own COPY of both local scope mappings, with the audience list and the
     role-prefix table baked in as literals at render time. Two invariants carry the

@@ -110,10 +110,8 @@ is no response to observe. For UDP, the lens must be Hubble, not the response.
 
 ## Expected-flow oracle
 
-`docs/superpowers/plans/2026-08-25-network-default-deny.md` holds the verified flow inventory
-for production and sandbox on both clusters, with the evidence class behind every row. Use it as
-the expected-result table for policy work instead of restating it here. Its central finding is
-worth carrying into every probe run:
+The flow inventory behind the default-deny rollout was verified per cluster and stage. Its
+central finding is worth carrying into every probe run:
 
 > Three of the most important flows produce no traffic at all under idle conditions — DNS
 > (long-lived connections, resolved at startup), CHMI egress (only during a user request), and

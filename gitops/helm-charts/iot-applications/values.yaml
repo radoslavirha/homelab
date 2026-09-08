@@ -203,7 +203,6 @@
 #     # Probes. All three are omitted when not set. Deliberately NOT defaulted by the chart:
 #     # the right path and boot budget differ between the nginx UIs (/healthz) and the Ts.ED
 #     # APIs (/health/live, /health/ready), and a wrong default silently CrashLoops a new app.
-#     # Design notes: docs/superpowers/plans/2026-08-06-iot-app-health-checks.md
 #     # https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
 
 #     # livenessProbe MUST stay shallow: process-local only, no dependency I/O. A dependency

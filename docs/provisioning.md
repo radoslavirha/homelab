@@ -76,7 +76,7 @@ influxdb2:
 
 Built and pushed to `ghcr.io/radoslavirha/homelab-provisioner` via `.github/workflows/provisioner-image.yaml` on any change to `provisioner/Dockerfile`.
 
-> **Rotation:** Scheduled credential rotation is not yet implemented. See [`docs/superpowers/plans/2026-04-22-credential-rotation.md`](superpowers/plans/2026-04-22-credential-rotation.md) for the implementation plan.
+> **Rotation:** Scheduled credential rotation is not yet implemented. The provisioner writes each datastore credential once, and nothing re-writes it on a schedule.
 
 ---
 

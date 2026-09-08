@@ -32,8 +32,7 @@ apps:
       hostname: dashboard.server3.homelab.irha.cz
       pathName: ""
       stripPrefix: false
-    # The Unifi host and credential are server-side only — see
-    # docs/superpowers/plans/2026-08-25-dashboard-credential-boundary-homelab.md.
+    # The Unifi host and credential are server-side only.
     # nginx reads UNIFI_HOST in proxy_pass and attaches SECRET_UNIFI_API_KEY (via the
     # secretRefs envFrom below) with proxy_set_header. config.json deliberately carries
     # neither, because nginx serves it to the browser.

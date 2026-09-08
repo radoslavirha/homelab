@@ -117,8 +117,3 @@ the file that actually arms egress enforcement, because `podSelector: {}` select
 a pod selected by any egress policy denies everything it does not match.
 
 The ArgoCD Applications are manual-sync precisely so `selfHeal` cannot undo this rollback.
-
-## Background
-
-Survey, evidence and rollout record:
-[`docs/superpowers/plans/2026-08-25-network-default-deny.md`](superpowers/plans/2026-08-25-network-default-deny.md).

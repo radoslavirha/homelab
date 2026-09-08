@@ -50,7 +50,7 @@
 # resolve within one environment only, and an application that is someone's target may
 # never declare `accesses` itself; the chart fails on both.
 #
-# Design: docs/superpowers/specs/2026-09-08-multi-audience-tokens.md
+# Design: docs/superpowers/specs/archive/2026-09-08-multi-audience-tokens.md
 
 applications:
   - name: qr-manager

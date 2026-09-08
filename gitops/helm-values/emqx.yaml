@@ -27,8 +27,8 @@ persistence:
 #
 # Deliberately not Reloader: its `auto` annotation would also watch the
 # emqx-credentials Secret, and emqx is excluded from Reloader on purpose because
-# that Secret only bootstraps the dashboard user into mnesia on first boot
-# (docs/superpowers/plans/2026-08-05-stakater-reloader.md). The chart checksums
+# that Secret only bootstraps the dashboard user into mnesia on first boot.
+# The chart checksums
 # configmap.yaml only, and the Secret is an ExternalSecret outside the chart, so
 # credential rotation still cannot trigger a restart.
 recreatePods: true
@@ -52,7 +52,6 @@ emqxConfig:
   # Rollback is re-commenting this line and syncing. recreatePods: true rolls the
   # broker either way — after any roll, check `emqx ctl clients list` for a client
   # that came back with subscriptions=0 before suspecting a rule.
-  # Spec: docs/superpowers/specs/2026-08-30-mqtt-acl-enforcement.md
   EMQX_AUTHORIZATION__NO_MATCH: deny
 
   # --- Denial visibility ----------------------------------------------------

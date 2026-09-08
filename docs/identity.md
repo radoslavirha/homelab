@@ -218,6 +218,68 @@ are shared across every provider — only the `client_id` changes per environmen
 | Callback URL | `https://oauth.pstmn.io/v1/callback` |
 | Scope | `openid profile email roles` — `roles` is **not** implied by `profile` |
 
+### Setting it up in Postman, step by step
+
+One config on the **collection**, and one Postman environment per homelab environment. Do this once.
+
+1. **Create a Postman environment per homelab environment** you will call — `server1-sandbox`,
+   `server1-production`, `server2-sandbox`, `server2-production`, `server3-production`, `local`. In
+   each, set two variables:
+
+   | Variable | Example (`server1-sandbox`) |
+   |---|---|
+   | `oidcClientId` | `postman-server1-sandbox` |
+   | `baseUrl` | `https://apps.sandbox.server1.homelab.irha.cz` |
+
+   The client ids are exactly `postman-<cluster>-<stage>`, plus `postman-local`.
+
+2. **Ask an Authentik admin to add you to `postman-<env>-user`** for each environment you need. Without
+   that membership Authentik completes the login and then shows *Permission denied* — no token is
+   issued. This is the one step that is not in git, deliberately.
+
+3. **On the collection** (not on individual requests), open *Authorization* and choose **OAuth 2.0**,
+   then set:
+
+   | Field | Value |
+   |---|---|
+   | Add auth data to | Request Headers |
+   | Grant type | Authorization Code (With PKCE) |
+   | Callback URL | `https://oauth.pstmn.io/v1/callback` |
+   | Authorize using browser | off (leave the callback above) |
+   | Auth URL | `https://auth.irha.cz/application/o/authorize/` |
+   | Access Token URL | `https://auth.irha.cz/application/o/token/` |
+   | Client ID | `{{oidcClientId}}` |
+   | Client Secret | *(leave empty)* |
+   | Code Challenge Method | SHA-256 |
+   | Scope | `openid profile email roles` |
+   | Client Authentication | Send client credentials in body |
+
+   Two of those are load-bearing. **Client Secret must stay empty** — these are public clients, and
+   Postman sending an empty secret as Basic auth is what "Send client credentials in body" avoids.
+   **`roles` must be in the scope string**: it is a separate scope mapping, not part of `profile`, and
+   without it the token carries no roles and every API answers `403`.
+
+4. **Set each request's URL from the environment** — `{{baseUrl}}/iot/qr-manager/...` — and leave its
+   own Authorization on *Inherit auth from parent*. That is what makes switching environment switch
+   both the API and the credential together.
+
+5. **Get a token**: *Get New Access Token* → a browser window → log in to Authentik → *Use Token*.
+
+6. **Check what you got** before blaming an API. Paste the token into any JWT decoder and confirm:
+   - `aud` contains the API you are calling, not just `postman-<env>`
+   - `iss` is `https://auth.irha.cz/application/o/postman-<env>/`
+   - `roles` names the target applications (`qr-manager.admin`), not `postman.*` alone
+   - `exp` — 30 minutes out
+
+**When it expires, log in again.** These clients have no refresh token on purpose, so Postman cannot
+renew silently; *Get New Access Token* is the whole recovery. If a request starts returning `401`
+after half an hour, that is expiry, not a broken config.
+
+**`401` vs `403`.** A `401` means the API did not accept the token at all — wrong environment's client,
+or that API has no trusted-issuer row for `postman-<env>` yet. A `403` means the token was accepted and
+the `roles` claim did not carry what the route wanted — check the claim, then your group memberships in
+the *target* application, not in `postman`.
+
 The gate group `postman-<env>-user` is the only membership Postman itself needs. It grants no API
 access: what the token can *do* still comes from the target applications' own role groups. It is the
 switch that revokes Postman in one environment without touching anyone's application roles, and the

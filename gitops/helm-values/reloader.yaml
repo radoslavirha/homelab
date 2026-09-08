@@ -4,7 +4,8 @@
 #
 # Opt-in: annotate the WORKLOAD (not the pod template) with
 #   reloader.stakater.com/auto: "true"
-# See docs/superpowers/plans/2026-08-05-stakater-reloader.md for the per-workload analysis.
+# Opt-in, not opt-out, because most workloads here must NOT restart on a secret change --
+# see the comment on the reloader settings below.
 
 reloader:
   # Opt-in mode (chart default). Only a handful of workloads benefit, and
