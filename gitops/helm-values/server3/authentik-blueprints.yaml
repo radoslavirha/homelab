@@ -56,6 +56,26 @@ applications:
       - { cluster: server2, stage: production }
       - { stage: local }
 
+  - name: interactive-map-feeder
+    title: Interactive Map Feeder
+    hostPrefix: apps
+    basePath: /interactive-map-feeder
+    # No UI. The application exists so a person can hold a token addressed to
+    # this API; the LaskaKit map does NOT use it — a device is its own
+    # confidential application with client_credentials, and that one cannot live
+    # here because it needs a client secret. See "Devices" in
+    # docs/superpowers/specs/2026-09-04-authentik-tenancy-topology.md.
+    #
+    # `reader` and nothing else: every route is a read of public CHMU data.
+    roles:
+      - reader
+    environments:
+      - { cluster: server1, stage: sandbox }
+      - { cluster: server1, stage: production }
+      - { cluster: server2, stage: sandbox }
+      - { cluster: server2, stage: production }
+      - { stage: local }
+
   - name: homelab-dashboard
     title: Homelab Dashboard
     # Explicit host: server3 is the control cluster and does not follow the
