@@ -42,7 +42,10 @@ gitops/
                             helm-values/server3/authentik-blueprints.yaml. Roles are a LADDER:
                             `{ name: admin, inherits: editor }` becomes Authentik group parentage, and
                             membership flows UPWARD, so admin is the CHILD of editor and an admin-only
-                            member gets all three roles in the claim. See docs/identity.md.
+                            member gets all three roles in the claim. An entry with `accesses` is
+                            CLIENT-ONLY (Postman): its token's aud names every API it may call and its
+                            roles come from THOSE applications' groups, resolved within ONE environment.
+                            See docs/identity.md.
     provisioner/            reusable PostSync provisioner Jobs chart (InfluxDB2, EMQX, MongoDB)
     iot-applications/       reusable chart for custom apps (Deployment/Rollout, Services, HTTPRoute,
                             Jinja2 config ConfigMap). Per-app `annotations` land on the WORKLOAD
@@ -468,6 +471,13 @@ the UI. Edit the matrix only:
 4. Hard Refresh + Sync `authentik-server3` in ArgoCD, then wait ~45s for the worker to apply the
    blueprint.
 5. Add users to the new groups in the Authentik UI — memberships are deliberately not in git.
+
+A **client-only** entry (something that calls other applications' APIs rather than serving one) adds
+`accesses: [<app>, …]` and `redirectUris:` instead of a host: its token's `aud` names each target and
+its `roles` claim is collected from the targets' groups. Targets resolve within ONE environment, so
+there is one client per environment — `aud`/`iss` are the only things pinning an otherwise
+environment-free `roles` claim to a cluster and stage. Each target API also needs a trusted-issuer row
+for that client on its own side, for its own environment only.
 
 **Blueprints do not prune.** A role removed or renamed in values leaves its group, its members and its
 policy binding in place; delete the old group in the UI or it keeps granting access.

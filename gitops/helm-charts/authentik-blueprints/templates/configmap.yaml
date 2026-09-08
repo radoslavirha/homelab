@@ -118,6 +118,57 @@ data:
                 ),
             }
 
+    {{- /*
+    ---------- `accesses`: one client, several APIs ----------
+
+    An application carrying `accesses` is a CLIENT-ONLY application: something a human
+    drives -- Postman today -- that calls other applications' APIs instead of serving one
+    of its own. Design: docs/superpowers/specs/2026-09-08-multi-audience-tokens.md.
+
+    It gets its own COPY of both local scope mappings, with the audience list and the
+    role-prefix table baked in as literals at render time. Two invariants carry the
+    design, and both are enforced rather than documented:
+
+    - A client-only app may not be anyone else's target. Clients are clients and APIs are
+      APIs. Without this the tempting one-line edit is to hand `qr-manager-local` an
+      `accesses` list, which deletes the property that makes the `-local` clients safe.
+    - Targets resolve WITHIN ONE ENVIRONMENT (below), never across. The `roles` claim is
+      environment-free by construction -- `qr-manager.admin` is the same string in every
+      cluster and stage -- so `aud` and `iss` are the only things pinning a token to an
+      environment. A client whose audience spanned two of them would put a sandbox
+      admin's role in a token the production API accepts, with no object misconfigured.
+    */ -}}
+    {{- $appNames := list }}
+    {{- $targetNames := list }}
+    {{- range $a := .Values.applications }}
+      {{- $appNames = append $appNames $a.name }}
+      {{- range $t := (default (list) $a.accesses) }}
+        {{- $targetNames = append $targetNames $t }}
+      {{- end }}
+    {{- end }}
+    {{- range $a := .Values.applications }}
+      {{- if $a.accesses }}
+        {{- /* self-reference first: it would otherwise be reported as the target check below */ -}}
+        {{- range $t := $a.accesses }}
+          {{- if eq $t $a.name }}
+            {{- fail (printf "application %q lists itself in `accesses`" $a.name) }}
+          {{- end }}
+          {{- if not (has $t $appNames) }}
+            {{- fail (printf "application %q lists %q in `accesses`, which is not an application in this matrix" $a.name $t) }}
+          {{- end }}
+        {{- end }}
+        {{- if has $a.name $targetNames }}
+          {{- fail (printf "application %q declares `accesses` and is also named as another application's target: an application is a client or an API, not both" $a.name) }}
+        {{- end }}
+        {{- if not $a.redirectUris }}
+          {{- fail (printf "application %q declares `accesses` but no `redirectUris`: a client-only application serves no host, so its callback cannot be derived" $a.name) }}
+        {{- end }}
+        {{- if or $a.host $a.hostPrefix $a.basePath }}
+          {{- fail (printf "application %q declares `accesses` together with a host: it has no deployment of its own, and its callback comes from `redirectUris`" $a.name) }}
+        {{- end }}
+      {{- end }}
+    {{- end }}
+
     {{- range $app := .Values.applications }}
       {{- if not $app.roles }}
         {{- fail (printf "application %q has no roles: it would render an Application with no policy binding, which is open to every user" $app.name) }}
@@ -200,24 +251,58 @@ data:
       {{- end }}
       {{- range $env := $app.environments }}
         {{- $isLocal := eq $env.stage "local" }}
-        {{- $slug := "" }}
+        {{- if and $isLocal $env.cluster }}
+          {{- fail (printf "application %q has a local environment with a cluster: a developer machine is not a cluster, and the slug would be wrong" $app.name) }}
+        {{- end }}
+        {{- /*
+        The environment key IS the slug suffix: `local`, or `<cluster>-<stage>`. Every
+        application in one environment shares it, and that is what lets an `accesses`
+        entry name a bare application -- `qr-manager` -- and resolve to that application's
+        client in THIS environment and no other.
+        */ -}}
+        {{- $envKey := ternary "local" (printf "%s-%s" (default "" $env.cluster) (default "" $env.stage)) $isLocal }}
+        {{- $slug := printf "%s-%s" $app.name $envKey }}
         {{- $base := "" }}
-        {{- if $isLocal }}
-          {{- if $env.cluster }}
-            {{- fail (printf "application %q has a local environment with a cluster: a developer machine is not a cluster, and the slug would be wrong" $app.name) }}
+        {{- if not $app.accesses }}
+          {{- if $isLocal }}
+            {{- $base = printf "http://localhost:%v" (default 5173 $app.localPort) }}
+          {{- else }}
+            {{- $host := $app.host }}
+            {{- if not $host }}
+              {{- $host = ternary
+                    (printf "%s.%s.%s" $app.hostPrefix $env.cluster $root.Values.domain)
+                    (printf "%s.%s.%s.%s" $app.hostPrefix $env.stage $env.cluster $root.Values.domain)
+                    (eq $env.stage "production") }}
+            {{- end }}
+            {{- $base = printf "https://%s%s" $host (default "" $app.basePath) }}
           {{- end }}
-          {{- $slug = printf "%s-local" $app.name }}
-          {{- $base = printf "http://localhost:%v" (default 5173 $app.localPort) }}
-        {{- else }}
-          {{- $slug = printf "%s-%s-%s" $app.name $env.cluster $env.stage }}
-          {{- $host := $app.host }}
-          {{- if not $host }}
-            {{- $host = ternary
-                  (printf "%s.%s.%s" $app.hostPrefix $env.cluster $root.Values.domain)
-                  (printf "%s.%s.%s.%s" $app.hostPrefix $env.stage $env.cluster $root.Values.domain)
-                  (eq $env.stage "production") }}
+        {{- end }}
+        {{- /*
+        Targets of a client-only app, resolved in THIS environment only. A target that
+        does not run here is skipped, not an error: the matrix is ragged on purpose --
+        server3 runs one application -- so postman-server3-production correctly ends up
+        addressing homelab-dashboard alone. Resolving to NOTHING is the error, because
+        that renders a client whose audience is only itself.
+        */ -}}
+        {{- $targets := list }}
+        {{- range $t := (default (list) $app.accesses) }}
+          {{- range $other := $root.Values.applications }}
+            {{- if eq $other.name $t }}
+              {{- range $oe := $other.environments }}
+                {{- $oKey := ternary "local" (printf "%s-%s" (default "" $oe.cluster) (default "" $oe.stage)) (eq $oe.stage "local") }}
+                {{- if eq $oKey $envKey }}
+                  {{- $targets = append $targets (dict "slug" (printf "%s-%s" $other.name $envKey) "name" $other.name) }}
+                {{- end }}
+              {{- end }}
+            {{- end }}
           {{- end }}
-          {{- $base = printf "https://%s%s" $host (default "" $app.basePath) }}
+        {{- end }}
+        {{- if and $app.accesses (not $targets) }}
+          {{- fail (printf "application %q declares `accesses` but none of them exist in environment %q: the client would render with an audience of only itself" $app.name $envKey) }}
+        {{- end }}
+        {{- $auds := list $slug }}
+        {{- range $t := $targets }}
+          {{- $auds = append $auds $t.slug }}
         {{- end }}
 
       # ---------- {{ $slug }} ----------
@@ -236,6 +321,96 @@ data:
         {{- else }}
           parents: []
         {{- end }}
+        {{- end }}
+        {{- /*
+        ---------- the client-only pair, one copy per client ----------
+
+        A client-only app binds these INSTEAD of the shared `homelab profile` / `homelab
+        roles`. Both lists are baked from the values matrix at render time, so no property
+        mapping expression ever looks up another application's objects, and the audience of
+        a client is readable in git rather than only on the instance.
+
+        `aud` still lives in exactly ONE mapping per provider. Authentik merges list-valued
+        claims from several mappings by CONCATENATION, so binding this copy ALONGSIDE the
+        shared one would duplicate every entry -- measured, see the shared mapping above.
+
+        The roles half is the one that is easy to miss. The shared mapping filters on the
+        ISSUING client_id, which here would collect this client's own gate group and
+        nothing else: a token that verifies at every API it addresses and is authorized at
+        none of them. Widening `aud` without this turns a 401 into a 403.
+        */ -}}
+        {{- if $app.accesses }}
+
+      # This client calls other applications' APIs, so it carries its own copies of the two
+      # local mappings: `aud` names every API it may call, and `roles` is collected from
+      # THEIR role groups rather than from anything named {{ $app.name }}.
+      - model: authentik_providers_oauth2.scopemapping
+        id: pm-profile-{{ $slug }}
+        identifiers:
+          name: homelab profile ({{ $slug }})
+        attrs:
+          scope_name: profile
+          description: "Standard profile claims for {{ $slug }}, whose `aud` names every API it may call."
+          expression: |
+            return delete_none_values({
+                "name": request.user.name,
+                "given_name": ak_obj_attr(request.user, "given_name", "name"),
+                "family_name": ak_obj_attr(request.user, "family_name"),
+                "preferred_username": request.user.username,
+                "nickname": request.user.username,
+                "picture": request.user.avatar,
+                # This client's own id, then one entry per API it may call.
+                #
+                # Widening `aud` is only half of what makes those APIs reachable: issuer_mode
+                # is per_provider, so `iss` stays {{ $slug }} whatever the audience says, and
+                # each API listed here needs a trusted-issuer row for this client on its own
+                # side. Without that row the widened audience changes nothing.
+                "aud": [
+                    {{- range $a := $auds }}
+                    "{{ $a }}",
+                    {{- end }}
+                ],
+            })
+
+      - model: authentik_providers_oauth2.scopemapping
+        id: pm-roles-{{ $slug }}
+        identifiers:
+          name: homelab roles ({{ $slug }})
+        attrs:
+          scope_name: roles
+          description: "Roles for {{ $slug }}, collected from every application it may call. Requested explicitly: scope=openid profile email roles."
+          expression: |
+            # Groups name the RESOURCE, not the client that logs in. A token minted here
+            # carries `qr-manager.editor` because the user holds
+            # qr-manager-{{ $envKey }}-editor -- not because they hold anything named
+            # {{ $app.name }}.
+            #
+            # This is the half that `aud` alone does not solve. The shared `homelab roles`
+            # mapping filters on the ISSUING client_id, which for this client would collect
+            # its own gate group and nothing else: a token that verifies at every API it
+            # addresses and is authorized at none of them.
+            #
+            # Every prefix below ends in -{{ $envKey }}, baked at render time. Two
+            # environments in one table would merge their roles into a claim that no longer
+            # says which environment they came from.
+            targets = {
+                {{- range $t := $targets }}
+                "{{ $t.slug }}": "{{ $t.name }}",
+                {{- end }}
+                "{{ $slug }}": "{{ $app.name }}",
+            }
+            # all_groups() returns direct groups PLUS their ancestors, so a role ladder in
+            # a target application arrives here whole, exactly as it does in that
+            # application's own token.
+            groups = [group.name for group in request.user.all_groups()]
+            return {
+                "roles": sorted(
+                    f"{app}.{name[len(client_id) + 1:]}"
+                    for client_id, app in targets.items()
+                    for name in groups
+                    if name.startswith(f"{client_id}-")
+                ),
+            }
         {{- end }}
 
       - model: authentik_providers_oauth2.oauth2provider
@@ -289,7 +464,16 @@ data:
           # ("The request is otherwise malformed") before any policy is evaluated.
           grant_types:
             - authorization_code
+        {{- if $app.accesses }}
+            # No refresh_token, deliberately. This client's token is addressed to several
+            # APIs at once and nothing in this design introspects -- every verifier checks
+            # the signature offline -- so expiry is the ONLY revocation there is. A refresh
+            # token would make a credential worth N APIs effectively permanent. Re-running
+            # the browser login every {{ $root.Values.accessTokenValidity }} is the price,
+            # and it is what keeps removing someone from a group meaningful.
+        {{- else }}
             - refresh_token
+        {{- end }}
           access_code_validity: {{ $root.Values.accessCodeValidity }}
           access_token_validity: {{ $root.Values.accessTokenValidity }}
           # For a `local` environment $base is http://localhost:<port>, so these are
@@ -310,19 +494,36 @@ data:
           # application as a trusted issuer row, which is exactly the point: that row
           # lives in the developer's own config and never ships.
           redirect_uris:
+        {{- if $app.accesses }}
+            # A client-only app serves no host, so the callback belongs to the tool rather
+            # than to a deployment of ours. No logout URI: there is no page to return to.
+            {{- range $uri := $app.redirectUris }}
+            - matching_mode: strict
+              url: {{ $uri }}
+              redirect_uri_type: authorization
+            {{- end }}
+        {{- else }}
             - matching_mode: strict
               url: {{ $base }}/callback
               redirect_uri_type: authorization
             - matching_mode: strict
               url: {{ $base }}/
               redirect_uri_type: logout
+        {{- end }}
           property_mappings:
             {{- range $scope := $root.Values.scopes }}
             - !Find [authentik_providers_oauth2.scopemapping, [managed, goauthentik.io/providers/oauth2/scope-{{ $scope }}]]
             {{- end }}
+        {{- if $app.accesses }}
+            # This client's OWN copies, carrying its audience list and its role table.
+            # Not the shared pair -- binding both would duplicate `aud`.
+            - !KeyOf pm-profile-{{ $slug }}
+            - !KeyOf pm-roles-{{ $slug }}
+        {{- else }}
             # Local, not the shipped ones -- see the entries at the top of this blueprint.
             - !KeyOf pm-profile
             - !KeyOf pm-roles
+        {{- end }}
           signing_key: !Find [authentik_crypto.certificatekeypair, [name, {{ $root.Values.signingKeyName }}]]
 
       - model: authentik_core.application
@@ -341,7 +542,9 @@ data:
           # any: membership of ANY bound group grants access. Role groups ARE the
           # access groups, so there is no separate access group to keep in sync.
           policy_engine_mode: any
+        {{- if not $app.accesses }}
           meta_launch_url: {{ $base }}/
+        {{- end }}
         {{- range $role := $ordered }}
 
       # One binding per role, parentage notwithstanding: an `-admin`-only member is

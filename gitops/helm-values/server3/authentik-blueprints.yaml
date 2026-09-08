@@ -42,6 +42,15 @@
 # application: `qr-manager.admin` implies nothing about `miot-bridge`.
 #
 # Design: docs/superpowers/specs/archive/2026-09-08-role-hierarchy.md
+#
+# `accesses` makes an application a CLIENT-ONLY one: it serves no host and calls other
+# applications' APIs, so its token's `aud` names each of them and its `roles` claim is
+# collected from THEIR role groups. It brings `redirectUris` with it -- there is no host
+# to derive a callback from -- and it forbids `host`/`hostPrefix`/`basePath`. Targets
+# resolve within one environment only, and an application that is someone's target may
+# never declare `accesses` itself; the chart fails on both.
+#
+# Design: docs/superpowers/specs/2026-09-08-multi-audience-tokens.md
 
 applications:
   - name: qr-manager
@@ -113,6 +122,47 @@ applications:
       - { cluster: server1, stage: production }
       - { cluster: server2, stage: sandbox }
       - { cluster: server2, stage: production }
+      - { stage: local }
+
+  - name: postman
+    title: Postman
+    # CLIENT-ONLY: Postman serves nothing, it calls the APIs above. `accesses` is the
+    # superset; each environment gets the intersection with what actually runs there, so
+    # postman-server3-production addresses homelab-dashboard alone while postman-local
+    # addresses all four.
+    #
+    # ONE CLIENT PER ENVIRONMENT, and that is not tidiness. The `roles` claim is
+    # environment-free by design -- `qr-manager.admin` is the same string everywhere --
+    # so `aud` and `iss` are the only things pinning a token to server1-sandbox rather
+    # than server2-production. A single postman client spanning environments would put a
+    # sandbox admin's `qr-manager.admin` into a token the production API accepts.
+    #
+    # In Postman this is one collection-level OAuth 2.0 config with the client_id as a
+    # variable: the authorize and token endpoints are shared across every provider here,
+    # so switching Postman environment switches the client and nothing else. Authorization
+    # Code with PKCE, no client secret, scope `openid profile email roles` -- `roles` is
+    # not implied by `profile` and has to be asked for.
+    #
+    # Public client + PKCE means there is no secret, which is why this belongs in git with
+    # the rest instead of in OpenBao.
+    accesses: [qr-manager, miot-bridge, interactive-map-feeder, homelab-dashboard]
+    # Postman's hosted callback, used by the desktop app and the web client alike.
+    redirectUris:
+      - https://oauth.pstmn.io/v1/callback
+    # The access gate, and nothing more. An Application with no binding is readable by
+    # EVERY user, and this one mints tokens for every API in its environment. Membership
+    # means "may hold a broad token here" -- the switch that revokes Postman access
+    # without touching anyone's application roles, and the only revocation that acts
+    # faster than expiry, since this client gets no refresh token. What the token can
+    # actually DO still comes from the target applications' own role groups.
+    roles:
+      - user
+    environments:
+      - { cluster: server1, stage: sandbox }
+      - { cluster: server1, stage: production }
+      - { cluster: server2, stage: sandbox }
+      - { cluster: server2, stage: production }
+      - { cluster: server3, stage: production }
       - { stage: local }
 
   - name: homelab-dashboard

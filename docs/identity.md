@@ -75,9 +75,9 @@ every cluster and stage.
 
 | Claim | Value | Notes |
 |-------|-------|-------|
-| `aud` | `["<client_id>"]` | A one-element **array**, not the bare string Authentik defaults to. The shape must never change |
+| `aud` | `["<client_id>"]` | A one-element **array**, not the bare string Authentik defaults to. The shape must never change. A [client-only application](#client-only-applications--one-token-several-apis) carries several entries |
 | `iss` | `https://auth.irha.cz/application/o/<client_id>/` | `issuer_mode: per_provider` — every provider signs with the same key, so `iss` is what makes a lazy verifier app-scoped rather than IdP-scoped |
-| `roles` | `["qr-manager.admin", …]` | Filtered to the issuing application. Sorted |
+| `roles` | `["qr-manager.admin", …]` | Filtered to the issuing application — or, for a client-only application, to the applications it may call. Sorted |
 | `sub` | username | `sub_mode: user_username` |
 
 Access tokens live 30 minutes. **Revocation latency is bounded by that** — a demotion is not visible
@@ -147,9 +147,81 @@ grant. "Remove their access" means removing the *lowest* membership they hold, n
 | `miot-bridge` | none — REST surface operated by hand | admin → editor → reader | server1 · server2 × sandbox · production, + local |
 | `interactive-map-feeder` | none — reads of public CHMU data | admin → editor → reader | server1 · server2 × sandbox · production, + local |
 | `homelab-dashboard` | `dashboard.server3.homelab.irha.cz` | admin → editor → reader | server3 production, + local |
+| `postman` | none — a client, not an API | `user` (the access gate only) | every environment above |
 
 Devices are **not** here. A device is a confidential application with `client_credentials` and a client
 secret, which does not belong in git; its authorization is its `aud`, not a role claim.
+
+## Client-only applications — one token, several APIs
+
+Every application above serves an API and is addressed by its own client. `postman` is the other kind:
+it serves nothing and *calls* the others. An application that declares `accesses` becomes **client-only**.
+
+```yaml
+  - name: postman
+    title: Postman
+    accesses: [qr-manager, miot-bridge, interactive-map-feeder, homelab-dashboard]
+    redirectUris:
+      - https://oauth.pstmn.io/v1/callback
+    roles:
+      - user
+    environments: [...]
+```
+
+What the chart does with it:
+
+- **`aud` names every API it may call**, not just itself, so one token verifies at all of them. The
+  audience list is baked into a per-client copy of the `profile` mapping at render time.
+- **`roles` is collected from the TARGET applications' groups.** This is the half that is easy to miss:
+  the shared `roles` mapping filters on the *issuing* `client_id`, which for a client-only app would
+  collect its own gate group and nothing else — a token that verifies everywhere and is authorized
+  nowhere. Widening `aud` alone turns a `401` into a `403`.
+- **No `refresh_token`.** Nothing here introspects; every verifier checks the signature offline, so
+  expiry is the only revocation there is, and a refresh token would make a credential worth N APIs
+  effectively permanent. Log in again when it expires.
+- **No `meta_launch_url`, no logout URI, no host.** The callback belongs to the tool, via `redirectUris`.
+
+**One client per environment, and that is not tidiness.** The `roles` claim is environment-free by
+design — `qr-manager.admin` is the same string in every cluster and stage — so `aud` and `iss` are the
+only things pinning a token to `server1-sandbox` rather than `server2-production`. A single client
+spanning environments would put a sandbox admin's `qr-manager.admin` into a token the production API
+accepts, with no object misconfigured. So `accesses` resolves **within one environment only**, and
+each environment gets its own client:
+
+```
+postman-server1-sandbox     → qr-manager, miot-bridge, interactive-map-feeder   (that environment's)
+postman-server3-production  → homelab-dashboard          (the only application server3 runs)
+postman-local               → all four
+```
+
+`accesses` is the superset; each environment gets the intersection with what actually runs there. The
+chart `fail`s if a target does not exist in the matrix, if a client-only app is itself someone's
+target (clients are clients, APIs are APIs — this is what stops the narrow `-local` clients being
+widened), if it declares a host, if it has no `redirectUris`, or if an environment resolves to no
+targets at all.
+
+**The API side needs a row per client.** `issuer_mode` is `per_provider`, so `iss` stays
+`postman-<env>` however wide `aud` is: every API it addresses needs a trusted-issuer row for that
+client, **for its own environment only**. That row is `iot-miniservers` config, and a
+`postman-server1-sandbox` row in a production API's config re-opens exactly the escalation above.
+
+**In Postman** it is one collection-level OAuth 2.0 config, because the authorize and token endpoints
+are shared across every provider — only the `client_id` changes per environment:
+
+| Field | Value |
+|-------|-------|
+| Grant type | Authorization Code (With PKCE), `S256` |
+| Auth URL | `https://auth.irha.cz/application/o/authorize/` |
+| Access Token URL | `https://auth.irha.cz/application/o/token/` |
+| Client ID | `postman-<cluster>-<stage>` / `postman-local` — a Postman environment variable |
+| Client Secret | *empty* — public client |
+| Callback URL | `https://oauth.pstmn.io/v1/callback` |
+| Scope | `openid profile email roles` — `roles` is **not** implied by `profile` |
+
+The gate group `postman-<env>-user` is the only membership Postman itself needs. It grants no API
+access: what the token can *do* still comes from the target applications' own role groups. It is the
+switch that revokes Postman in one environment without touching anyone's application roles, and the
+only revocation faster than token expiry.
 
 ## Adding an application
 

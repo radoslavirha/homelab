@@ -259,6 +259,11 @@ Roles form a per-application ladder (`admin` → `editor` → `reader`) expresse
 parentage, so a user in the `-admin` group alone receives all three roles in the claim and an API can
 set one role as a class-level floor.
 
+One entry in that matrix is client-only: `postman` serves nothing and calls the others, so its token's
+`aud` names every API in its environment and its roles come from those applications' groups. One such
+client per environment — the roles claim is environment-free, so `aud` and `iss` are the only things
+keeping a sandbox token out of production.
+
 See [docs/identity.md](identity.md) for the object model, naming, token shape, the role ladder, and
 how to add an application or a role.
 
