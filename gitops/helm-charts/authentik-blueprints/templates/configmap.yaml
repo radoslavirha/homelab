@@ -119,58 +119,176 @@ data:
             }
 
     {{- /*
-    ---------- `accesses`: one client, several APIs ----------
+    ---------- `kind`: what sort of client this is ----------
 
-    An application carrying `accesses` is a CLIENT-ONLY application: something a human
-    drives -- Postman today -- that calls other applications' APIs instead of serving one
-    of its own. Design: docs/superpowers/specs/archive/2026-09-08-multi-audience-tokens.md.
+    Three kinds, and `kind` is OURS -- it is not Authentik's `client_type`, which stays
+    public/confidential and is DERIVED from this.
 
-    It gets its own COPY of both local scope mappings, with the audience list and the
-    role-prefix table baked in as literals at render time. Two invariants carry the
-    design, and both are enforced rather than documented:
+      api     (default)  Serves a host. A human's browser logs in. Public + PKCE.
+      client             A human drives it, and it calls other applications' APIs
+                         (Postman). Public + PKCE, `accesses`, `redirectUris`.
+      device             A machine. No browser, no human. Confidential +
+                         client_credentials, `accesses` carrying an explicit role,
+                         a blueprint-declared service account, no redirect URIs.
 
-    - A client-only app may not be anyone else's target. Clients are clients and APIs are
-      APIs. Without this the tempting one-line edit is to hand `qr-manager-local` an
-      `accesses` list, which deletes the property that makes the `-local` clients safe.
+    A device may declare SEVERAL environments, and each renders its own client -- own
+    client_id, own secret, own service account, own single-environment audience. That is
+    not a device spanning environments, it is one client per environment exactly as the
+    `postman` entry does, and it is how a device gets a `local` credential for a bench
+    without its deployed credential reaching the bench. The cost is one secret to flash
+    per environment.
+
+    `accesses` is what both non-api kinds have in common: the list of applications whose
+    audience this client's token carries. Two invariants carry the design, and both are
+    enforced rather than documented:
+
+    - A client is never anyone's target. Clients are clients and APIs are APIs. Without
+      this the tempting one-line edit is to hand `qr-manager-local` an `accesses` list,
+      which deletes the property that makes the `-local` clients safe.
     - Targets resolve WITHIN ONE ENVIRONMENT (below), never across. The `roles` claim is
       environment-free by construction -- `qr-manager.admin` is the same string in every
       cluster and stage -- so `aud` and `iss` are the only things pinning a token to an
       environment. A client whose audience spanned two of them would put a sandbox
       admin's role in a token the production API accepts, with no object misconfigured.
+
+    Where the two differ is WHOSE groups fill the roles claim. A `client` borrows the
+    human's: whatever the person logging in already holds at the target. A `device` has
+    no human, so its access must name the role, and the chart puts its service account in
+    that group. Hence `accesses: [qr-manager]` for a client and
+    `accesses: [{ app: qr-manager, role: reader }]` for a device.
+
+    Design: docs/superpowers/specs/2026-09-08-device-identity-esp32.md and
+    docs/superpowers/specs/archive/2026-09-08-multi-audience-tokens.md.
     */ -}}
     {{- $appNames := list }}
     {{- $targetNames := list }}
+    {{- $byName := dict }}
     {{- range $a := .Values.applications }}
       {{- $appNames = append $appNames $a.name }}
+      {{- $_ := set $byName $a.name $a }}
       {{- range $t := (default (list) $a.accesses) }}
-        {{- $targetNames = append $targetNames $t }}
+        {{- if kindIs "map" $t }}
+          {{- $targetNames = append $targetNames $t.app }}
+        {{- else }}
+          {{- $targetNames = append $targetNames (toString $t) }}
+        {{- end }}
+      {{- end }}
+    {{- end }}
+    {{- /*
+    The SHARED `homelab roles` mapping strips `<client_id>-` off a group name, which is a
+    prefix rule: if one api's name prefixed another's, a group of the longer would match
+    the shorter and render a role out of the leftover. Broad clients enumerate exact pairs
+    and are immune; these are not, so the collision is refused here instead.
+    */ -}}
+    {{- range $a := .Values.applications }}
+      {{- if eq (default "api" $a.kind) "api" }}
+        {{- range $b := $root.Values.applications }}
+          {{- if and (eq (default "api" $b.kind) "api") (ne $a.name $b.name) }}
+            {{- if hasPrefix (printf "%s-" $a.name) $b.name }}
+              {{- fail (printf "application %q is a prefix of %q: the shared roles mapping strips %q off a group name, so %q's groups would match it and render a role from the leftover" $a.name $b.name (printf "%s-" $a.name) $b.name) }}
+            {{- end }}
+          {{- end }}
+        {{- end }}
       {{- end }}
     {{- end }}
     {{- range $a := .Values.applications }}
-      {{- if $a.accesses }}
-        {{- /* self-reference first: it would otherwise be reported as the target check below */ -}}
-        {{- range $t := $a.accesses }}
-          {{- if eq $t $a.name }}
-            {{- fail (printf "application %q lists itself in `accesses`" $a.name) }}
-          {{- end }}
-          {{- if not (has $t $appNames) }}
-            {{- fail (printf "application %q lists %q in `accesses`, which is not an application in this matrix" $a.name $t) }}
-          {{- end }}
+      {{- $kind := default "api" $a.kind }}
+      {{- if not (has $kind (list "api" "client" "device")) }}
+        {{- fail (printf "application %q has kind %q: must be one of api, client, device" $a.name $kind) }}
+      {{- end }}
+      {{- if eq $kind "api" }}
+        {{- if $a.accesses }}
+          {{- fail (printf "application %q declares `accesses` but is kind api: an application that calls other applications' APIs is kind client (a human drives it) or kind device (a machine does)" $a.name) }}
+        {{- end }}
+      {{- else }}
+        {{- if not $a.accesses }}
+          {{- fail (printf "application %q is kind %q but declares no `accesses`: it would render a client with an audience of only itself, which reaches nothing" $a.name $kind) }}
         {{- end }}
         {{- if has $a.name $targetNames }}
-          {{- fail (printf "application %q declares `accesses` and is also named as another application's target: an application is a client or an API, not both" $a.name) }}
-        {{- end }}
-        {{- if not $a.redirectUris }}
-          {{- fail (printf "application %q declares `accesses` but no `redirectUris`: a client-only application serves no host, so its callback cannot be derived" $a.name) }}
+          {{- fail (printf "application %q is kind %q and is also named as another application's target: an application is a client or an API, not both" $a.name $kind) }}
         {{- end }}
         {{- if or $a.host $a.hostPrefix $a.basePath }}
-          {{- fail (printf "application %q declares `accesses` together with a host: it has no deployment of its own, and its callback comes from `redirectUris`" $a.name) }}
+          {{- fail (printf "application %q is kind %q and declares a host: it has no deployment of its own" $a.name $kind) }}
+        {{- end }}
+        {{- range $t := $a.accesses }}
+          {{- $tName := "" }}
+          {{- if kindIs "map" $t }}{{- $tName = $t.app }}{{- else }}{{- $tName = toString $t }}{{- end }}
+          {{- if eq $tName $a.name }}
+            {{- fail (printf "application %q lists itself in `accesses`" $a.name) }}
+          {{- end }}
+          {{- if not (has $tName $appNames) }}
+            {{- fail (printf "application %q lists %q in `accesses`, which is not an application in this matrix" $a.name $tName) }}
+          {{- end }}
+          {{- if eq $kind "device" }}
+            {{- if not (kindIs "map" $t) }}
+              {{- fail (printf "application %q is kind device: every `accesses` entry must be `{ app: <name>, role: <role> }`, not a bare name -- a device has no human whose groups could supply the role" $a.name) }}
+            {{- end }}
+            {{- if not $t.role }}
+              {{- fail (printf "application %q is kind device and its access to %q names no `role`" $a.name $tName) }}
+            {{- end }}
+            {{- $target := index $byName $tName }}
+            {{- $targetRoles := list }}
+            {{- range $tr := (default (list) $target.roles) }}
+              {{- if kindIs "map" $tr }}
+                {{- $targetRoles = append $targetRoles $tr.name }}
+              {{- else }}
+                {{- $targetRoles = append $targetRoles (toString $tr) }}
+              {{- end }}
+            {{- end }}
+            {{- if not (has $t.role $targetRoles) }}
+              {{- fail (printf "application %q asks for role %q on %q, which declares no such role: the group would not exist and the device would authenticate into nothing" $a.name $t.role $tName) }}
+            {{- end }}
+          {{- else }}
+            {{- if kindIs "map" $t }}
+              {{- fail (printf "application %q is kind client: `accesses` entries are bare application names. The role comes from the groups the HUMAN logging in already holds, not from this file" $a.name) }}
+            {{- end }}
+          {{- end }}
+        {{- end }}
+      {{- end }}
+      {{- if eq $kind "device" }}
+        {{- if $a.roles }}
+          {{- fail (printf "application %q is kind device and declares `roles`: a device holds no roles of its own. Its policy bindings and its service account's memberships come from the TARGET applications' role groups, named in `accesses`" $a.name) }}
+        {{- end }}
+        {{- if $a.redirectUris }}
+          {{- fail (printf "application %q is kind device and declares `redirectUris`: client_credentials has no redirect" $a.name) }}
+        {{- end }}
+      {{- else }}
+        {{- if eq $kind "client" }}
+          {{- if not $a.redirectUris }}
+            {{- fail (printf "application %q is kind client but declares no `redirectUris`: it serves no host, so its callback cannot be derived" $a.name) }}
+          {{- end }}
         {{- end }}
       {{- end }}
     {{- end }}
 
-    {{- range $app := .Values.applications }}
-      {{- if not $app.roles }}
+    {{- /*
+    Devices LAST. A device's policy bindings and its service account's group memberships
+    are `!KeyOf` references to the TARGET applications' role groups, and `!KeyOf` resolves
+    only against entries that already have a model instance -- so a device emitted before
+    its target fails with "failed to find entry with `id`". Ordering by kind here means
+    the matrix can be written in whatever order reads best.
+
+    (This is also why devices are not split into a second ConfigMap key to shorten the
+    apply: `!KeyOf` does not cross blueprint files. It would have to become `!Find` on
+    group NAMES, trading a render-time error for a runtime one.)
+    */ -}}
+    {{- $orderedApps := list }}
+    {{- range $a := .Values.applications }}
+      {{- if ne (default "api" $a.kind) "device" }}
+        {{- $orderedApps = append $orderedApps $a }}
+      {{- end }}
+    {{- end }}
+    {{- range $a := .Values.applications }}
+      {{- if eq (default "api" $a.kind) "device" }}
+        {{- $orderedApps = append $orderedApps $a }}
+      {{- end }}
+    {{- end }}
+
+    {{- range $app := $orderedApps }}
+      {{- $kind := default "api" $app.kind }}
+      {{- $isDevice := eq $kind "device" }}
+      {{- $isBroad := ne $kind "api" }}
+      {{- if and (not $app.roles) (not $isDevice) }}
         {{- fail (printf "application %q has no roles: it would render an Application with no policy binding, which is open to every user" $app.name) }}
       {{- end }}
 
@@ -249,21 +367,69 @@ data:
       {{- if ne (len $ordered) (len $roles) }}
         {{- fail (printf "application %q has a cycle in `inherits`: %v could not be ordered parent-first" $app.name (without $names $emitted)) }}
       {{- end }}
-      {{- range $env := $app.environments }}
-        {{- $isLocal := eq $env.stage "local" }}
+      {{- /*
+      An `api` renders one Application PER ENVIRONMENT. A `client` or a `device` renders
+      exactly ONE, whose audience covers every environment it lists -- one credential, one
+      login, every API. So the loop below runs once per environment for an api, and once
+      in total for the other two kinds.
+
+      What that costs, stated where it is decided: the `roles` claim is environment-free
+      (`qr-manager.admin` is the same string everywhere), so a token naming several
+      environments carries the UNION of the holder's roles across them. An API cannot tell
+      which environment a role came from. Holding `admin` in sandbox and `reader` in
+      production therefore means admin in both. Accepted deliberately -- the alternative
+      was a token per environment, and re-fetching one is as disruptive as logging in.
+      */ -}}
+      {{- $envs := $app.environments }}
+      {{- if $isBroad }}
+        {{- $envs = list (dict "broad" true) }}
+      {{- end }}
+      {{- range $env := $envs }}
+        {{- $isLocal := and (not $isBroad) (eq (default "" $env.stage) "local") }}
         {{- if and $isLocal $env.cluster }}
           {{- fail (printf "application %q has a local environment with a cluster: a developer machine is not a cluster, and the slug would be wrong" $app.name) }}
         {{- end }}
-        {{- /*
-        The environment key IS the slug suffix: `local`, or `<cluster>-<stage>`. Every
-        application in one environment shares it, and that is what lets an `accesses`
-        entry name a bare application -- `qr-manager` -- and resolve to that application's
-        client in THIS environment and no other.
-        */ -}}
-        {{- $envKey := ternary "local" (printf "%s-%s" (default "" $env.cluster) (default "" $env.stage)) $isLocal }}
-        {{- $slug := printf "%s-%s" $app.name $envKey }}
+        {{- $slug := "" }}
         {{- $base := "" }}
-        {{- if not $app.accesses }}
+        {{- $targets := list }}
+        {{- if $isBroad }}
+          {{- /*
+          One client. Its slug carries NO environment, because it is not of one, and its
+          targets are the union over every environment it lists. An environment that
+          resolves to no target at all is still an error -- that is a typo, not a ragged
+          matrix.
+          */ -}}
+          {{- $slug = $app.name }}
+          {{- range $ae := $app.environments }}
+            {{- $aKey := ternary "local" (printf "%s-%s" (default "" $ae.cluster) (default "" $ae.stage)) (eq (default "" $ae.stage) "local") }}
+            {{- $before := len $targets }}
+            {{- range $t := $app.accesses }}
+              {{- $tName := "" }}
+              {{- $tRole := "" }}
+              {{- if kindIs "map" $t }}
+                {{- $tName = $t.app }}
+                {{- $tRole = default "" $t.role }}
+              {{- else }}
+                {{- $tName = toString $t }}
+              {{- end }}
+              {{- range $other := $root.Values.applications }}
+                {{- if eq $other.name $tName }}
+                  {{- range $oe := $other.environments }}
+                    {{- $oKey := ternary "local" (printf "%s-%s" (default "" $oe.cluster) (default "" $oe.stage)) (eq (default "" $oe.stage) "local") }}
+                    {{- if eq $oKey $aKey }}
+                      {{- $targets = append $targets (dict "slug" (printf "%s-%s" $other.name $aKey) "name" $other.name "role" $tRole) }}
+                    {{- end }}
+                  {{- end }}
+                {{- end }}
+              {{- end }}
+            {{- end }}
+            {{- if eq (len $targets) $before }}
+              {{- fail (printf "application %q lists environment %q, where none of its `accesses` exist: nothing would be added to its audience" $app.name $aKey) }}
+            {{- end }}
+          {{- end }}
+        {{- else }}
+          {{- $envKey := ternary "local" (printf "%s-%s" (default "" $env.cluster) (default "" $env.stage)) $isLocal }}
+          {{- $slug = printf "%s-%s" $app.name $envKey }}
           {{- if $isLocal }}
             {{- $base = printf "http://localhost:%v" (default 5173 $app.localPort) }}
           {{- else }}
@@ -277,32 +443,39 @@ data:
             {{- $base = printf "https://%s%s" $host (default "" $app.basePath) }}
           {{- end }}
         {{- end }}
-        {{- /*
-        Targets of a client-only app, resolved in THIS environment only. A target that
-        does not run here is skipped, not an error: the matrix is ragged on purpose --
-        server3 runs one application -- so postman-server3-production correctly ends up
-        addressing homelab-dashboard alone. Resolving to NOTHING is the error, because
-        that renders a client whose audience is only itself.
-        */ -}}
-        {{- $targets := list }}
-        {{- range $t := (default (list) $app.accesses) }}
-          {{- range $other := $root.Values.applications }}
-            {{- if eq $other.name $t }}
-              {{- range $oe := $other.environments }}
-                {{- $oKey := ternary "local" (printf "%s-%s" (default "" $oe.cluster) (default "" $oe.stage)) (eq $oe.stage "local") }}
-                {{- if eq $oKey $envKey }}
-                  {{- $targets = append $targets (dict "slug" (printf "%s-%s" $other.name $envKey) "name" $other.name) }}
-                {{- end }}
-              {{- end }}
-            {{- end }}
-          {{- end }}
-        {{- end }}
-        {{- if and $app.accesses (not $targets) }}
-          {{- fail (printf "application %q declares `accesses` but none of them exist in environment %q: the client would render with an audience of only itself" $app.name $envKey) }}
-        {{- end }}
         {{- $auds := list $slug }}
         {{- range $t := $targets }}
           {{- $auds = append $auds $t.slug }}
+        {{- end }}
+        {{- /*
+        EXACT group -> claim pairs for this client, not a prefix rule.
+
+        The prefix version was wrong and the bug was live: a client named `interactive-map`
+        matched `interactive-map-feeder-...-reader` on `startswith`, and emitted
+        `interactive-map.feeder-server1-production-reader` as a role. Any client whose name
+        prefixes another application's name hits it. Enumerating the pairs -- which needs
+        only the target's declared roles, known here -- removes the class of bug entirely.
+        */ -}}
+        {{- $claims := list }}
+        {{- $claimed := list }}
+        {{- range $t := $targets }}
+          {{- $tApp := index $byName $t.name }}
+          {{- range $tr := (default (list) $tApp.roles) }}
+            {{- $trName := "" }}
+            {{- if kindIs "map" $tr }}{{- $trName = $tr.name }}{{- else }}{{- $trName = toString $tr }}{{- end }}
+            {{- $g := printf "%s-%s" $t.slug $trName }}
+            {{- if not (has $g $claimed) }}
+              {{- $claimed = append $claimed $g }}
+              {{- $claims = append $claims (dict "group" $g "claim" (printf "%s.%s" $t.name $trName)) }}
+            {{- end }}
+          {{- end }}
+        {{- end }}
+        {{- range $role := $ordered }}
+          {{- $g := printf "%s-%s" $slug $role.name }}
+          {{- if not (has $g $claimed) }}
+            {{- $claimed = append $claimed $g }}
+            {{- $claims = append $claims (dict "group" $g "claim" (printf "%s.%s" $app.name $role.name)) }}
+          {{- end }}
         {{- end }}
 
       # ---------- {{ $slug }} ----------
@@ -381,35 +554,39 @@ data:
           description: "Roles for {{ $slug }}, collected from every application it may call. Requested explicitly: scope=openid profile email roles."
           expression: |
             # Groups name the RESOURCE, not the client that logs in. A token minted here
-            # carries `qr-manager.editor` because the user holds
-            # qr-manager-{{ $envKey }}-editor -- not because they hold anything named
-            # {{ $app.name }}.
+            # carries `qr-manager.editor` because the user holds a qr-manager editor group
+            # -- not because they hold anything named {{ $app.name }}.
             #
             # This is the half that `aud` alone does not solve. The shared `homelab roles`
             # mapping filters on the ISSUING client_id, which for this client would collect
             # its own gate group and nothing else: a token that verifies at every API it
             # addresses and is authorized at none of them.
             #
-            # Every prefix below ends in -{{ $envKey }}, baked at render time. Two
-            # environments in one table would merge their roles into a claim that no longer
-            # says which environment they came from.
-            targets = {
-                {{- range $t := $targets }}
-                "{{ $t.slug }}": "{{ $t.name }}",
+            # THE TABLE BELOW SPANS ENVIRONMENTS, and the claim it produces cannot say
+            # which one a role came from: qr-manager-server1-sandbox-admin and
+            # qr-manager-server2-production-admin both render `qr-manager.admin`. That is
+            # the accepted cost of one credential for every environment -- holding a role
+            # in ANY environment listed here grants it in ALL of them. Narrowing it means
+            # going back to a client per environment, which means a token per environment.
+            #
+            # Exact pairs, not a prefix rule: a client whose name prefixes another
+            # application's name would otherwise strip the wrong number of characters and
+            # invent a role out of the remainder.
+            claims = {
+                {{- range $c := $claims }}
+                "{{ $c.group }}": "{{ $c.claim }}",
                 {{- end }}
-                "{{ $slug }}": "{{ $app.name }}",
             }
             # all_groups() returns direct groups PLUS their ancestors, so a role ladder in
             # a target application arrives here whole, exactly as it does in that
-            # application's own token.
-            groups = [group.name for group in request.user.all_groups()]
+            # application's own token. The set dedupes the same role reached through
+            # several environments.
             return {
-                "roles": sorted(
-                    f"{app}.{name[len(client_id) + 1:]}"
-                    for client_id, app in targets.items()
-                    for name in groups
-                    if name.startswith(f"{client_id}-")
-                ),
+                "roles": sorted({
+                    claims[group.name]
+                    for group in request.user.all_groups()
+                    if group.name in claims
+                }),
             }
         {{- end }}
 
@@ -455,27 +632,77 @@ data:
           # would mean updating every deployment's config and breaking live tokens until
           # their next renewal.
           issuer_mode: per_provider
+        {{- if $isDevice }}
+          # A machine: confidential, because there is no browser to run PKCE in and no
+          # human to be redirected. The secret is the whole credential.
+          #
+          # `client_secret` is deliberately NOT set here. Authentik generates one when it
+          # creates the provider, and a blueprint leaves a field it does not mention
+          # exactly as it found it -- so the value survives every re-apply. Read it once
+          # from the provider page in the UI and put it into that device's firmware.
+          #
+          # The rejected alternative was OpenBao -> ExternalSecret -> the worker's env ->
+          # `!Env` here. It buys a secret recoverable without the database, and it costs
+          # a KV path, an ExternalSecret entry and an env var per device. It is not worth
+          # it HERE because this instance's recovery unit is already the Postgres backup
+          # plus AUTHENTIK_SECRET_KEY: human group memberships are deliberately not in git
+          # either, so a rebuild without the database already means re-granting access by
+          # hand. A device secret is the same class of fact.
+          #
+          # What that costs: rebuild Authentik WITHOUT its database and every device gets
+          # a new secret and must be reflashed.
+          client_type: confidential
+        {{- else }}
           # SPA: public client, PKCE, no secret to store or rotate.
           client_type: public
+        {{- end }}
           client_id: {{ $slug }}
           sub_mode: user_username
           # REQUIRED. The model default is an empty list, and empty grant_types makes
           # /application/o/authorize/ reject every request with invalid_request
           # ("The request is otherwise malformed") before any policy is evaluated.
+        {{- if $isDevice }}
+          grant_types:
+            # No authorization_code: there is no browser, and no redirect URI below for
+            # one to come back to. No refresh_token either -- client_credentials IS the
+            # refresh: the device presents its secret again and gets a new token.
+            - client_credentials
+        {{- else }}
           grant_types:
             - authorization_code
-        {{- if $app.accesses }}
+          {{- if $app.accesses }}
             # No refresh_token, deliberately. This client's token is addressed to several
             # APIs at once and nothing in this design introspects -- every verifier checks
             # the signature offline -- so expiry is the ONLY revocation there is. A refresh
             # token would make a credential worth N APIs effectively permanent. Re-running
             # the browser login every {{ $root.Values.accessTokenValidity }} is the price,
             # and it is what keeps removing someone from a group meaningful.
-        {{- else }}
+          {{- else }}
             - refresh_token
+          {{- end }}
         {{- end }}
+        {{- if not $isDevice }}
           access_code_validity: {{ $root.Values.accessCodeValidity }}
-          access_token_validity: {{ $root.Values.accessTokenValidity }}
+        {{- end }}
+        {{- if $isDevice }}
+          # SHORT on purpose. Nothing here introspects -- every verifier checks the
+          # signature offline -- so this number IS the revocation latency: a device stays
+          # admitted for up to this long after its groups are cut.
+          #
+          # It can be short because a device does not have to store anything: a token
+          # lives in an ESPHome `global` in RAM, and client_credentials is its own refresh
+          # -- the device presents its secret again and gets a new one. Losing it on
+          # reboot costs one extra request.
+          #
+          # What it must NOT become is a token request per API request. Authentik runs
+          # update_or_create() on the service account on EVERY client_credentials call, so
+          # that is a database write per API call -- at a 10-second poll, 8640 writes a day
+          # per device. Fetch on expiry, not per request. Override with
+          # `accessTokenValidity` per device.
+          access_token_validity: {{ default $root.Values.deviceAccessTokenValidity $app.accessTokenValidity }}
+        {{- else }}
+          access_token_validity: {{ default $root.Values.accessTokenValidity $app.accessTokenValidity }}
+        {{- end }}
           # For a `local` environment $base is http://localhost:<port>, so these are
           # the loopback URIs and there is no separate special case below.
           #
@@ -493,8 +720,9 @@ data:
           # is not is a *sandbox* token — an API that wants to accept it needs the local
           # application as a trusted issuer row, which is exactly the point: that row
           # lives in the developer's own config and never ships.
+        {{- if not $isDevice }}
           redirect_uris:
-        {{- if $app.accesses }}
+          {{- if $app.accesses }}
             # A client-only app serves no host, so the callback belongs to the tool rather
             # than to a deployment of ours. No logout URI: there is no page to return to.
             {{- range $uri := $app.redirectUris }}
@@ -502,13 +730,14 @@ data:
               url: {{ $uri }}
               redirect_uri_type: authorization
             {{- end }}
-        {{- else }}
+          {{- else }}
             - matching_mode: strict
               url: {{ $base }}/callback
               redirect_uri_type: authorization
             - matching_mode: strict
               url: {{ $base }}/
               redirect_uri_type: logout
+          {{- end }}
         {{- end }}
           property_mappings:
             {{- range $scope := $root.Values.scopes }}
@@ -531,7 +760,7 @@ data:
         identifiers:
           slug: {{ $slug }}
         attrs:
-          name: {{ $app.title }} ({{ if $isLocal }}local{{ else }}{{ $env.cluster }}/{{ $env.stage }}{{ end }})
+          name: {{ $app.title }}{{ if not $isBroad }} ({{ if $isLocal }}local{{ else }}{{ $env.cluster }}/{{ $env.stage }}{{ end }}){{ end }}
           provider: !KeyOf prov-{{ $slug }}
           # Authentik's application-grouping field, doing double duty: it groups the
           # environments together in the user portal, AND the roles mapping reads it for
@@ -558,6 +787,54 @@ data:
         attrs:
           order: {{ index $order $role.name }}
           enabled: true
+        {{- end }}
+        {{- if $isDevice }}
+
+      # The service account this device's tokens are issued as.
+      #
+      # Authentik's client_credentials grant does update_or_create() on a username it
+      # DERIVES -- `ak-<provider name>-client_credentials` -- and creates it in no groups
+      # if it is absent. Left to that, the first token request would produce an empty
+      # `roles` claim and then be refused by the bindings below, after creating the user.
+      #
+      # Declaring it here first is what avoids that: update_or_create finds this one by
+      # username and only overwrites name/path/type, so the memberships survive. Only
+      # `type` and `groups` are set -- a blueprint leaves fields it does not mention
+      # alone, so name and path stay whatever Authentik itself last wrote and the two
+      # writers never fight over them.
+      #
+      # VERIFY the derived username against a real client_credentials request before
+      # trusting this: if it differs by one character, Authentik silently creates a
+      # SECOND, group-less user beside this one and the device gets a useless token.
+      #
+      # Unlike a human's memberships -- deliberately not in git -- a service account is
+      # not a person, and its access is exactly as reviewable as the device it belongs to.
+      - model: authentik_core.user
+        id: sa-{{ $slug }}
+        identifiers:
+          username: ak-{{ $slug }}-client_credentials
+        attrs:
+          type: service_account
+          groups:
+          {{- range $t := $targets }}
+            - !KeyOf grp-{{ $t.slug }}-{{ $t.role }}
+          {{- end }}
+          {{- range $i, $t := $targets }}
+
+      # Bound to the TARGET's role group, not to a gate group of its own.
+      #
+      # A `client` needs its own gate because many humans share one Postman client. A
+      # device does not: it has its own service account, so removing THAT user from this
+      # group revokes this device and nothing else. A second group would be an object
+      # that exists only to be a switch someone forgets to flip.
+      - model: authentik_policies.policybinding
+        identifiers:
+          target: !KeyOf app-{{ $slug }}
+          group: !KeyOf grp-{{ $t.slug }}-{{ $t.role }}
+        attrs:
+          order: {{ $i }}
+          enabled: true
+          {{- end }}
         {{- end }}
       {{- end }}
     {{- end }}

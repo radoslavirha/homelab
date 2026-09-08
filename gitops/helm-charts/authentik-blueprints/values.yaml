@@ -32,4 +32,21 @@ signingKeyName: authentik Self-signed Certificate
 accessCodeValidity: minutes=1
 accessTokenValidity: minutes=30
 
+# Token lifetime for kind: device providers, overridable per device with
+# `accessTokenValidity`.
+#
+# SHORT, because nothing here introspects: every verifier checks the signature offline, so
+# this number IS the revocation latency. A device stays admitted for up to this long after
+# its groups are cut.
+#
+# It can be short because a device stores nothing durable -- the token lives in an ESPHome
+# `global` in RAM, and client_credentials is its own refresh: present the secret, get a new
+# token. A reboot costs one extra request.
+#
+# It should NOT be so short that the device fetches a token per API request. Authentik runs
+# update_or_create() on the service account on every client_credentials call, so that is a
+# database write per API call: at a 10-second poll, 8640 a day per device. Ten minutes gives
+# six token requests an hour and ten-minute revocation.
+deviceAccessTokenValidity: minutes=10
+
 applications: []
