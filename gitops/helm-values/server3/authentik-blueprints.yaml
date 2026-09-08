@@ -4,7 +4,7 @@
 # mounted by the Authentik worker, and applied by Authentik itself. Adding an
 # application or a role is a few lines here; the chart produces the repetitive YAML.
 #
-# Topology: docs/superpowers/specs/2026-09-04-authentik-tenancy-topology.md
+# Topology: docs/superpowers/specs/archive/2026-09-04-authentik-tenancy-topology.md
 #
 # Hostnames are derived as:
 #   production -> <hostPrefix>.<cluster>.homelab.irha.cz
@@ -41,7 +41,7 @@
 # A bare string is still accepted and means a role with no parent. Ladders are per
 # application: `qr-manager.admin` implies nothing about `miot-bridge`.
 #
-# Design: docs/superpowers/specs/2026-09-08-role-hierarchy.md
+# Design: docs/superpowers/specs/archive/2026-09-08-role-hierarchy.md
 
 applications:
   - name: qr-manager
@@ -96,7 +96,7 @@ applications:
     # this API; the LaskaKit map does NOT use it — a device is its own
     # confidential application with client_credentials, and that one cannot live
     # here because it needs a client secret. See "Devices" in
-    # docs/superpowers/specs/2026-09-04-authentik-tenancy-topology.md.
+    # docs/superpowers/specs/archive/2026-09-04-authentik-tenancy-topology.md.
     #
     # Every route is a read of public CHMU data, so `reader` is the only rung with
     # anything behind it today. `editor` and `admin` are declared so the feeder is

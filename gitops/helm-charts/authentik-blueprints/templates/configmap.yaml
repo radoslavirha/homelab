@@ -2,7 +2,7 @@
 Renders one Authentik blueprint from the application matrix in values.
 
 Shape per environment, which is the topology decision in
-docs/superpowers/specs/2026-09-04-authentik-tenancy-topology.md:
+docs/superpowers/specs/archive/2026-09-04-authentik-tenancy-topology.md:
 
   - one OAuth2 provider + one Application per app per environment
   - one Group per role
@@ -134,7 +134,7 @@ data:
       That is what lets an API set one role as a class-level floor instead of repeating
       every role on every route.
 
-      Design: docs/superpowers/specs/2026-09-08-role-hierarchy.md
+      Design: docs/superpowers/specs/archive/2026-09-08-role-hierarchy.md
       */ -}}
       {{- $roles := list }}
       {{- $names := list }}
