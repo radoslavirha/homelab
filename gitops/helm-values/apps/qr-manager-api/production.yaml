@@ -9,7 +9,7 @@
 apps:
   qr-manager-api:
     image:
-      tag: "0.6.0"
+      tag: "0.7.0"
     templates:
       config:
         content: |
