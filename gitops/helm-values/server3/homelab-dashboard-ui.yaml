@@ -97,7 +97,7 @@ apps:
         validate: true
         content: |
           {
-            "title": "homelab",
+            "title": "Homelab dashboard",
             "unifi": {
               "site": "default"
             },
