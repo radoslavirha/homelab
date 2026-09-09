@@ -20,6 +20,20 @@ authentik:
     workers: 2
     threads: 4
 
+  # Default (600s / 10 minutes) is no longer enough for the homelab-applications
+  # blueprint's single apply_blueprint transaction. Measured 2026-09-09: adding the
+  # 9th application (argocd) pushed it from the ~9min AGENTS.md already flagged as
+  # climbing (from an original ~45s) into TimeLimitExceeded — the worker killed its
+  # own task at exactly 600s, twice (the automatic retry hit the same wall), and the
+  # blueprint was left unapplied. This is the one global knob Authentik exposes
+  # (docs.goauthentik.io/worker/#time-limits); there is no per-task override for
+  # blueprint apply specifically. 30 minutes is a 3x margin over the failure point,
+  # not a fix for the underlying growth — if this matrix keeps growing, the next
+  # lever is splitting homelab-applications.yaml into more than one blueprint file
+  # (chart already supports it: multiple keys in blueprints.configMaps).
+  worker:
+    task_default_time_limit: minutes=30
+
   postgresql:
     # Host defaults to "{{ .Release.Name }}-postgresql" -> authentik-postgresql.
     name: authentik
