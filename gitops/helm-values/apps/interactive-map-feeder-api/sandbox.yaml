@@ -19,7 +19,7 @@ apps:
               "publicURL": "{{ VAR_PROTOCOL }}://{{ COMPONENT }}.{{ VAR_SUBDOMAIN }}.{{ VAR_PUBLIC_DOMAIN }}/{{ PATH_NAME }}",
               "externalApis": {
                   "CHMI_PORTAL": {
-                      "baseURL": "https://intranet.chmi.cz",
+                      "baseURL": "https://produkty.chmi.cz",
                       "resilience": {
                           "timeout": {
                               "ms": 10000

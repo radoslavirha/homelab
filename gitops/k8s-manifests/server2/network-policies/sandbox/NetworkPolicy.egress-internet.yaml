@@ -2,7 +2,7 @@
 #
 # ── Why this is broad on purpose ─────────────────────────────────────────────
 # An earlier revision pinned each third-party host with Cilium `toFQDNs`
-# (intranet.chmi.cz, opendata.chmi.cz, miot-spec.org), derived from 30 days of
+# (produkty.chmi.cz, opendata.chmi.cz, miot-spec.org), derived from 30 days of
 # the apps' own OTel metrics. It was removed deliberately.
 #
 # The problem was not tightness, it was that the constraint lived nowhere a

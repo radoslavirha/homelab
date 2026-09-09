@@ -100,7 +100,7 @@ Do not hand-assemble a URL that a run depends on without confirming against the 
 | InfluxDB2 |  `influxdb2.iot.svc.cluster.local:80` | `curl /health` |
 | miIO device (LAN) | `192.168.1.85:54321` UDP | `echo -n probe > /dev/udp/192.168.1.85/54321` |
 | Loxone (LAN) | `192.168.1.140:50450` UDP | same form |
-| CHMI (internet) | `opendata.chmi.cz:443`, `intranet.chmi.cz:443` | `curl -sS -o /dev/null -w '%{http_code}'` |
+| CHMI (internet) | `opendata.chmi.cz:443`, `produkty.chmi.cz:443` | `curl -sS -o /dev/null -w '%{http_code}'` |
 | miot-spec (internet) | `miot-spec.org:443` | same |
 | OpenBao (server3) | `vault.server3.home:80` | plain HTTP, from server1/server2 via ExternalSecrets |
 | Cross-cluster OTLP | `192.168.1.202:4317` / `otel.server3.home` | belongs to the `monitoring` namespace, **not** to app pods |
