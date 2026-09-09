@@ -131,12 +131,10 @@ data:
                          client_credentials, `accesses` carrying an explicit role,
                          a blueprint-declared service account, no redirect URIs.
 
-    A device may declare SEVERAL environments, and each renders its own client -- own
-    client_id, own secret, own service account, own single-environment audience. That is
-    not a device spanning environments, it is one client per environment exactly as the
-    `postman` entry does, and it is how a device gets a `local` credential for a bench
-    without its deployed credential reaching the bench. The cost is one secret to flash
-    per environment.
+    A device, like a client, declares several environments and gets ONE client whose
+    audience covers all of them -- one client_id, one secret to flash, one service account
+    placed in each environment's role group. That is how a device reaches both a bench and
+    its deployment on a single credential.
 
     `accesses` is what both non-api kinds have in common: the list of applications whose
     audience this client's token carries. Two invariants carry the design, and both are

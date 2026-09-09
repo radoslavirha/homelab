@@ -144,10 +144,9 @@ applications:
   - name: postman
     title: Postman
     kind: client
-    # Postman serves nothing, it calls the APIs above. `accesses` is the
-    # superset; each environment gets the intersection with what actually runs there, so
-    # postman-server3-production addresses homelab-dashboard alone while postman-local
-    # addresses all four.
+    # Postman serves nothing, it calls the APIs above. `accesses` names the applications
+    # and `environments` the environments; the audience is the intersection -- every one of
+    # those applications that actually runs in each of those environments, 18 entries today.
     #
     # ONE client for every environment: log in once, call any API anywhere. The `roles`
     # claim is `app.role` and carries no environment, so this token holds the union of
@@ -205,18 +204,22 @@ applications:
   # Devices. A machine identity, not a person -- no browser, no redirect, no password
   # prompt. It presents a client_id and a client_secret and gets a signed JWT back.
   #
-  # THE SECRET IS NOT HERE AND NEVER WILL BE. The chart emits
-  #   client_secret: !Env AUTHENTIK_DEVICE_SECRET_<SLUG IN CAPS>
-  # which the Authentik WORKER resolves from its own environment when it applies the
-  # blueprint. The chain, for each device:
+  # THE SECRET IS NOT HERE AND NEVER WILL BE. Authentik GENERATES it when it creates the
+  # provider, and the chart deliberately does not set `client_secret` -- a blueprint leaves
+  # a field it does not mention exactly as it found it, so the value survives every
+  # re-apply. For each device:
   #
-  #   1. generate once           openssl rand -hex 32
-  #   2. bao kv put secret/server3/authentik-devices <device>=<value>
-  #   3. add a data entry to gitops/k8s-manifests/server3/authentik/ExternalSecret.authentik.yaml
-  #      mapping it to AUTHENTIK_DEVICE_SECRET_<SLUG IN CAPS>
-  #   4. put the SAME value into that device's own firmware secrets, by hand
+  #   1. read it once from the provider page in the Authentik UI
+  #   2. put it into that device's own firmware secrets, by hand
   #
-  # Step 4 is manual and stays manual: nothing here flashes an ESP32.
+  # Step 2 is manual and stays manual: nothing here flashes an ESP32.
+  #
+  # An OpenBao -> ExternalSecret -> `!Env` chain was considered and dropped. It buys a
+  # secret recoverable without the database and costs a KV path, an ExternalSecret entry
+  # and an env var per device -- not worth it when this instance's recovery unit is already
+  # the Postgres backup plus AUTHENTIK_SECRET_KEY, and human group memberships are not in
+  # git either. The cost of that choice: rebuild Authentik without its database and every
+  # device needs a new secret and a reflash.
   # ---------------------------------------------------------------------------------
 
   - name: interactive-map
