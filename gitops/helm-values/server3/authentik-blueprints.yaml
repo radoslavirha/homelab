@@ -181,6 +181,24 @@ applications:
       - { cluster: server3, stage: production }
       - { stage: local }
 
+  - name: argocd
+    title: ArgoCD
+    # Explicit host, same reasoning as homelab-dashboard: server3 is the control
+    # cluster and does not follow the apps.<cluster> convention. No `local`
+    # environment -- ArgoCD does not run on a developer machine.
+    host: argocd.server3.homelab.irha.cz
+    # ArgoCD's OIDC callback is fixed at /auth/callback, not this chart's /callback
+    # default for our own apps. logoutPath stays the default (/).
+    redirectPath: /auth/callback
+    roles:
+      - name: admin
+        inherits: editor
+      - name: editor
+        inherits: reader
+      - name: reader
+    environments:
+      - { cluster: server3, stage: production }
+
   - name: homelab-dashboard
     title: Homelab Dashboard
     # Explicit host: server3 is the control cluster and does not follow the

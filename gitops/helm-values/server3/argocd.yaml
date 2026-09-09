@@ -27,10 +27,30 @@ notifications:
 
 configs:
   cm:
+    # Kept on as a fallback: `oidc.config` below adds Authentik SSO, it does not
+    # replace local admin login. If Authentik or the network path to it is down,
+    # `admin` still gets in.
     admin.enabled: "true"
     # External URL. TLS terminates at Traefik's websecure listener against server3-tls;
     # the server itself still speaks plaintext behind it (configs.params below).
     url: https://argocd.server3.homelab.irha.cz
+    # Authentik SSO. Public client + PKCE (no clientSecret) — same as every other
+    # api-kind application in gitops/helm-values/server3/authentik-blueprints.yaml.
+    # client_id is the rendered slug: <app>-<cluster>-<stage>, no `local` environment
+    # exists for this application.
+    #
+    # `dex.enabled: false` below — this uses ArgoCD's native OIDC support directly,
+    # no Dex connector needed for a single, already-OIDC-compliant IdP.
+    oidc.config: |
+      name: Authentik
+      issuer: https://auth.irha.cz/application/o/argocd-server3-production/
+      clientID: argocd-server3-production
+      requestedScopes:
+        - openid
+        - profile
+        - email
+        - roles
+      enablePKCEAuthentication: true
     # Machine account for the Argo CD MCP server (read-only, see rbac below).
     # `apiKey` grants token generation only — no `login`, so this account cannot
     # sign in to the UI and needs no password in argocd-secret.
@@ -67,6 +87,11 @@ configs:
       jqPathExpressions:
         - '.spec.template.metadata.annotations."reloader.stakater.com/last-reloaded-from"'
   rbac:
+    # ArgoCD's group-claim key defaults to `groups`; our IdP emits `roles`
+    # (docs/identity.md — `["argocd.admin", "argocd.editor", "argocd.reader"]`,
+    # already filtered to this application and already flattened by the role
+    # ladder). Point RBAC at the claim we actually issue.
+    scopes: '[roles]'
     # Full operational control for the MCP account: every ArgoCD resource is
     # granted except `accounts` and `exec` (see below).
     #
@@ -102,6 +127,13 @@ configs:
       p, role:copilot, projects, *, *, allow
       p, role:copilot, repositories, *, *, allow
       g, copilot, role:copilot
+      # Authentik SSO. ArgoCD ships only role:admin and role:readonly out of the
+      # box — `editor` has no distinct routes anywhere in this repo yet (same
+      # reasoning docs/identity.md gives for every other application's unused
+      # `editor` rung), so it maps alongside `reader` until that changes.
+      g, argocd.admin, role:admin
+      g, argocd.editor, role:readonly
+      g, argocd.reader, role:readonly
   params:
     server.insecure: "true"
     # Bound how long a values-only commit can stay invisible.

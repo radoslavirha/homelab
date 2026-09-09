@@ -205,8 +205,8 @@ data:
         {{- if has $a.name $targetNames }}
           {{- fail (printf "application %q is kind %q and is also named as another application's target: an application is a client or an API, not both" $a.name $kind) }}
         {{- end }}
-        {{- if or $a.host $a.hostPrefix $a.basePath }}
-          {{- fail (printf "application %q is kind %q and declares a host: it has no deployment of its own" $a.name $kind) }}
+        {{- if or $a.host $a.hostPrefix $a.basePath $a.redirectPath $a.logoutPath }}
+          {{- fail (printf "application %q is kind %q and declares a host (or redirectPath/logoutPath): it has no deployment of its own" $a.name $kind) }}
         {{- end }}
         {{- range $t := $a.accesses }}
           {{- $tName := "" }}
@@ -736,11 +736,18 @@ data:
               redirect_uri_type: authorization
             {{- end }}
           {{- else }}
+            {{- /*
+            Our own apps (qr-manager-ui, homelab-dashboard, ...) all answer OAuth
+            callbacks at /callback and return to / on logout. Third-party apps we don't
+            control (ArgoCD, Grafana, Headlamp, ...) each have their own fixed callback
+            path, so redirectPath/logoutPath let a single api-kind entry override it —
+            defaults keep every existing app's rendered output byte-identical.
+            */}}
             - matching_mode: strict
-              url: {{ $base }}/callback
+              url: {{ $base }}{{ default "/callback" $app.redirectPath }}
               redirect_uri_type: authorization
             - matching_mode: strict
-              url: {{ $base }}/
+              url: {{ $base }}{{ default "/" $app.logoutPath }}
               redirect_uri_type: logout
           {{- end }}
         {{- end }}
