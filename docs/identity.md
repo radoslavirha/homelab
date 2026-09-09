@@ -200,7 +200,17 @@ it **in no groups**. Left alone, the first token request would produce an empty 
 be refused by the application's bindings, *after* creating the user. The chart emits that user ahead of
 time, in the target's role group; `update_or_create` then finds it by username and overwrites only
 name/path/type, so the membership survives. Get the username wrong by one character and Authentik
-silently creates a second, group-less user beside it — so verify it against a real token request.
+silently creates a second, group-less user beside it.
+
+Verified on 2026-09-09 with a real `client_credentials` request: `sub` came back as
+`ak-interactive-map-client_credentials` — the declared username — with
+`roles: ["interactive-map-feeder.reader"]` and a three-entry `aud`. A non-empty roles claim is the
+proof that the declared account was used rather than a fresh group-less one.
+
+**Two fields are required even though they look inapplicable, and omitting either fails the WHOLE
+blueprint** — no entry applies, `BlueprintInstance.status` reads `error`, and the task log still says
+*"Task finished processing without errors"*. Look at the instance, not the task. A device provider
+needs `redirect_uris: []` despite having no redirect, and its service account needs a `name`.
 
 **No gate group.** A `client` needs one because many humans share one Postman client. A device has its
 own service account, so removing *that user* from the target's role group revokes that device and
@@ -411,6 +421,11 @@ and its binding. Delete the old group in the UI and re-add its members.
 
 - **ArgoCD does not auto-deploy here.** Pushing is not deploying — Hard Refresh, then Sync, then wait
   for the worker.
+- **Do not run `ak apply_blueprint` by hand while the scheduled apply is running.** Two importers on
+  the same blueprint contend on row locks, and the loser sets `BlueprintInstance.status` to `error`
+  even though the content is fine — observed repeatedly on 2026-09-09, recovering to `successful` on
+  the next uncontended scheduled run. Reach for a manual apply only to read an error message, and
+  expect the status to flap while you do.
 - **A blueprint takes ~15 minutes to land, not seconds** (measured 2026-09-08). ConfigMap propagation
   into the worker's volume is ~1 min, Authentik's discovery timer is the long pole at ~10 min, and the
   import itself ran ~5 min for this matrix. The import is **one transaction**, so the objects appear
