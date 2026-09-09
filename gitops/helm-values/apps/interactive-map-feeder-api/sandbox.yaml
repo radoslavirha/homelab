@@ -55,6 +55,33 @@ apps:
                       "retriableStatusCodes": [500, 502, 503, 504, 429, 408]
                   }
               },
+              "auth": {
+                  "IDP": {
+                      "type": "bearer-jwt",
+                      "trustedIssuers": [
+                          {
+                              "name": "idp",
+                              "issuer": "https://auth.irha.cz/application/o/interactive-map-feeder-{{ VAR_CLUSTER }}-{{ NAMESPACE }}/",
+                              "audience": "interactive-map-feeder-{{ VAR_CLUSTER }}-{{ NAMESPACE }}",
+                              "subjectKind": "human",
+                              "key": {
+                                  "source": "jwks",
+                                  "uri": "https://auth.irha.cz/application/o/interactive-map-feeder-{{ VAR_CLUSTER }}-{{ NAMESPACE }}/jwks/"
+                              }
+                          },
+                          {
+                              "name": "postman",
+                              "issuer": "https://auth.irha.cz/application/o/postman/",
+                              "audience": "interactive-map-feeder-{{ VAR_CLUSTER }}-{{ NAMESPACE }}",
+                              "subjectKind": "human",
+                              "key": {
+                                  "source": "jwks",
+                                  "uri": "https://auth.irha.cz/application/o/postman/jwks/"
+                              }
+                          }
+                      ]
+                  }
+              },
               "logger": {
                   "enabled": true,
                   "level": "info"

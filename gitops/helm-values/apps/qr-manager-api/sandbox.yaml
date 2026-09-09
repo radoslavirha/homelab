@@ -31,6 +31,33 @@ apps:
                       "pass": "{{ SECRET_MONGODB_PASSWORD }}"
                   }
               },
+              "auth": {
+                  "IDP": {
+                      "type": "bearer-jwt",
+                      "trustedIssuers": [
+                          {
+                              "name": "idp",
+                              "issuer": "https://auth.irha.cz/application/o/qr-manager-{{ VAR_CLUSTER }}-{{ NAMESPACE }}/",
+                              "audience": "qr-manager-{{ VAR_CLUSTER }}-{{ NAMESPACE }}",
+                              "subjectKind": "human",
+                              "key": {
+                                  "source": "jwks",
+                                  "uri": "https://auth.irha.cz/application/o/qr-manager-{{ VAR_CLUSTER }}-{{ NAMESPACE }}/jwks/"
+                              }
+                          },
+                          {
+                              "name": "postman",
+                              "issuer": "https://auth.irha.cz/application/o/postman/",
+                              "audience": "qr-manager-{{ VAR_CLUSTER }}-{{ NAMESPACE }}",
+                              "subjectKind": "human",
+                              "key": {
+                                  "source": "jwks",
+                                  "uri": "https://auth.irha.cz/application/o/postman/jwks/"
+                              }
+                          }
+                      ]
+                  }
+              },
               "logger": {
                   "enabled": true,
                   "level": "info"
