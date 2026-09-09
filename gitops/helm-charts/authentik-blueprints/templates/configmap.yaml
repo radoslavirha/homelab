@@ -720,7 +720,14 @@ data:
           # is not is a *sandbox* token — an API that wants to accept it needs the local
           # application as a trusted issuer row, which is exactly the point: that row
           # lives in the developer's own config and never ships.
-        {{- if not $isDevice }}
+        {{- if $isDevice }}
+          # REQUIRED even here. client_credentials has no redirect, but the provider
+          # serializer rejects the entry outright without this key -- measured 2026-09-09:
+          # "Serializer errors {'redirect_uris': [... 'This field is required.']}", which
+          # failed the WHOLE blueprint, not just this entry. An empty list is the faithful
+          # expression of "this client has no redirect".
+          redirect_uris: []
+        {{- else }}
           redirect_uris:
           {{- if $app.accesses }}
             # A client-only app serves no host, so the callback belongs to the tool rather
