@@ -27,6 +27,25 @@ Loxone is the only physical IoT controller. MiOT Bridge supports UDP transport b
 | **miot-bridge-api** | server2, namespaces `production` + `sandbox` | Bridges Loxone ↔ MiOT cloud devices. HTTP + UDP ingress. Polls MiOT devices every 5 s |
 | **interactive-map-feeder-api** | server2, namespaces `production` + `sandbox` | Feeds data to an interactive map UI. HTTP ingress only. No secrets |
 
+### Pod security posture
+
+The three API pods (`qr-manager-api`, `miot-bridge-api`, `interactive-map-feeder-api`) run
+**non-root and enforced**: `runAsNonRoot: true` with the numeric UID 1000 their images
+declare, all capabilities dropped, no privilege escalation, `RuntimeDefault` seccomp and a
+**read-only root filesystem**. Set in `gitops/helm-values/apps/<app>/base.yaml`; the chart
+keys are `podSecurityContext` / `containerSecurityContext`, covered by
+`gitops/helm-charts/iot-applications/tests/deployment_test.yaml`.
+
+Two things this couples to, worth knowing before changing either:
+
+- **`miot-bridge-api` tolerates the read-only filesystem only while `mongodb.enabled` is
+  true.** Its device, notification and model-property-override facades fall back to local
+  JSON files under `cachePath` (`/home/app/cache`) when Mongo is off, and those writes fail
+  on a read-only root. Turn one off, turn the other off.
+- **The nginx UI pods (`qr-manager-ui`, `homelab-dashboard-ui`) still start as root.** They
+  need `nginxinc/nginx-unprivileged` (port 8080, Service `targetPort` change) before the
+  same block can apply to them.
+
 ---
 
 ## Data Flows
