@@ -34,6 +34,26 @@ apps:
       limits:
         cpu: 500m
         memory: 500Mi
+    # readOnlyRootFilesystem is safe here *because* mongodb.enabled is true: the device,
+    # notification and model-property-override facades all pick their Mongo backend when
+    # it is, and the local JSON fallbacks — which write cachePath (/home/app/cache) — stay
+    # unused. Turning mongodb off without dropping readOnlyRootFilesystem would crash this
+    # pod on its first write.
+    # The image declares USER 1000; runAsUser repeats it numerically because kubelet
+    # verifies runAsNonRoot against the image's configured user and cannot resolve a
+    # username — a named user fails closed with CreateContainerConfigError.
+    podSecurityContext:
+      runAsNonRoot: true
+      runAsUser: 1000
+      runAsGroup: 1000
+      fsGroup: 1000
+      seccompProfile:
+        type: RuntimeDefault
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop: [ALL]
     labels:
       component: api
       partOf: iot

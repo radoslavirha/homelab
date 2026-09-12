@@ -12,26 +12,6 @@ apps:
   qr-manager-api:
     image:
       tag: "0.8.0"
-    # Staged here first, promoted to base.yaml once a sandbox rollout has been watched —
-    # same path probes and lifecycle took.
-    #
-    # The image declares USER 1000 since 0.8.0; runAsUser repeats it numerically because
-    # kubelet verifies runAsNonRoot against the image's configured user and cannot resolve
-    # a username. readOnlyRootFilesystem was exercised locally against this image (boots,
-    # /health/ready passes, no tmpfs needed); the sandbox is where its runtime write paths
-    # get the same test.
-    podSecurityContext:
-      runAsNonRoot: true
-      runAsUser: 1000
-      runAsGroup: 1000
-      fsGroup: 1000
-      seccompProfile:
-        type: RuntimeDefault
-    containerSecurityContext:
-      allowPrivilegeEscalation: false
-      readOnlyRootFilesystem: true
-      capabilities:
-        drop: [ALL]
     templates:
       config:
         content: |
