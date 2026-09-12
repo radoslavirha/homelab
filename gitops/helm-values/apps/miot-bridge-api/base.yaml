@@ -27,8 +27,17 @@ apps:
       # service-to-service call exists, not speculatively.
       projectedToken:
         enabled: true
-    # requests == limits puts the pod in the Guaranteed QoS class, which is what keeps it
-    # off the eviction list when the node comes under memory pressure. The 500Mi ceiling
+    # Memory requests == limits so the scheduler reserves what this pod can actually use,
+    # and kubelet ranks it last among Burstable pods for eviction (usage can never exceed
+    # requests — it OOMKills first).
+    #
+    # This is NOT the Guaranteed QoS class, and cannot be while the chart renders
+    # initContainers with no resources at all: Guaranteed requires requests == limits for
+    # BOTH cpu and memory on EVERY container, initContainers included. The jinja2 config
+    # renderer has none, and CPU is unequal here by the decision below. Getting Guaranteed
+    # would mean a chart change plus giving up the CPU headroom — measured as not worth it.
+    #
+    # The 500Mi ceiling
     # stays: measured peak working set over 7 days was 273Mi
     # (interactive-map-feeder-api), so this is ~1.8x headroom. The slim 2026-09 images run
     # lower still (115-155Mi at startup); revisit the ceiling once they have a week of

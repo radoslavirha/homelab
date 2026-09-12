@@ -15,6 +15,9 @@ apps:
     # with traffic the way a Node heap does. The config-validator initContainer runs
     # before the main container and shares this ceiling; it reads one JSON file and exits.
     #
+    # requests == limits here, but the pod is still Burstable: its initContainers declare
+    # no resources, and Guaranteed needs every container to set both.
+    #
     # CPU unchanged: measured CFS throttling is 0%.
     resources:
       requests:
