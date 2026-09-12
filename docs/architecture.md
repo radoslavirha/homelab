@@ -8,7 +8,7 @@ Multi-cluster Kubernetes homelab: three Talos Linux nodes managed with a shared 
 |---------|---------|------|
 | `server1` | server1 — 32 GB RAM / 6 cores / 500 GB SSD | Production workloads |
 | `server2` | server2 — 32 GB RAM / 6 cores / 500 GB SSD | Experimentation, staging |
-| `server3` | server3 — 16 GB RAM / 4 cores / 256 GB SSD | Platform services — OpenBao, ArgoCD, Authentik, central observability hub (manages all clusters) |
+| `server3` | server3 — 16 GB RAM / 4 cores / 500 GB SSD | Platform services — OpenBao, ArgoCD, Authentik, central observability hub (manages all clusters) |
 
 ## Technology stack
 
