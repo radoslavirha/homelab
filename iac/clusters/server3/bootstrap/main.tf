@@ -68,12 +68,13 @@ module "bootstrap" {
   # mounting over it hides the data rather than migrating it. Register the new path
   # as a second Longhorn disk, evict replicas onto it, then retire the OS-disk one.
   #
-  # longhorn_disks = {
-  #   "192.168.1.202" = {
-  #     device     = "/dev/disk/by-id/..."   # talosctl get disks -n 192.168.1.202
-  #     mountpoint = "/var/mnt/longhorn-ssd"
-  #   }
-  # }
+  # Samsung V-NAND SSD 860 EVO
+  longhorn_disks = {
+    "192.168.1.202" = {
+      device     = "/dev/disk/by-id/wwn-0x5002538ed0beadbb"   # talosctl get disks -n 192.168.1.202
+      mountpoint = "/var/mnt/longhorn-ssd"
+    }
+  }
 
   # ── Credentials output ─────────────────────────────────────────────────────
   credentials_dir = "${path.root}/../credentials"
