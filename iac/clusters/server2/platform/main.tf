@@ -37,7 +37,7 @@ module "platform" {
   # renovate: datasource=helm registryUrl=https://helm.cilium.io depName=cilium
   cilium_version      = "1.19.2"
   # renovate: datasource=helm registryUrl=https://charts.longhorn.io depName=longhorn
-  longhorn_version    = "1.11.1"
+  longhorn_version    = "1.12.1"
   # 1.4.0, not 1.2.1: Cilium 1.19.2 installed the standard-channel CRDs at v1.4.0
   # underneath Terraform, so the old pin no longer described any cluster. Kept on the
   # EXPERIMENTAL channel because server3's Traefik sets providers.kubernetesGateway
