@@ -764,3 +764,57 @@ tests:
     asserts:
       - failedTemplate:
           errorMessage: "serviceAccount.projectedToken.audiences must not contain an empty string; omit the entry instead. [apps.my-app.serviceAccount.projectedToken]."
+
+  - it: should render podSecurityContext when set
+    set:
+      apps.my-app.image.repository: ghcr.io/example/my-app
+      apps.my-app.labels.component: api
+      apps.my-app.labels.partOf: iot
+      apps.my-app.ingress.enabled: false
+      apps.my-app.podSecurityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile:
+          type: RuntimeDefault
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.runAsUser
+          value: 1000
+      - equal:
+          path: spec.template.spec.securityContext.seccompProfile.type
+          value: RuntimeDefault
+
+  - it: should render containerSecurityContext on the main container
+    set:
+      apps.my-app.image.repository: ghcr.io/example/my-app
+      apps.my-app.labels.component: api
+      apps.my-app.labels.partOf: iot
+      apps.my-app.ingress.enabled: false
+      apps.my-app.containerSecurityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        capabilities:
+          drop: [ALL]
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+      - contains:
+          path: spec.template.spec.containers[0].securityContext.capabilities.drop
+          content: ALL
+
+  # Guards the `with` guards: an app that asks for neither must not inherit one.
+  - it: should omit both security contexts when unset
+    set:
+      apps.my-app.image.repository: ghcr.io/example/my-app
+      apps.my-app.labels.component: api
+      apps.my-app.labels.partOf: iot
+      apps.my-app.ingress.enabled: false
+    asserts:
+      - notExists:
+          path: spec.template.spec.securityContext
+      - notExists:
+          path: spec.template.spec.containers[0].securityContext

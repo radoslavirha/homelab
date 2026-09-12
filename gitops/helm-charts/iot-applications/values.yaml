@@ -67,6 +67,26 @@
 #         cpu: 500m
 #         memory: 500Mi
 
+#     # podSecurityContext applies to every container in the Pod, initContainers included.
+#     # runAsUser must be NUMERIC: kubelet verifies runAsNonRoot against the image's
+#     # configured user and cannot map a username to a UID, so an image whose USER is a
+#     # name fails closed with CreateContainerConfigError "non-numeric user".
+#     podSecurityContext:
+#       runAsNonRoot: true
+#       runAsUser: 1000
+#       runAsGroup: 1000
+#       fsGroup: 1000
+#       seccompProfile:
+#         type: RuntimeDefault
+
+#     # containerSecurityContext applies to the main container only. The config-validator
+#     # initContainers set their own, unconditionally, in the template.
+#     containerSecurityContext:
+#       allowPrivilegeEscalation: false
+#       readOnlyRootFilesystem: true
+#       capabilities:
+#         drop: [ALL]
+
 #     labels:
 #       # labels.component is used as the component label and ingress subdomain (required).
 #       component: api
