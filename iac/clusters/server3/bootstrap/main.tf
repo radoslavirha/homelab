@@ -49,7 +49,7 @@ module "bootstrap" {
   # renovate: datasource=github-releases depName=siderolabs/talos
   talos_version = "v1.13.10" # keep in sync with other clusters
   # renovate: datasource=github-releases depName=kubernetes/kubernetes extractVersion=^v(?<version>.*)$
-  kubernetes_version = "1.35.2"
+  kubernetes_version = "1.36.4"
 
   # Schematic includes: siderolabs/iscsi-tools + siderolabs/util-linux-tools
   # Regenerate at https://factory.talos.dev when extensions change.
