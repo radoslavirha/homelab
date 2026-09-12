@@ -8,6 +8,28 @@
 annotations:
   reloader.stakater.com/auto: "true"
 
+# Grafana 13's background plugin installer re-installs the image's bundled plugins on
+# every start, with preinstall_auto_update on by default. The container root is
+# read-only, so the unlink step fails:
+#
+#   plugin.backgroundinstaller  Failed to install plugin pluginId=elasticsearch
+#     error="unlinkat /usr/share/grafana/data/plugins-bundled/elasticsearch: read-only file system"
+#
+# and it takes the already-registered bundled plugins down with it -- influxdb, loki,
+# elasticsearch, mysql, mssql, jaeger and postgres all log "plugin process exited",
+# after which every query returns 404 "Plugin not registered" and the datasource page
+# shows "Could not find plugin definition for data source". prometheus and tempo are
+# unaffected because they are not bundled that way.
+#
+# Disabling preinstall leaves the image's bundled plugins alone, which is what we want:
+# they are already the right versions and the pod has no business fetching plugins at
+# runtime. If Grafana later ships influxdb/loki as external-only, the answer becomes
+# `preinstall_sync: influxdb,loki` -- the plugins dir (/var/lib/grafana/plugins) is on
+# the Longhorn PVC and is writable.
+grafana.ini:
+  plugins:
+    preinstall_disabled: true
+
 # Admin credentials supplied via ExternalSecret → grafana-admin Secret
 admin:
   existingSecret: grafana-admin
