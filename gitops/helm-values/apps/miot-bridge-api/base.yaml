@@ -27,13 +27,30 @@ apps:
       # service-to-service call exists, not speculatively.
       projectedToken:
         enabled: true
+    # requests == limits puts the pod in the Guaranteed QoS class, which is what keeps it
+    # off the eviction list when the node comes under memory pressure. The 500Mi ceiling
+    # stays: measured peak working set over 7 days was 273Mi
+    # (interactive-map-feeder-api), so this is ~1.8x headroom. The slim 2026-09 images run
+    # lower still (115-155Mi at startup); revisit the ceiling once they have a week of
+    # history, not before.
+    #
+    # CPU is deliberately unchanged. Measured peak CFS throttling over 3 days was 9% /
+    # 4% / 2% (feeder / miot / qr) — not enough to justify removing limits on a node
+    # shared with EMQX, InfluxDB and Longhorn. Revisit above 25% sustained.
     resources:
       requests:
         cpu: 250m
-        memory: 250Mi
+        memory: 500Mi
       limits:
         cpu: 500m
         memory: 500Mi
+    # V8 sizes its heap from what it detects, which is not the cgroup limit, and the
+    # failure mode is an OOMKill with no Node-level error. 384Mi is ~75% of the container
+    # limit; the remaining quarter is buffers, native modules, the code cache and thread
+    # stacks, which all live outside the old space.
+    env:
+      - name: NODE_OPTIONS
+        value: "--max-old-space-size=384"
     # readOnlyRootFilesystem is safe here *because* mongodb.enabled is true: the device,
     # notification and model-property-override facades all pick their Mongo backend when
     # it is, and the local JSON fallbacks — which write cachePath (/home/app/cache) — stay
