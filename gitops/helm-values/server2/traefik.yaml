@@ -31,52 +31,9 @@ gateway:
       certificateRefs:
         - name: server2-tls
 
-# ── staged chart migration: this block is per cluster until all three are on 41.x ──
-# server2 is the canary for chart 39.0.7 -> 41.5.0; server1 and server3 are still on 39.0.7
-# and carry the 39.x spelling of these same keys in their own files. Each schema rejects the
-# other's spelling, so they cannot live in the shared gitops/helm-values/traefik.yaml while
-# the fleet is split. (Helm null-deletion was tried first and does not work: helm 3.13.3
-# keeps `logs: null` as a present key and the 41.x schema still rejects it.) When server1 and
-# server3 move to 41.x, fold this back into the shared file.
-
-# `logs.general`/`logs.access` became `log`/`accessLog` in chart 41.0.0. The root of the
-# values file carries additionalProperties:false, so the old spelling fails the render
-# loudly rather than being silently ignored -- the safe direction.
-log:
-  level: INFO
-
-accessLog:
-  enabled: true
-  # The chart default is `common` (CLF) — a plain text line. Every log panel of the
-  # Traefik dashboard runs `| json` over the line and reads Traefik's own field names
-  # (OriginStatus, RequestMethod, RequestPath, ServiceAddr), so with CLF they render
-  # empty while metrics and traces look healthy. JSON also emits `"level":"info"`,
-  # which is what makes detected_level something other than `unknown` for these lines.
-  #
-  # JSON also carries TraceId/SpanId: with tracing enabled Traefik writes them into every
-  # access log record, but only in the structured formats. Those are lifted into Loki
-  # structured metadata by the Traefik-scoped stage in gitops/helm-values/k8s-monitoring.yaml.
-  format: json
-  fields:
-    headers:
-      # `defaultMode`, capital M — chart 41.0.0 recased this key and the rename is not in
-      # the changelog. Schema-caught, but it travels with the `logs` rename above.
-      defaultMode: drop
-      names:
-        X-Real-Ip: keep
-        Cf-Connecting-Ip: keep
-        Cf-Ipcountry: keep
-
 service:
-  # `service.type` and `service.externalIPs` moved under `service.spec` in chart 41.x, and
-  # this rename is SILENT: `service` carries no additionalProperties:false, so the old
-  # spelling passes schema validation and is then discarded. Rendered against 41.x with the
-  # old keys the Service comes back as LoadBalancer with no externalIPs -- which on bare
-  # metal never gets status.loadBalancer.ingress, so ArgoCD sits Progressing forever and
-  # external-dns's traefik-proxy source has nothing to resolve. `helm template` exits 0 and
-  # the ArgoCD diff preview looks clean, so nothing warns you.
+  # type: ClusterIP is in the shared values file; only the address is per cluster.
   spec:
-    type: ClusterIP
     externalIPs:
       - 192.168.1.201
 

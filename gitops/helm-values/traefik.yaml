@@ -62,11 +62,52 @@ api:
   # service, which `dashboard: true` provides regardless of this switch.
   insecure: false
 
-# NOTE: `service` and the access-log keys are defined PER CLUSTER while the fleet is split
-# across chart 39.x and 41.x -- 41.x moved service.type/externalIPs under `service.spec` and
-# renamed logs -> log/accessLog, and each schema rejects the other's spelling. See the note
-# at the top of each gitops/helm-values/<cluster>/traefik.yaml. Fold back here once all
-# three clusters are on 41.x.
+log:
+  level: INFO
+
+accessLog:
+  enabled: true
+  # The chart default is `common` (CLF) — a plain text line. Every log panel of the
+  # Traefik dashboard runs `| json` over the line and reads Traefik's own field names
+  # (OriginStatus, RequestMethod, RequestPath, ServiceAddr), so with CLF they render
+  # empty while metrics and traces look healthy. JSON also emits `"level":"info"`,
+  # which is what makes detected_level something other than `unknown` for these lines.
+  #
+  # JSON is what carries TraceId/SpanId as well: with tracing enabled Traefik writes
+  # them into every access log record, but only in the structured formats. Those two
+  # fields are lifted into Loki structured metadata by the Traefik-scoped stage in
+  # gitops/helm-values/k8s-monitoring.yaml — that is what links an access log line to
+  # its Tempo trace, the same correlation the Winston-instrumented APIs get.
+  #
+  # Renamed in chart 41.0.0: `logs.general` -> `log`, `logs.access` -> a top-level
+  # `accessLog`, and `defaultmode` -> `defaultMode`. Only the first is in the changelog.
+  # The root of this file carries additionalProperties:false, so the old spelling fails
+  # the render loudly rather than being silently ignored -- the safe direction.
+  format: json
+  fields:
+    headers:
+      # Headers are dropped wholesale by default. The dashboard reads three of them.
+      # Loki's `| json` rewrites `-` to `_`, so `request_X-Real-Ip` is queried as
+      # `request_X_Real_Ip`. The Cf-* pair only ever populates behind Cloudflare —
+      # kept so the client-country panels work if this is ever fronted by it, and
+      # simply absent on the private network.
+      defaultMode: drop
+      names:
+        X-Real-Ip: keep
+        Cf-Connecting-Ip: keep
+        Cf-Ipcountry: keep
+
+service:
+  # ClusterIP + externalIPs is the correct pattern for bare metal. LoadBalancer (default)
+  # waits for status.loadBalancer.ingress which a bare metal cluster never populates,
+  # causing ArgoCD to mark the Service as Progressing forever.
+  #
+  # Both keys live under `spec` since chart 41.x, and that rename is SILENT: `service`
+  # carries no additionalProperties:false, so the old spelling validates and is then
+  # discarded, leaving a LoadBalancer with no externalIPs. `helm template` exits 0 and the
+  # ArgoCD diff preview looks clean, so nothing warns you. externalIPs stays per cluster.
+  spec:
+    type: ClusterIP
 
 ingressClass:
   enabled: false
