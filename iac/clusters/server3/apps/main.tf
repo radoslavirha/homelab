@@ -22,7 +22,11 @@ terraform {
   required_providers {
     helm = {
       source  = "hashicorp/helm"
-      version = "3.1.1"
+      # Duplicates the pin in modules/apps/versions.tf -- this root declares its own
+      # required_providers, unlike the other cluster configs. Keep the two in step or
+      # init fails with 'locked version selection doesn't match the updated version
+      # constraints "3.1.1, 3.3.0"'.
+      version = "3.3.0"
     }
     vault = {
       source  = "hashicorp/vault"
