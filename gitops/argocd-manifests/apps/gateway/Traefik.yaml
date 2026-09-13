@@ -6,13 +6,33 @@ metadata:
 spec:
   generators:
     - list:
+        # chartVersion is per cluster ON PURPOSE, and is temporary.
+        #
+        # Traefik 3.7 (chart 41.x) watches v1.TLSRoute unconditionally. On 2026-09-06 this
+        # chart was bumped for all three clusters in one commit while Gateway API was still
+        # 1.4.0, which does not serve that version: every informer failed to sync, the
+        # gateway provider published nothing, and all ingress on all three clusters 404'd
+        # for 3-4 minutes -- taking ESO's path to OpenBao with it. See the write-up in
+        # docs/superpowers/plans/archive/2026-09-03-upgrade-w2-charts-medium-risk.md § 2.6.
+        #
+        # Gateway API is now 1.6.2 fleet-wide and v1.TLSRoute is served, so the cause is
+        # gone. This field exists so the retry is still staged rather than simultaneous:
+        # syncPolicy.automated is on, so a single shared targetRevision would re-sync all
+        # three clusters the moment the ApplicationSet updated.
+        #
+        # server2 carries almost no data and is the canary. Once it is verified, move
+        # server1 and server3, then collapse this back to a single targetRevision and
+        # migrate the shared values file.
         elements:
           - cluster: server1
             clusterServer: https://192.168.1.200:6443
+            chartVersion: "39.0.7"
           - cluster: server2
             clusterServer: https://192.168.1.201:6443
+            chartVersion: "41.5.0"
           - cluster: server3
             clusterServer: https://kubernetes.default.svc
+            chartVersion: "39.0.7"
   template:
     metadata:
       name: traefik-{{cluster}}
@@ -21,7 +41,7 @@ spec:
       sources:
         - repoURL: https://traefik.github.io/charts
           chart: traefik
-          targetRevision: 39.0.7
+          targetRevision: '{{chartVersion}}'
           helm:
             releaseName: traefik
             valueFiles:
