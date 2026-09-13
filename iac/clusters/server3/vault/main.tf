@@ -34,7 +34,7 @@ module "secrets" {
 
   # Check latest: helm search repo openbao/openbao --versions
   # renovate: datasource=helm registryUrl=https://openbao.github.io/openbao-helm depName=openbao
-  openbao_version = "0.10.0"
+  openbao_version = "0.29.4"
 
   openbao_values = file("${path.root}/../helm-values/openbao.yaml")
 }

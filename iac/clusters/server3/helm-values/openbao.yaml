@@ -2,6 +2,17 @@
 # Upstream values.yaml: https://github.com/openbao/openbao-helm/blob/main/values.yaml
 
 server:
+  # Pinned to the value chart 0.10.0 hardcoded. 0.29.4 introduced this as a value and
+  # defaults it to OrderedReady -- but podManagementPolicy is an IMMUTABLE StatefulSet
+  # field, so letting it change makes `helm upgrade` fail with
+  #   spec.podManagementPolicy: Forbidden: updates to statefulset spec for fields other
+  #   than 'replicas', 'ordinals', 'template', 'updateStrategy',
+  #   'persistentVolumeClaimRetentionPolicy' and 'minReadySeconds' are forbidden
+  # and the only way through would be deleting the StatefulSet. With replicas: 1 the two
+  # policies are behaviourally identical, so pinning costs nothing. Revisit only if this
+  # ever becomes multi-replica.
+  podManagementPolicy: Parallel
+
   # Single-node server3 cluster — standalone mode, no HA needed.
   standalone:
     enabled: true
