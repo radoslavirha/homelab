@@ -42,42 +42,8 @@ providers:
     statusAddress:
       ip: "192.168.1.201"
 
-ports:
-  udp-miot-prod:
-    port: 4000
-    protocol: UDP
-    # hostNetwork: true — traffic goes directly to Traefik on the host.
-    # Exposing via the Service causes kube-proxy to DNAT+SNAT packets,
-    # masquerading the client source IP and breaking UDP response routing.
-    expose:
-      default: false
-  udp-miot-sbx:
-    port: 4001
-    protocol: UDP
-    expose:
-      default: false
-  mqtt:
-    port: 1883
-    protocol: TCP
-    expose:
-      default: true
-    exposedPort: 1883
-  # MQTT over TLS, alongside 1883 rather than replacing it. Terminated at Traefik against
-  # the cluster certificate; EMQX keeps listening plaintext behind it.
-  #
-  # Both stay open deliberately. A TLS client must send SNI for the route to match, and it
-  # is not yet established that the Loxone Miniserver and the ESP32 devices can do MQTT over
-  # TLS at all — several ESPHome/Arduino MQTT clients cannot, or cannot send SNI. Closing
-  # 1883 before that is known would take the IoT estate offline.
-  mqtts:
-    port: 8883
-    protocol: TCP
-    expose:
-      default: true
-    exposedPort: 8883
-  mongodb:
-    port: 27017
-    protocol: TCP
-    expose:
-      default: true
-    exposedPort: 27017
+# No `ports:` block. server1's Traefik opens 1883/8883/27017 and UDP 4000/4001 for the
+# IoT estate; server2's entire IoT estate was removed on 2026-09-13, so every one of those
+# entrypoints routed to nothing. The IngressRouteTCP objects that backed them went with it.
+# If server2 ever needs a TCP/UDP entrypoint again, copy the block from
+# gitops/helm-values/server1/traefik.yaml and read the hostNetwork note there first.
