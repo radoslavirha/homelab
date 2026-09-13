@@ -26,7 +26,7 @@ spec:
         elements:
           - cluster: server1
             clusterServer: https://192.168.1.200:6443
-            chartVersion: "39.0.7"
+            chartVersion: "41.5.0"
           - cluster: server2
             clusterServer: https://192.168.1.201:6443
             chartVersion: "41.5.0"
