@@ -9,8 +9,6 @@ spec:
         elements:
           - cluster: server1
             clusterServer: https://192.168.1.200:6443
-          - cluster: server2
-            clusterServer: https://192.168.1.201:6443
   template:
     metadata:
       name: mongodb-{{cluster}}

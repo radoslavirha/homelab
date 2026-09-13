@@ -16,15 +16,16 @@
 # time ArgoCD reconciled — turning the emergency brake into a temporary one.
 # Switch to automated once both clusters have run enforced for a while.
 #
-# ── The two clusters' policy sets are byte-identical ────────────────────────
-# `diff -r gitops/k8s-manifests/server1/network-policies \
-#          gitops/k8s-manifests/server2/network-policies` is empty, and should
-# stay that way. Current behaviour differs between the clusters only until
-# someone registers a device on server2, so tailoring either set to what its
-# cluster happens to do today is how the LAN rule ends up missing on the
-# cluster that later needs it. They are separate directories rather than one
-# shared path only because everything else under k8s-manifests/ is per-cluster;
-# if they ever must diverge, do it deliberately and say why in the file.
+# ── server1 only, since 2026-09-13 ──────────────────────────────────────────
+# server2's entire IoT estate was removed (it is being repurposed to host an
+# LLM), taking its production and sandbox namespaces with it. This generator
+# used to be cluster × env across both clusters, and the two clusters' policy
+# sets were required to stay byte-identical for that reason.
+#
+# That rule is now moot, but the reasoning behind it is not: policy sets were
+# kept identical rather than tailored to what each cluster happened to run,
+# because tailoring is how the LAN rule ends up missing on the cluster that
+# later needs it. Keep that in mind if a second cluster is ever added back.
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
@@ -38,8 +39,6 @@ spec:
               elements:
                 - cluster: server1
                   clusterServer: https://192.168.1.200:6443
-                - cluster: server2
-                  clusterServer: https://192.168.1.201:6443
           - list:
               elements:
                 - env: production

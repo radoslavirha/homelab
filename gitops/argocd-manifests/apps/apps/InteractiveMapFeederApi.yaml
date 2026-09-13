@@ -1,4 +1,4 @@
-# interactive-map-feeder-api — ApplicationSet (server2 × production + sandbox)
+# interactive-map-feeder-api — ApplicationSet (server1 × production + sandbox)
 # Chart: gitops/helm-charts/iot-applications/ (path-based, no publishing)
 # No ExternalSecrets (no secretRefs), no cluster-specific overrides.
 apiVersion: argoproj.io/v1alpha1
@@ -14,8 +14,6 @@ spec:
               elements:
                 - cluster: server1
                   clusterServer: https://192.168.1.200:6443
-                - cluster: server2
-                  clusterServer: https://192.168.1.201:6443
           - list:
               elements:
                 - env: production
