@@ -32,7 +32,7 @@ spec:
             chartVersion: "41.5.0"
           - cluster: server3
             clusterServer: https://kubernetes.default.svc
-            chartVersion: "39.0.7"
+            chartVersion: "41.5.0"
   template:
     metadata:
       name: traefik-{{cluster}}

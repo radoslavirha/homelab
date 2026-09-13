@@ -57,43 +57,52 @@ gateway:
 # not work here: helm 3.13.3 keeps `logs: null` as a present key and the schema still
 # rejects it.) When server1 and server3 move to 41.x, fold this back into the shared file.
 
-logs:
-  general:
-    level: INFO
-  access:
-    enabled: true
-    # The chart default is `common` (CLF) — a plain text line. Every log panel of the
-    # Traefik dashboard runs `| json` over the line and reads Traefik's own field names
-    # (OriginStatus, RequestMethod, RequestPath, ServiceAddr), so with CLF they render
-    # empty while metrics and traces look healthy. JSON also emits `"level":"info"`,
-    # which is what makes detected_level something other than `unknown` for these lines.
-    #
-    # JSON is what carries TraceId/SpanId as well: with tracing enabled Traefik writes
-    # them into every access log record, but only in the structured formats. Those two
-    # fields are lifted into Loki structured metadata by the Traefik-scoped stage in
-    # gitops/helm-values/k8s-monitoring.yaml — that is what links an access log line to
-    # its Tempo trace, the same correlation the Winston-instrumented APIs get.
-    format: json
-    fields:
-      headers:
-        # Headers are dropped wholesale by default. The dashboard reads three of them.
-        # Loki's `| json` rewrites `-` to `_`, so `request_X-Real-Ip` is queried as
-        # `request_X_Real_Ip`. The Cf-* pair only ever populates behind Cloudflare —
-        # kept so the client-country panels work if this is ever fronted by it, and
-        # simply absent on the private network.
-        defaultmode: drop
-        names:
-          X-Real-Ip: keep
-          Cf-Connecting-Ip: keep
-          Cf-Ipcountry: keep
+# `logs.general`/`logs.access` became `log`/`accessLog` in chart 41.0.0, and
+# `defaultmode` was recased to `defaultMode` in the same release -- only one of the two
+# is in the changelog. The root of the values file carries additionalProperties:false,
+# so the old spelling fails the render loudly rather than being ignored.
+log:
+  level: INFO
+
+accessLog:
+  enabled: true
+  # The chart default is `common` (CLF) — a plain text line. Every log panel of the
+  # Traefik dashboard runs `| json` over the line and reads Traefik's own field names
+  # (OriginStatus, RequestMethod, RequestPath, ServiceAddr), so with CLF they render
+  # empty while metrics and traces look healthy. JSON also emits `"level":"info"`,
+  # which is what makes detected_level something other than `unknown` for these lines.
+  #
+  # JSON is what carries TraceId/SpanId as well: with tracing enabled Traefik writes
+  # them into every access log record, but only in the structured formats. Those two
+  # fields are lifted into Loki structured metadata by the Traefik-scoped stage in
+  # gitops/helm-values/k8s-monitoring.yaml — that is what links an access log line to
+  # its Tempo trace, the same correlation the Winston-instrumented APIs get.
+  format: json
+  fields:
+    headers:
+      # Headers are dropped wholesale by default. The dashboard reads three of them.
+      # Loki's `| json` rewrites `-` to `_`, so `request_X-Real-Ip` is queried as
+      # `request_X_Real_Ip`. The Cf-* pair only ever populates behind Cloudflare —
+      # kept so the client-country panels work if this is ever fronted by it, and
+      # simply absent on the private network.
+      defaultMode: drop
+      names:
+        X-Real-Ip: keep
+        Cf-Connecting-Ip: keep
+        Cf-Ipcountry: keep
 
 service:
   # ClusterIP + externalIPs is the correct pattern for bare metal.
   # LoadBalancer (default) waits for status.loadBalancer.ingress which a bare metal cluster
   # never populates, causing ArgoCD to mark the Service as Progressing forever.
-  type: ClusterIP
-  externalIPs:
-    - 192.168.1.202
+  #
+  # Both keys live under `spec` since chart 41.x, and that rename is SILENT: `service` carries
+  # no additionalProperties:false, so the old spelling validates and is then discarded, leaving
+  # a LoadBalancer with no externalIPs. `helm template` exits 0 and the ArgoCD diff looks clean.
+  spec:
+    type: ClusterIP
+    externalIPs:
+      - 192.168.1.202
 
 providers:
   kubernetesGateway:
