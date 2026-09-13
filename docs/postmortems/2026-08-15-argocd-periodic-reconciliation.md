@@ -1,8 +1,25 @@
 # ArgoCD stopped reconciling on a timer
 
-**Status:** open, unmitigated by choice. Upstream bug, no fix released.
+**Status:** **RESOLVED — no longer reproduces as of 2026-09-13.** Cause of the fix not identified.
 **Found:** 2026-08-15, while wondering why a pushed commit had not deployed after ~10 hours.
 **Affects:** every Application on server3's ArgoCD — 67 of them, all clusters.
+
+> **Update 2026-09-13.** This does not reproduce any more. The detector below
+> (`sum(increase(argocd_app_reconcile_count[30m])) == 0`) now reads **~720-760**, flat across a 20h
+> range query that includes a quiet overnight stretch. All 77 Applications reconcile within
+> 52-223s, consistent with `timeout.reconciliation: 120s` + `timeout.reconciliation.jitter: 60s`,
+> and an automated sync was observed firing with no human involved. What changed between 2026-08-15
+> and 2026-09-13 was not identified — ArgoCD is still app v3.3.7.
+>
+> **Do not use a snapshot of `reconciledAt` to check this.** On a busy cluster watch events refresh
+> Applications anyway, so fresh timestamps prove nothing either way. Only the metric over an idle
+> window separates the two causes.
+>
+> **A separate limitation is NOT fixed and never will be:** a change that only reaches a PostSync
+> hook Job still cannot show as `OutOfSync`, because `hook-delete-policy: HookSucceeded` means no
+> Job object exists to diff against. See `docs/provisioning.md`.
+>
+> Everything below is the original 2026-08-15 write-up, kept as the record of what was true then.
 
 ## Summary
 

@@ -201,6 +201,8 @@ cd iac/clusters/<name>/<stage> && terraform validate
 | Gateway API CRDs | `iac/clusters/<cluster>/platform/main.tf` — `gateway_api_version` |
 | ArgoCD | `iac/clusters/server3/apps/main.tf` — `argocd_chart_version` (server3 only) |
 | OpenBao | `iac/clusters/server3/vault/main.tf` — `openbao_version` (server3 only) |
+| Provisioner image | `gitops/helm-charts/provisioner/values.yaml` — `image.digest` (**not** a `*_version` variable, and **not** Terraform — it is a chart value) |
+| Terraform providers | `iac/modules/<module>/versions.tf` — exact pins. `clusters/server3/apps/main.tf` duplicates the helm pin; keep both in step |
 
 To apply a version change: `cd iac/clusters/<cluster>/<stage> && terraform apply -auto-approve`
 
@@ -280,7 +282,7 @@ everywhere and must stay off.
 
 | Path | What merging actually does | What deploys it |
 |------|---------------------------|-----------------|
-| `gitops/` | Changes `targetRevision` in git | Hard Refresh → **one** Sync in ArgoCD. There is no periodic reconciliation |
+| `gitops/` | Changes `targetRevision` in git | Periodic reconciliation **does** run (`timeout.reconciliation: 120s`, verified 2026-09-13 — see the note below), so most changes deploy on their own within ~3 min. Hard Refresh → **one** Sync when they do not |
 | `iac/` | Changes a string in a `.tf` file. **Nothing else.** | `terraform apply` in that cluster's module. **For `talos_version` this still does not upgrade anything** — see below |
 | `gitops/argocd-manifests/ArgoCD.yaml` | Changes a file **nothing reconciles** | `kubectl -n argocd apply -f` it by hand. No Application sources that directory (`bootstrap` watches `roots/` only) and the Terraform resource has `ignore_changes = [yaml_body]`, so neither GitOps nor `terraform apply` will pick it up |
 
@@ -327,8 +329,13 @@ up to date. Add the annotation whenever you add a version variable.
 5. Upstream `values.yaml` links in `docs/architecture.md` point to the `main` branch — no link update needed on upgrade
 6. **Verify against the cluster, not the Synced badge.** A values-only change hits a stale
    multi-source cache and reads `Synced` while serving the old values — hard refresh first.
+   **A change that only reaches a PostSync hook Job is worse: it can never show as `OutOfSync`,
+   and a hard refresh does not help.** The provisioner Jobs use
+   `hook-delete-policy: HookSucceeded`, so no Job exists in the cluster once it has run, and ArgoCD
+   only diffs live tracked resources. Trigger an explicit sync per app and check
+   `status.operationState.syncResult` for `hookPhase: Succeeded`. Verified 2026-09-13.
 7. **Check that the chart version actually pins the image.** Usually it does — loki `18.12.1`
-   renders `grafana/loki:3.7.7`, traefik `39.0.7` renders `traefik:v3.6.12` — so one pin covers
+   renders `grafana/loki:3.7.7`, traefik `41.5.0` renders `traefik:v3.7.13` — so one pin covers
    both the templates and the binary. **`mongodb` is the exception and the only Bitnami chart
    here.** Its image block is `bitnami/mongodb:latest` in every chart version, so `targetRevision`
    pins the YAML and says nothing about which mongod runs; the chart's advertised app version is a

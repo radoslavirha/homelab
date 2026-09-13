@@ -7,7 +7,7 @@ Multi-cluster Kubernetes homelab: three Talos Linux nodes managed with a shared 
 | Cluster | Machine | Role |
 |---------|---------|------|
 | `server1` | server1 — 32 GB RAM / 6 cores / 500 GB SSD | Production workloads |
-| `server2` | server2 — 32 GB RAM / 6 cores / 500 GB SSD | Experimentation, staging |
+| `server2` | server2 — 32 GB RAM / 8 cores / 500 GB SSD | Experimentation, staging |
 | `server3` | server3 — 16 GB RAM / 4 cores / 500 GB SSD | Platform services — OpenBao, ArgoCD, Authentik, central observability hub (manages all clusters) |
 
 ## Technology stack
@@ -149,7 +149,7 @@ OpenBao is a prerequisite for External Secrets Operator across all clusters. If 
 
 ### Why Longhorn on the server3 cluster?
 
-Longhorn provides durable PersistentVolumes for OpenBao. The overhead (≈500 MB RAM, single replica) is acceptable on 32 GB RAM.
+Longhorn provides durable PersistentVolumes for OpenBao. The overhead (≈500 MB RAM, single replica) is acceptable on server3's 16 GB.
 
 **There are no Longhorn-level backups, but there are offsite logical dumps.** Keep the two apart — they fail differently.
 

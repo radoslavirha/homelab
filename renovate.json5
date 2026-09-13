@@ -16,8 +16,10 @@
 
   // A merged PR is NOT a deployment, and this is true twice over:
   //
-  //   gitops/  ArgoCD has no periodic reconciliation. A targetRevision bump
-  //            reaches a cluster only when a human does Hard Refresh -> Sync.
+  //   gitops/  A targetRevision bump usually does reach a cluster on its own -- periodic
+  //            reconciliation was broken in Aug 2026 but was measured working again on
+  //            2026-09-13. "Usually" is the problem: a change reaching only a PostSync
+  //            hook Job can never show as OutOfSync, so it still needs a hand.
   //
   //   iac/     Worse: a Terraform version bump changes a string in a .tf file
   //            and nothing else. An updated talos_version or kubernetes_version

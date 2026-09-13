@@ -25,7 +25,7 @@ ArgoCD syncs app
 Key properties of every provisioner Job:
 - `automountServiceAccountToken: false` — makes no K8s API calls
 - No `serviceAccountName` — accesses secrets via `secretKeyRef` (kubelet-injected, no RBAC needed)
-- All Jobs use `ghcr.io/radoslavirha/homelab-provisioner` — single image with `influx` CLI, `bao` CLI, `mongosh`, `curl`, `jq`
+- All Jobs use `ghcr.io/radoslavirha/homelab-provisioner` — single image with `influx` CLI, `bao` CLI, `mongosh`, `curl`, `jq`. **Pinned by digest**, see below
 - Idempotent — safe to re-run on every sync
 
 ### Provisioner Helm chart
@@ -74,7 +74,19 @@ influxdb2:
 - `mongosh` (MongoDB deb repo) — database and user operations
 - `curl` + `jq` — EMQX REST API (no remote CLI exists for EMQX)
 
-Built and pushed to `ghcr.io/radoslavirha/homelab-provisioner` via `.github/workflows/provisioner-image.yaml` on any change to `provisioner/Dockerfile`.
+Built and pushed to `ghcr.io/radoslavirha/homelab-provisioner` via `.github/workflows/provisioner-image.yaml` on any change to `provisioner/Dockerfile`. The workflow publishes **two tags for the same digest**: `latest` and the full commit SHA.
+
+**The chart pins the digest, not the tag** — `image.digest` in `gitops/helm-charts/provisioner/values.yaml`. `:latest` alone is not reproducible: PostSync Jobs on different days could pull different bytes, and a failed Job could not be reproduced from the manifest. The commit-SHA tag cannot be used instead, because it is the SHA of the commit that changes the Dockerfile and so is unknowable until after that commit exists.
+
+After a rebuild, update the digest:
+
+```bash
+docker buildx imagetools inspect ghcr.io/radoslavirha/homelab-provisioner:latest
+```
+
+Then **sync each datastore app explicitly** — a hook-only change never shows as `OutOfSync` (the Jobs are deleted by `hook-delete-policy: HookSucceeded`, so there is nothing live to diff), and it will otherwise sit undeployed until some unrelated change forces a sync.
+
+> **CLI versions must not trail the servers they talk to.** `ARG BAO_VERSION` should match the OpenBao server version. Note that OpenBao renamed its release assets between 2.5.3 and 2.6.2 — `bao_<v>_Linux_x86_64.tar.gz` became `openbao_<v>_linux_amd64.tar.gz`, though the binary inside is still `bao`. If a bump 404s, check the release asset names before assuming the version is wrong.
 
 > **Rotation:** Scheduled credential rotation is not yet implemented. The provisioner writes each datastore credential once, and nothing re-writes it on a schedule.
 
