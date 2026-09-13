@@ -37,13 +37,22 @@ module "platform" {
   cilium_version      = "1.19.2"
   # renovate: datasource=helm registryUrl=https://charts.longhorn.io depName=longhorn
   longhorn_version    = "1.12.1"
-  # 1.4.0, not 1.2.1: Cilium 1.19.2 installed the standard-channel CRDs at v1.4.0
-  # underneath Terraform, so the old pin no longer described any cluster. Kept on the
-  # EXPERIMENTAL channel because server3's Traefik sets providers.kubernetesGateway
+  # Stays on the EXPERIMENTAL channel: server3's Traefik sets providers.kubernetesGateway
   # .experimentalChannel, which makes the chart grant it watch on tcproutes/tlsroutes --
   # deleting those CRDs breaks its informers. Do not "tidy up" to standard-install.
+  #
+  # 1.6.2 installs a ValidatingAdmissionPolicy, safe-upgrades.gateway.networking.k8s.io,
+  # that did not exist at 1.4.0. It denies two things once present:
+  #   - applying an EXPERIMENTAL CRD over an existing STANDARD one, and
+  #   - applying any gateway.networking.k8s.io CRD with bundle-version v1.0-v1.4.
+  # Before this bump the CRDs were a mix -- the six core kinds were standard@v1.4.0 from a
+  # manual client-side kubectl apply (not from Cilium: they carry no Helm ownership), while
+  # TCP/TLS/UDPRoute were experimental@v1.4.0 from this resource. This bump makes them
+  # uniformly experimental, which is what keeps the VAP satisfied on every later apply.
+  # Rollback to <=v1.4 is now DENIED unless the VAP is deleted first -- verified by
+  # server-side dry-run on server2.
   # renovate: datasource=github-releases depName=kubernetes-sigs/gateway-api extractVersion=^v(?<version>.*)$
-  gateway_api_version = "1.4.0"
+  gateway_api_version = "1.6.2"
 
   cilium_values = [
     file("${path.root}/../../helm-values/cilium.yaml"),
