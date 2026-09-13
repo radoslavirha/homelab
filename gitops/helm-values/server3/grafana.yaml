@@ -7,8 +7,3 @@ extraSecretMounts:
     defaultMode: 0440
     mountPath: /etc/secrets/server1-influxdb2-grafana
     readOnly: true
-  - name: server2-influxdb2-grafana
-    secretName: server2-influxdb2-grafana
-    defaultMode: 0440
-    mountPath: /etc/secrets/server2-influxdb2-grafana
-    readOnly: true
