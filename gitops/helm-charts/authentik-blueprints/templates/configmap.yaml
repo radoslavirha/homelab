@@ -44,6 +44,8 @@ data:
       # qr-manager-server2-production-admin membership. So the sandbox SPA is told
       # which other clusters and stages the user can reach. Nothing needs that, and
       # the roles mapping below supplies the same information scoped correctly.
+      # (server2's estate was removed on 2026-09-13, so that particular group no
+      # longer exists. The measurement stands as the record of the behaviour.)
       #
       # Cost of owning a copy: if Authentik adds a claim to `profile` upstream, we do
       # not get it until someone updates this. Everything here is from OIDC Core 5.1
@@ -562,7 +564,7 @@ data:
             #
             # THE TABLE BELOW SPANS ENVIRONMENTS, and the claim it produces cannot say
             # which one a role came from: qr-manager-server1-sandbox-admin and
-            # qr-manager-server2-production-admin both render `qr-manager.admin`. That is
+            # qr-manager-server1-production-admin both render `qr-manager.admin`. That is
             # the accepted cost of one credential for every environment -- holding a role
             # in ANY environment listed here grants it in ALL of them. Narrowing it means
             # going back to a client per environment, which means a token per environment.

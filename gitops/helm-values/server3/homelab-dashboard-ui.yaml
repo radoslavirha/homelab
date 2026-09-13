@@ -139,10 +139,6 @@ apps:
               "api.sandbox.server1.homelab.irha.cz",
               "apps.server1.homelab.irha.cz",
               "apps.sandbox.server1.homelab.irha.cz",
-              "api.server2.homelab.irha.cz",
-              "api.sandbox.server2.homelab.irha.cz",
-              "apps.server2.homelab.irha.cz",
-              "apps.sandbox.server2.homelab.irha.cz",
               "otel.server3.homelab.irha.cz"
             ],
             "paths": {
