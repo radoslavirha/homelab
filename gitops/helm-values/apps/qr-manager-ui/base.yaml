@@ -36,6 +36,26 @@ apps:
       limits:
         cpu: 100m
         memory: 32Mi
+    # nginxinc/nginx-unprivileged runs as UID 101 and binds 8080 — a non-root process
+    # cannot take a port below 1024, which is why targetPort moved with the image.
+    podSecurityContext:
+      runAsNonRoot: true
+      runAsUser: 101
+      runAsGroup: 101
+      fsGroup: 101
+      seccompProfile:
+        type: RuntimeDefault
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
+      # NOT read-only, unlike the APIs: the nginx entrypoint renders
+      # /etc/nginx/templates/*.template into /etc/nginx/conf.d on every start, and nginx
+      # keeps its client_body and proxy temp paths under /tmp. Both need a writable root
+      # filesystem unless the chart grows emptyDir support for them.
+      readOnlyRootFilesystem: false
+      # Safe precisely because of the port move: the stock image needed NET_BIND_SERVICE
+      # to bind 80, this one does not.
+      capabilities:
+        drop: [ALL]
     labels:
       component: apps
       partOf: iot
@@ -44,7 +64,7 @@ apps:
         enabled: true
         protocol: TCP
         port: 80
-        targetPort: 80
+        targetPort: 8080
     ingress:
       enabled: true
       serviceRef: http
