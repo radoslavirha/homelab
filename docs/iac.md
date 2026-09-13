@@ -317,8 +317,8 @@ argocd cluster list   # note the SERVER URL; matches clusterServer in Applicatio
 | `worker_ips` | list(string) | Worker node IPs (empty = single-node) |
 | `cluster_vip` | string | Virtual IP for HA clusters (optional) |
 | `talos_secrets_contract` | string | Version contract used to **generate machine secrets**. Frozen at the bootstrap value; never bump it to upgrade Talos. Guarded by `ignore_changes` |
-| `talos_version` | string | Talos Linux version for the **installer image** (e.g. `v1.12.6`). Safe to bump; Renovate manages it |
-| `kubernetes_version` | string | Kubernetes version (e.g. `1.35.2`) |
+| `talos_version` | string | Talos Linux version for the **installer image** (e.g. `v1.13.10`). Safe to bump; Renovate manages it |
+| `kubernetes_version` | string | Kubernetes version (e.g. `1.36.4`) |
 | `talos_schematic_id` | string | Image Factory schematic ID — controls system extensions |
 | `install_disk_selector` | map(string) | Talos `diskSelector` for OS disk (e.g. `{ wwid = "..." }`) |
 | `install_wipe` | bool | Wipe the install disk during install **and upgrade**. Default `false`; set `true` only for a deliberate clean reprovision |
@@ -413,7 +413,7 @@ being up to date. Add one whenever you add a version variable:
 
 ```hcl
 # renovate: datasource=helm registryUrl=https://helm.cilium.io depName=cilium
-cilium_version = "1.19.2"
+cilium_version = "1.20.1"
 ```
 
 ### Terraform state can silently stop describing reality
@@ -423,6 +423,12 @@ on 2026-09-05: `gateway_api_version` was pinned to `1.2.1` on all three clusters
 actually ran Gateway API `1.4.0`, installed underneath Terraform. Because the CRD install is a
 `null_resource` keyed on the variable, a taint or a lost state file would have re-applied the old
 `1.2.1` bundle over live `1.4.0` CRDs and stripped fields from Gateways and HTTPRoutes.
+
+*(Those figures are the 2026-09-05 state, kept because the lesson is the point. Gateway API is on
+**1.6.2** across the fleet as of 2026-09-13, and the pin matches. Note that 1.6.2 also installs a
+`safe-upgrades` ValidatingAdmissionPolicy that refuses any Gateway API CRD apply below v1.5 — so the
+re-apply-an-old-bundle failure described above is now blocked by admission as well, and a deliberate
+downgrade requires deleting that policy first.)*
 
 Treat a clean `terraform plan` as the only evidence that a pinned version is real. See
 [AGENTS.md](../AGENTS.md) → "Dependency monitoring (Renovate)".

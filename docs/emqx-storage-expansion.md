@@ -61,7 +61,7 @@ for fields other than 'replicas', 'ordinals', 'template',
 
 The sync fails, EMQX keeps running on the old spec, and the app sits Degraded. The StatefulSet object has to be replaced. Separately, the existing PVC is **not** resized by changing the template — `volumeClaimTemplates` only governs PVCs the controller creates, so an existing claim has to be expanded on its own.
 
-Good news: the `longhorn` StorageClass has `allowVolumeExpansion: true` (verified on all three clusters), and per the Longhorn 1.11 docs, **online expansion is supported since 1.4.0** — the volume can be resized while attached and in use. Expansion runs in two stages, block device then filesystem.
+Good news: the `longhorn` StorageClass has `allowVolumeExpansion: true` (verified on all three clusters), and per the Longhorn 1.12 docs, **online expansion is supported since 1.4.0** — the volume can be resized while attached and in use. Expansion runs in two stages, block device then filesystem.
 
 ## Options
 

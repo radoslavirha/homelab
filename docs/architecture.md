@@ -30,7 +30,7 @@ Multi-cluster Kubernetes homelab: three Talos Linux nodes managed with a shared 
 | [Headlamp](https://headlamp.dev/) | Kubernetes web UI | all | ArgoCD | [headlamp](https://artifacthub.io/packages/helm/headlamp/headlamp) | [shared](../gitops/helm-values/headlamp.yaml) · [server3](../gitops/helm-values/server3/headlamp.yaml) · [server2](../gitops/helm-values/server2/headlamp.yaml) · [server1](../gitops/helm-values/server1/headlamp.yaml) | [values.yaml](https://github.com/kubernetes-sigs/headlamp/blob/main/charts/headlamp/values.yaml) |
 | [Hubble UI](https://docs.cilium.io/en/stable/observability/hubble/) | Cilium network observability UI | all | ArgoCD | — | — | — |
 | [Longhorn UI](https://longhorn.io/) | Distributed storage dashboard | all | ArgoCD | — | — | — |
-| [MinIO](https://min.io/) | **Not deployed.** Intended S3 backend for Terraform state and Longhorn backups; no manifest exists and no ArgoCD Application is defined | — | — | — | — | — |
+| [MinIO](https://min.io/) | **Not deployed, and dropped as a backup destination.** Was intended as the S3 backend for both Terraform state and Longhorn backups. The Longhorn-backup half was abandoned in favour of offsite logical dumps to Cloudflare R2 (see "Why Longhorn on the server3 cluster?"); the Terraform-state half is still an open intention. No manifest and no ArgoCD Application exist | — | — | — | — | — |
 | [MongoDB](https://www.mongodb.com/) | Document database | server2 | ArgoCD `databases` | [mongodb](https://artifacthub.io/packages/helm/bitnami/mongodb) | [shared](../gitops/helm-values/mongodb.yaml) · [server2](../gitops/helm-values/server2/mongodb.yaml) | [values.yaml](https://github.com/bitnami/charts/blob/main/bitnami/mongodb/values.yaml) |
 | [EMQX](https://www.emqx.io/) | MQTT broker for IoT message routing | server2 | ArgoCD `iot` | [emqx](https://artifacthub.io/packages/helm/emqx/emqx) | [shared](../gitops/helm-values/emqx.yaml) · [server2](../gitops/helm-values/server2/emqx.yaml) | [values.yaml](https://github.com/emqx/emqx/blob/master/deploy/charts/emqx/values.yaml) |
 | [InfluxDB2](https://www.influxdata.com/) | Time-series database for IoT data | server2 | ArgoCD `iot` | [influxdb2](https://artifacthub.io/packages/helm/influxdata/influxdb2) | [shared](../gitops/helm-values/influxdb2.yaml) · [server2](../gitops/helm-values/server2/influxdb2.yaml) | [values.yaml](https://github.com/influxdata/helm-charts/blob/master/charts/influxdb2/values.yaml) |
@@ -151,15 +151,23 @@ OpenBao is a prerequisite for External Secrets Operator across all clusters. If 
 
 Longhorn provides durable PersistentVolumes for OpenBao. The overhead (≈500 MB RAM, single replica) is acceptable on 32 GB RAM.
 
-**There are no backups today.** `backupTarget` is `""` in [longhorn.yaml](../iac/clusters/helm-values/longhorn.yaml), the `default` BackupTarget reports `available: false` on all three clusters, and there are zero RecurringJobs, Backups and Snapshots fleet-wide. The CSI snapshotter is not installed either, so `VolumeSnapshot` is not a served resource. Every PVC below is single-replica on one node with no copy anywhere else:
+**There are no Longhorn-level backups, but there are offsite logical dumps.** Keep the two apart — they fail differently.
 
-| Cluster | PVC-backed data with no backup |
-|---|---|
-| server1 | InfluxDB2 25Gi · MongoDB 10Gi · EMQX 20Mi |
-| server2 | InfluxDB2 25Gi · MongoDB 10Gi · EMQX 20Mi |
-| server3 | Prometheus 20Gi · Loki 20Gi · Tempo 20Gi · OpenBao 10Gi · Authentik PostgreSQL 10Gi · Grafana 5Gi |
+*Longhorn side, unchanged:* `backupTarget` is `""` in [longhorn.yaml](../iac/clusters/helm-values/longhorn.yaml), the `default` BackupTarget reports `available: false` on all three clusters, and there are zero RecurringJobs, Backups and Snapshots fleet-wide. The CSI snapshotter is not installed, so `VolumeSnapshot` is not a served resource. **There is no volume-level restore and no point-in-time snapshot of a PVC.**
 
-The intended design was Longhorn `backupTarget` pointing at MinIO on the same cluster, which is why MinIO appears in the bootstrap notes. MinIO was never deployed, so that path does not exist. Same-cluster backups would in any case not survive the node, which is the failure these single-control-plane clusters are most exposed to.
+*What does exist, since 2026-09-07:* `~/homelab-backups/dump-all.sh` takes application-level dumps and uploads them to Cloudflare R2 (~300 MB), checksummed under `SHA256SUMS` and pruned on a retention window. It is run by hand, not scheduled — so its freshness is only ever as good as the last run.
+
+| Cluster | Covered by the offsite dumps | **Not** covered |
+|---|---|---|
+| server1 | InfluxDB2 25Gi · MongoDB 10Gi · etcd | EMQX 20Mi |
+| server2 | InfluxDB2 25Gi · MongoDB 10Gi · etcd | EMQX 20Mi |
+| server3 | OpenBao 10Gi (raft snapshot) · Authentik PostgreSQL 10Gi · etcd | Prometheus 20Gi · Loki 20Gi · Tempo 20Gi · Grafana 5Gi |
+
+The server3 exclusions are deliberate: Prometheus, Loki and Tempo hold reconstructible telemetry, and Grafana is fully provisioned from git. EMQX's 20Mi is broker runtime state, not configuration.
+
+Every PVC is still single-replica on one node, so a lost disk still loses the volume — the dumps are a rebuild path, not high availability.
+
+The originally intended design was Longhorn `backupTarget` pointing at MinIO on the same cluster, which is why MinIO appears in the bootstrap notes. **That was dropped, not deferred** — same-cluster backups would not survive the node, which is exactly the failure these single-control-plane clusters are most exposed to. Offsite dumps replaced it; do not re-propose MinIO as a backup destination.
 
 Stated so it is not rediscovered under pressure: any Longhorn or Talos upgrade, and any OpenBao upgrade, is currently a one-way door. Take a manual snapshot or dump first — there is nothing to roll back to.
 

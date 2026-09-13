@@ -293,7 +293,8 @@ refreshing, know what is sitting unsynced: `git log` since the revision the apps
 An updated `talos_version` sitting merged in git is not installed, and only `terraform plan` will
 tell you. The same applies to `cilium_version`, `longhorn_version`, `openbao_version` and
 `gateway_api_version`. This exact drift was found live on 2026-09-05: Terraform claimed Gateway API
-`1.2.1` while all three clusters ran `1.4.0`.
+`1.2.1` while all three clusters ran `1.4.0`. (Both figures are that day's state — the fleet is on
+`1.6.2` as of 2026-09-13 and the pin matches.)
 
 **`talos_version` is worse than the others: even `terraform apply` does not install it.** The
 variable feeds exactly one place, `machine.install.image`, which the *installer* reads at install
@@ -349,6 +350,34 @@ OpenBao is deployed via `iac/clusters/server3/vault/` (Terraform-managed, server
 App secrets are stored in OpenBao and synced to all clusters via External Secrets Operator.
 After `terraform apply`, run the init ceremony manually (see `iac/clusters/server3/vault/main.tf` header).
 See [docs/secrets.md](docs/secrets.md) for the full secrets path inventory and seeding commands per stage.
+
+## Backups — what exists, and what it does not cover
+
+**Take a dump before anything that cannot be rolled back.** Longhorn has no downgrade path,
+Kubernetes has no downgrade path, and there is no volume-level restore (see below).
+
+```bash
+~/homelab-backups/dump-all.sh     # lives OUTSIDE this repo; credentials come from ./.env
+```
+
+It dumps etcd on all three clusters, the Authentik Postgres, MongoDB x2, InfluxDB x2 and an OpenBao
+raft snapshot, writes `SHA256SUMS`, uploads to Cloudflare R2 (~300 MB) and verifies the remote copy
+with `rclone check --checksum`. **It is run by hand — nothing schedules it**, so its freshness is only
+ever as good as the last run. Check the date of the newest directory in `~/homelab-backups/` before
+trusting it.
+
+Two things it is not:
+
+- **Not a Longhorn backup.** `backupTarget` is `""`, there are no RecurringJobs or Snapshots, and the
+  CSI snapshotter is not installed. There is no point-in-time volume restore. These are logical dumps
+  — a rebuild path, not high availability. MinIO was dropped as a backup destination; do not
+  re-propose it.
+- **Not complete.** Prometheus, Loki, Tempo, Grafana and EMQX are deliberately excluded — the first
+  three hold reconstructible telemetry, Grafana is provisioned from git, and EMQX's PVC is broker
+  runtime state. See [docs/architecture.md](docs/architecture.md) for the per-cluster table.
+
+The OpenBao raft snapshot is taken with `BAO_TOKEN` from `.env` and **only works while OpenBao is
+unsealed** — so dump before a reboot of server3, not after.
 
 ## Credentials
 
