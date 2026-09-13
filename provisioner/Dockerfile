@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # influx CLI — InfluxData GitHub release
 # renovate: datasource=github-releases depName=influxdata/influx-cli extractVersion=^v(?<version>.*)$
 ARG INFLUX_VERSION=2.8.0
-RUN curl -sLo /tmp/influx.tar.gz \
+RUN curl -fsSLo /tmp/influx.tar.gz \
     "https://dl.influxdata.com/influxdb/releases/influxdb2-client-${INFLUX_VERSION}-linux-amd64.tar.gz" \
     && tar -xzf /tmp/influx.tar.gz -C /usr/local/bin/ --strip-components=0 ./influx \
     && rm /tmp/influx.tar.gz \
@@ -19,8 +19,13 @@ RUN curl -sLo /tmp/influx.tar.gz \
 # bao CLI — OpenBao GitHub release
 # renovate: datasource=github-releases depName=openbao/openbao extractVersion=^v(?<version>.*)$
 ARG BAO_VERSION=2.6.2
-RUN curl -sLo /tmp/bao.tar.gz \
-    "https://github.com/openbao/openbao/releases/download/v${BAO_VERSION}/bao_${BAO_VERSION}_Linux_x86_64.tar.gz" \
+# The asset name changed between 2.5.3 and 2.6.2 -- BOTH halves of it:
+#   2.5.3:  bao_2.5.3_Linux_x86_64.tar.gz
+#   2.6.2:  openbao_2.6.2_linux_amd64.tar.gz
+# The binary inside is still called `bao`. If a future bump 404s, check the release
+# assets before assuming the version is wrong.
+RUN curl -fsSLo /tmp/bao.tar.gz \
+    "https://github.com/openbao/openbao/releases/download/v${BAO_VERSION}/openbao_${BAO_VERSION}_linux_amd64.tar.gz" \
     && tar -xzf /tmp/bao.tar.gz -C /usr/local/bin/ bao \
     && rm /tmp/bao.tar.gz \
     && chmod +x /usr/local/bin/bao
