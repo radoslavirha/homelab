@@ -3,6 +3,26 @@ global:
   baoHost: ""
   baoTokenSecret: openbao-provision-token
 
+# Provisioner image, pinned by digest.
+#
+# `:latest` alone is not reproducible: PostSync Jobs on different days can pull
+# different bytes, so a failed Job cannot be reproduced from the manifest. The tag is
+# kept alongside the digest for readability -- the digest is what is actually pulled.
+#
+# The build workflow (.github/workflows/provisioner-image.yaml) publishes two tags on
+# every push that touches provisioner/Dockerfile: `latest` and the full commit SHA.
+# Both point at the same digest. The commit SHA cannot be used here, because it is the
+# SHA of the commit that changes the Dockerfile and is therefore unknowable until after
+# that commit exists -- hence the digest, which Renovate can raise on the dashboard.
+#
+# To update by hand after a rebuild:
+#   docker buildx imagetools inspect ghcr.io/radoslavirha/homelab-provisioner:latest
+image:
+  # renovate: datasource=docker depName=ghcr.io/radoslavirha/homelab-provisioner
+  repository: ghcr.io/radoslavirha/homelab-provisioner
+  tag: latest
+  digest: sha256:4dc939d508c16dd5995e8041ffe7ebd1edee07f060384ce1e59add4417afb0d7
+
 # influxdb2:
 #   host: ""
 #   org: ""

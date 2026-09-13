@@ -16,9 +16,19 @@ automountServiceAccountToken: false
 
 {{/*
 Image used by all provisioner containers.
+
+Digest-pinned -- see the `image` block in values.yaml for why. The digest wins over the
+tag when both are present; the tag stays for readability in `kubectl describe`.
 */}}
 {{- define "provisioner.image" -}}
-ghcr.io/radoslavirha/homelab-provisioner:latest
+{{- $img := .Values.image | default dict -}}
+{{- $repo := $img.repository | default "ghcr.io/radoslavirha/homelab-provisioner" -}}
+{{- $tag := $img.tag | default "latest" -}}
+{{- if $img.digest -}}
+{{ $repo }}:{{ $tag }}@{{ $img.digest }}
+{{- else -}}
+{{ $repo }}:{{ $tag }}
+{{- end -}}
 {{- end }}
 
 {{/*
