@@ -18,7 +18,7 @@ RUN curl -sLo /tmp/influx.tar.gz \
 
 # bao CLI — OpenBao GitHub release
 # renovate: datasource=github-releases depName=openbao/openbao extractVersion=^v(?<version>.*)$
-ARG BAO_VERSION=2.5.3
+ARG BAO_VERSION=2.6.2
 RUN curl -sLo /tmp/bao.tar.gz \
     "https://github.com/openbao/openbao/releases/download/v${BAO_VERSION}/bao_${BAO_VERSION}_Linux_x86_64.tar.gz" \
     && tar -xzf /tmp/bao.tar.gz -C /usr/local/bin/ bao \
