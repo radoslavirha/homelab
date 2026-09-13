@@ -34,7 +34,7 @@ module "platform" {
 
   kubeconfig_path     = "${path.root}/../credentials/kubeconfig"
   # renovate: datasource=helm registryUrl=https://helm.cilium.io depName=cilium
-  cilium_version      = "1.19.2"
+  cilium_version      = "1.20.1"
   # renovate: datasource=helm registryUrl=https://charts.longhorn.io depName=longhorn
   longhorn_version    = "1.12.1"
   # Stays on the EXPERIMENTAL channel: server3's Traefik sets providers.kubernetesGateway
