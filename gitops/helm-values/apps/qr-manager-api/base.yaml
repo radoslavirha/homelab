@@ -60,14 +60,15 @@ apps:
     env:
       - name: NODE_OPTIONS
         value: "--max-old-space-size=384"
-    # The image declares USER 1000; runAsUser repeats it numerically because kubelet
-    # verifies runAsNonRoot against the image's configured user and cannot resolve a
-    # username — a named user fails closed with CreateContainerConfigError.
+    # The distroless base (gcr.io/distroless/nodejs24-debian12:nonroot) declares USER
+    # 65532; runAsUser repeats it numerically because kubelet verifies runAsNonRoot
+    # against the image's configured user and cannot resolve a username — a named user
+    # fails closed with CreateContainerConfigError.
     podSecurityContext:
       runAsNonRoot: true
-      runAsUser: 1000
-      runAsGroup: 1000
-      fsGroup: 1000
+      runAsUser: 65532
+      runAsGroup: 65532
+      fsGroup: 65532
       seccompProfile:
         type: RuntimeDefault
     containerSecurityContext:
