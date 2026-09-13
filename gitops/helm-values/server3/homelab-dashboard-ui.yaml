@@ -7,7 +7,7 @@ apps:
       reloader.stakater.com/auto: "true"
     image:
       repository: ghcr.io/radoslavirha/homelab-dashboard-ui
-      tag: "0.7.0"
+      tag: "0.8.0"
       pullPolicy: Always
     replicas: 1
     # Measured over 7 days: 6-8Mi typical, 16Mi peak. 32Mi requests == limits gives
