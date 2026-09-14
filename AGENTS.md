@@ -274,7 +274,7 @@ Helm values use a two-layer approach:
 - **Shared base**: `gitops/helm-values/<name>.yaml` — common across all clusters
 - **Cluster overrides**: `gitops/helm-values/<cluster>/<name>.yaml` — cluster-specific values (merged last, wins)
 
-> The `iot-miniservers` deploy action rewrites the app values files with `yq` to bump `image.tag`. That **strips blank lines** from the whole file — comments survive, formatting does not. Don't spend effort on blank-line layout in `gitops/helm-values/apps/**` or `gitops/helm-values/server3/homelab-dashboard-ui.yaml`; the next release flattens it.
+> The `homelab-apps` deploy action rewrites the app values files with `yq` to bump `image.tag`. That **strips blank lines** from the whole file — comments survive, formatting does not. Don't spend effort on blank-line layout in `gitops/helm-values/apps/**` or `gitops/helm-values/server3/homelab-dashboard-ui.yaml`; the next release flattens it.
 
 For custom apps deployed via the `apps` stage, a third layer is used:
 - **App-level values**: `gitops/helm-values/apps/<app>/` — shared + env-specific (base.yaml, production.yaml, sandbox.yaml)
@@ -513,14 +513,13 @@ rm -rf / any deletion of credentials
 
 ## Adding a new ArgoCD app
 
-**For apps from `radoslavirha/iot-miniservers`:** use the `onboard-to-homelab` skill from the apps repo instead of manually creating files. The skill generates all files below and opens a PR. After merge, seed OpenBao secrets listed in the PR TODO section before first ArgoCD sync. 
+**For apps from `radoslavirha/homelab-apps`** (renamed from `iot-miniservers` 2026-09-14): use its `onboard-to-homelab` skill (`.apm/skills/onboard-to-homelab/`) instead of manually creating files. The skill generates all files below and opens a PR. After merge, seed OpenBao secrets listed in the PR TODO section before first ArgoCD sync. 
 
 For other apps (manual):
 1. Create `gitops/argocd-manifests/apps/<stage>/<Name>.yaml` — copy an existing ApplicationSet as template. The list generator already targets all registered clusters.
 2. Add helm values at `gitops/helm-values/<name>.yaml` (shared) and `gitops/helm-values/<cluster>/<name>.yaml` (cluster overrides)
 3. Add raw manifests to `gitops/k8s-manifests/<cluster>/<name>/` if needed
 4. Add a row to the technology stack table in `docs/architecture.md` with all required columns (see App documentation rules above)
-5. Update `docs/iot-miniservers-setup/CLAUDE-app-template.md` is not needed for non-iot-miniservers apps
 
 ## Adding an Authentik application or role
 

@@ -14,7 +14,7 @@ next section. That is the symptom this page exists for.**
 
 App pods may reach **any** internet host, but **only on TCP 80 and 443**.
 
-Adding an external API to an app is a change in `iot-miniservers` (`externalApis` config).
+Adding an external API to an app is a change in `homelab-apps` (`externalApis` config).
 Nothing there mentions network policy. So an HTTPS API works the moment you add it, and an API
 on any other port — 8080, 8443, 9000, a database, an SMTP relay — fails with a timeout that
 points at your HTTP client rather than at a firewall.

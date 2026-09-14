@@ -7,7 +7,7 @@
 #
 # The problem was not tightness, it was that the constraint lived nowhere a
 # developer would find it. Adding an external API to an app is a change in
-# iot-miniservers (`externalApis` config); the matching egress rule would have
+# homelab-apps (`externalApis` config); the matching egress rule would have
 # been a change in THIS repo. Nothing in AGENTS.md, docs/Deployment.md, the
 # add-workspace-member skill, or the http-provider READMEs mentions network
 # policy at all — verified, zero hits. So the failure mode was: add an API, it
