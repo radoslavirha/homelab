@@ -95,19 +95,31 @@ gitops/
       interactive-map-feeder-api/ base.yaml, production.yaml, sandbox.yaml
       qr-manager-api/   base.yaml, production.yaml, sandbox.yaml
       qr-manager-ui/    base.yaml, production.yaml, sandbox.yaml
-    server2/
+    server1/              the only cluster running datastores and custom apps
       apps/
-        common/             production.yaml, sandbox.yaml (shared VAR_* for all apps in each namespace)
+        common/             values.yaml, production.yaml, sandbox.yaml (shared VAR_* per namespace)
       provisioner/          influxdb2.yaml, emqx.yaml, mongodb.yaml — provisioner chart values per datastore
-      emqx.yaml             server2 EMQX overrides
+      cert-manager.yaml     cluster-specific overrides
+      emqx.yaml             server1 EMQX overrides
+      external-dns.yaml     domainFilters, txtOwnerId
+      external-secrets.yaml cluster-specific overrides
+      headlamp.yaml         hostname: headlamp.server1.homelab.irha.cz
+      influxdb2.yaml        server1 Longhorn storageClass overrides
+      mongodb.yaml          server1 overrides
+      k8s-monitoring.yaml   server1 cluster name + OTLP destination to server3
+      reloader.yaml         cluster-specific overrides
+      telegraf.yaml         server1 overrides (currently empty)
+      traefik.yaml          dashboard hostname/IP, externalIPs, statusAddress.ip,
+                            ports: 1883/8883/27017 + UDP 4000-4001 for the IoT estate
+    server2/              platform only since 2026-09-13 — no datastores, no custom apps
+      cert-manager.yaml     cluster-specific overrides
       external-dns.yaml     domainFilters, txtOwnerId
       external-secrets.yaml cluster-specific overrides
       headlamp.yaml         hostname: headlamp.server2.homelab.irha.cz
-      influxdb2.yaml        server2 Longhorn storageClass overrides
-      mongodb.yaml          server2 overrides
       k8s-monitoring.yaml   server2 cluster name + OTLP destination to server3
-      telegraf.yaml         server2 overrides (currently empty)
-      traefik.yaml          dashboard hostname/IP, externalIPs, statusAddress.ip
+      reloader.yaml         cluster-specific overrides
+      traefik.yaml          dashboard hostname/IP, externalIPs, statusAddress.ip.
+                            Deliberately NO ports: block — see the comment in the file
     server3/
       argocd.yaml           ArgoCD helm overrides
       external-dns.yaml     domainFilters, txtOwnerId
@@ -133,8 +145,10 @@ gitops/
       RootDatabases.yaml      sync-wave: "3" — App-of-Apps → apps/databases/
       RootDashboards.yaml     sync-wave: "3" — App-of-Apps → apps/dashboards/
       RootApps.yaml           sync-wave: "4" — App-of-Apps → apps/apps/ (custom apps)
+      RootNetworkPolicies.yaml sync-wave: "5" — App-of-Apps → apps/network-policies/
       server3/
-        RootDashboards.yaml    sync-wave: "2" — App-of-Apps → server3/apps/dashboards/ (OpenBao HTTPRoute)
+        RootDashboards.yaml    sync-wave: "2" — App-of-Apps → server3/apps/dashboards/ (OpenBao HTTPRoute, homelab-dashboard-ui)
+        RootIdentity.yaml      sync-wave: "3" — App-of-Apps → server3/apps/identity/ (Authentik + blueprints)
         RootObservability.yaml sync-wave: "3" — App-of-Apps → server3/apps/observability/ (LGTM stack)
     apps/
       infra/       ESO (AppSet, list generator), Reloader (AppSet, list generator), CertManager (AppSet, sync-wave: 2)
@@ -144,24 +158,36 @@ gitops/
       databases/   MongoDB (AppSet)
       dashboards/  Headlamp (AppSet), Hubble (AppSet), Longhorn (AppSet)
       apps/        MiotBridgeApi (AppSet), InteractiveMapFeederApi (AppSet), QrManagerApi (AppSet), QrManagerUi (AppSet)
+      network-policies/ NetworkPolicies (AppSet, cluster × env) — MANUAL sync, deliberately
     server3/
       apps/
         dashboards/ OpenBao.yaml   App: vault.server3.homelab.irha.cz HTTPRoute
+                    HomeLab.yaml   App: homelab-dashboard-ui (iot-applications chart, ns homelab)
+        identity/   Authentik.yaml App: Authentik + authentik-blueprints chart
         observability/ Prometheus.yaml, Grafana.yaml, Loki.yaml, Tempo.yaml
   k8s-manifests/
-    server2/
-      cilium/              HTTPRoute: hubble.server2.homelab.irha.cz → hubble-dashboard:80
+    server1/
+      cilium/              HTTPRoute: hubble.server1.homelab.irha.cz → hubble-dashboard:80
       cert-manager/        ExternalSecret (cloudflare-api-token), ClusterIssuer letsencrypt-staging + letsencrypt-prod (ACME DNS-01 via Cloudflare)
       external-secrets/    ClusterSecretStore → remote server3 OpenBao at vault.server3.homelab.irha.cz
       iot/         ExternalSecret.provisioner-token.yaml (openbao-provision-token; sync-wave -1 via IotInfra)
       influxdb2/   ExternalSecret.yaml, HTTPRoute.yaml
       emqx/        ExternalSecret.yaml, HTTPRoute.yaml, IngressRouteTCP.yaml (1883 plaintext + 8883 TLS)
       telegraf/    ExternalSecret.telegraf.influxdb2.yaml, ExternalSecret.telegraf.mqtt.yaml
-      external-dns/ ExternalSecret (unifi-credentials), DNSEndpoint server2-anchor (server2.homelab.irha.cz A record)
-      longhorn/    HTTPRoute: longhorn.server2.homelab.irha.cz → longhorn-frontend:80
+      external-dns/ ExternalSecret (unifi-credentials), DNSEndpoint server1-anchor (server1.homelab.irha.cz A record)
+      longhorn/    HTTPRoute: longhorn.server1.homelab.irha.cz → longhorn-frontend:80
       mongodb/     ExternalSecret, IngressRouteTCP (27017, TLS-only), ExternalSecret.provisioner-token.yaml
       miot-bridge-api/ production/ and sandbox/ — ExternalSecret.mqtt.yaml, ExternalSecret.mongodb.yaml
-      qr-manager-api/ production/ and sandbox/ — ExternalSecret.mongodb.yaml
+      qr-manager-api/ production/ and sandbox/ — ExternalSecret.mongodb.yaml, HTTPRoute.qr.yaml, Middleware.addprefix-qr.yaml
+      network-policies/ production/ and sandbox/ — default-deny + the egress allow-list (manual-sync)
+      k8s-monitoring/ ExternalSecret.otel-auth-token.yaml (shared OTLP bearer token pulled from secret/otel-gateway/auth-token)
+      traefik/     Certificate.server1-tls.yaml → Secret server1-tls for the websecure listener
+    server2/              platform only since 2026-09-13
+      cilium/              HTTPRoute: hubble.server2.homelab.irha.cz → hubble-dashboard:80
+      cert-manager/        ExternalSecret (cloudflare-api-token), ClusterIssuer letsencrypt-staging + letsencrypt-prod (ACME DNS-01 via Cloudflare)
+      external-secrets/    ClusterSecretStore → remote server3 OpenBao at vault.server3.homelab.irha.cz
+      external-dns/ ExternalSecret (unifi-credentials), DNSEndpoint server2-anchor (server2.homelab.irha.cz A record)
+      longhorn/    HTTPRoute: longhorn.server2.homelab.irha.cz → longhorn-frontend:80
       k8s-monitoring/ ExternalSecret.otel-auth-token.yaml (shared OTLP bearer token pulled from secret/otel-gateway/auth-token)
       traefik/     Certificate.server2-tls.yaml → Secret server2-tls for the websecure listener
     server3/
@@ -208,14 +234,16 @@ To apply a version change: `cd iac/clusters/<cluster>/<stage> && terraform apply
 
 ### 2. ArgoCD-managed (GitOps)
 
-All other apps use the **app-of-apps + ApplicationSet** pattern with seven stages (six multi-cluster + server3-only LGTM):
+All other apps use the **app-of-apps + ApplicationSet** pattern: **eight stages under `apps/`**, plus three server3-only stages under `server3/apps/`.
 - **infra** stage: ESO + supporting K8s resources (ClusterSecretStore)
 - **gateway** stage: Traefik + ExternalDNS + ExternalSecret for Unifi credentials
 - **observability** stage: k8s-monitoring / Grafana Alloy (all clusters); server3-only LGTM stack (Prometheus, Grafana, Loki, Tempo) under `server3/apps/observability/`
-- **iot** stage: InfluxDB2 (server2), EMQX (server2), Telegraf (server2), IotInfra (server2)
-- **databases** stage: MongoDB (server2)
-- **dashboards** stage: Headlamp, Hubble UI, Longhorn UI (server3 · server2); server3-only OpenBao HTTPRoute under `server3/apps/dashboards/`
-- **apps** stage: custom apps — miot-bridge-api, interactive-map-feeder-api, qr-manager-api, qr-manager-ui, per-namespace OTel collectors
+- **iot** stage: InfluxDB2, EMQX, Telegraf, IotInfra — **server1 only**
+- **databases** stage: MongoDB — **server1 only**
+- **network-policies** stage: default-deny + egress allow-list per namespace — **server1 only**, and deliberately manual-sync
+- **dashboards** stage: Headlamp, Hubble UI, Longhorn UI (all clusters); `server3/apps/dashboards/` adds the OpenBao HTTPRoute and homelab-dashboard-ui
+- **identity** stage: Authentik + the authentik-blueprints chart — `server3/apps/identity/`, **server3 only**
+- **apps** stage: custom apps — miot-bridge-api, interactive-map-feeder-api, qr-manager-api, qr-manager-ui, per-namespace OTel collectors — **server1 only**
 
 Bootstrap is **two manual kubectl applies** on server3:
 
@@ -228,8 +256,9 @@ kubectl apply -f gitops/argocd-manifests/Bootstrap.yaml   # meta App-of-Apps
 
 - **wave 1** — `RootInfra` (ESO + CRDs; must precede any other app's ExternalSecret)
 - **wave 2** — `RootGateway` (Traefik + ExternalDNS) · `server3/RootDashboards` (OpenBao HTTPRoute — unblocks server2 ESO reaching `vault.server3.homelab.irha.cz`)
-- **wave 3** — `RootObservability` · `server3/RootObservability` · `RootIoT` · `RootDatabases` · `RootDashboards`
+- **wave 3** — `RootObservability` · `server3/RootObservability` · `server3/RootIdentity` · `RootIoT` · `RootDatabases` · `RootDashboards`
 - **wave 4** — `RootApps` (custom apps depending on MongoDB + EMQX)
+- **wave 5** — `RootNetworkPolicies` (must come after the namespaces its Applications target exist; `CreateNamespace=false`)
 
 For sync waves to wait on child-Application Health (not just creation), ArgoCD's Application CRD health check is restored via a Lua `resource.customizations` entry in `gitops/helm-values/server3/argocd.yaml`. Source: [ArgoCD 1.7→1.8 upgrade notes](https://argo-cd.readthedocs.io/en/stable/operator-manual/upgrading/1.7-1.8).
 
@@ -266,7 +295,7 @@ When changing any component version:
 - Every row must have: Purpose, Clusters (which clusters run it), Managed by, Artifact Hub link (or `—`), Local values links for every cluster-specific file that exists, and Upstream `values.yaml` link (or `—`).
 - If an app has no Helm chart (e.g. Gateway API CRDs, Hubble UI built into Cilium), use `—` for Artifact Hub, Local values, and Upstream columns.
 - If an app is removed from all clusters, remove its row from the table.
-- Apps with per-cluster helm overrides must list all local values files in one row as `shared · server3` or `server1 · server2 · server3`.
+- Apps with per-cluster helm overrides must list all local values files in one row as `shared · server3` or `server1 · server2 · server3` — list only the files that exist. server2 carries platform values only.
 
 ## Dependency monitoring (Renovate)
 

@@ -3,6 +3,9 @@
 Terraform manages three stages for the **server3** cluster and two stages for **server1** and **server2**.
 Shared logic lives in `iac/modules/`; cluster-specific values are inlined in `iac/clusters/<cluster>/<stage>/main.tf`.
 
+Everything above the platform layer belongs to ArgoCD, and what ArgoCD deploys differs per cluster —
+see [architecture.md](architecture.md#technology-stack) for which cluster runs what.
+
 ## Prerequisites
 
 ```bash
@@ -261,7 +264,10 @@ bao kv put secret/<cluster>/provisioner-token token="$PROVISIONER_TOKEN"
 #    missing paths cause ExternalSecrets to fail and pods to crashloop.
 #    See docs/secrets.md for full details and verification commands.
 #    These secrets must exist before ESO syncs for the first time (steps 5 onwards).
-#    Add all secrets for every app you plan to deploy on this cluster.
+#    Add all secrets for every app you plan to deploy on this cluster — and ONLY those.
+#    external-dns and cert-manager are needed by every cluster. influxdb2, emqx, mongodb
+#    and the provisioner token are needed only where those datastores actually run, which
+#    since 2026-09-13 is server1 alone; server2 runs platform components only.
 
 #    ExternalDNS — UniFi API key (gateway stage):
 bao kv put secret/<cluster>/external-dns api-key=<unifi-api-key>
@@ -402,8 +408,16 @@ Terraform reads the ArgoCD values during initial bootstrap via a relative `file(
 5. Re-run `terraform plan` afterwards; it must come back clean, or state and reality disagree.
 
 When upgrading across all clusters, update each cluster's `main.tf` separately, in the order
-**server1 → server2 → server3**, verifying between each. server3 runs ArgoCD and the whole
-observability stack — breaking it blinds you for every other step.
+**server2 → server1 → server3**, verifying between each.
+
+server2 goes first because it is the canary: since 2026-09-13 it runs platform components only,
+so a bad bump there costs nothing that matters. It used to run a full mirror of server1's IoT
+estate, which is what made it a *representative* canary — it no longer is, and a platform-only
+cluster cannot surface a break in EMQX, InfluxDB2, MongoDB or the custom apps. Treat a clean
+server2 as evidence about the platform layer and nothing more.
+
+server3 goes last because it runs ArgoCD and the whole observability stack — breaking it blinds
+you for every other step.
 
 ### Version variables are Renovate-annotated
 

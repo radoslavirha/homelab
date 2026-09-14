@@ -7,7 +7,7 @@ Multi-cluster Kubernetes homelab: three Talos Linux nodes managed with a shared 
 | Cluster | Machine | Role |
 |---------|---------|------|
 | `server1` | server1 — 32 GB RAM / 6 cores / 500 GB SSD | Production workloads |
-| `server2` | server2 — 32 GB RAM / 8 cores / 500 GB SSD | Experimentation, staging |
+| `server2` | server2 — 32 GB RAM / 8 cores / 500 GB SSD | Platform-only since 2026-09-13 — its IoT estate was removed and it is being repurposed to host an LLM. Doubles as the canary: platform upgrades land here first |
 | `server3` | server3 — 16 GB RAM / 4 cores / 500 GB SSD | Platform services — OpenBao, ArgoCD, Authentik, central observability hub (manages all clusters) |
 
 ## Technology stack
@@ -31,16 +31,21 @@ Multi-cluster Kubernetes homelab: three Talos Linux nodes managed with a shared 
 | [Hubble UI](https://docs.cilium.io/en/stable/observability/hubble/) | Cilium network observability UI | all | ArgoCD | — | — | — |
 | [Longhorn UI](https://longhorn.io/) | Distributed storage dashboard | all | ArgoCD | — | — | — |
 | [MinIO](https://min.io/) | **Not deployed, and dropped as a backup destination.** Was intended as the S3 backend for both Terraform state and Longhorn backups. The Longhorn-backup half was abandoned in favour of offsite logical dumps to Cloudflare R2 (see "Why Longhorn on the server3 cluster?"); the Terraform-state half is still an open intention. No manifest and no ArgoCD Application exist | — | — | — | — | — |
-| [MongoDB](https://www.mongodb.com/) | Document database | server2 | ArgoCD `databases` | [mongodb](https://artifacthub.io/packages/helm/bitnami/mongodb) | [shared](../gitops/helm-values/mongodb.yaml) · [server2](../gitops/helm-values/server2/mongodb.yaml) | [values.yaml](https://github.com/bitnami/charts/blob/main/bitnami/mongodb/values.yaml) |
-| [EMQX](https://www.emqx.io/) | MQTT broker for IoT message routing | server2 | ArgoCD `iot` | [emqx](https://artifacthub.io/packages/helm/emqx/emqx) | [shared](../gitops/helm-values/emqx.yaml) · [server2](../gitops/helm-values/server2/emqx.yaml) | [values.yaml](https://github.com/emqx/emqx/blob/master/deploy/charts/emqx/values.yaml) |
-| [InfluxDB2](https://www.influxdata.com/) | Time-series database for IoT data | server2 | ArgoCD `iot` | [influxdb2](https://artifacthub.io/packages/helm/influxdata/influxdb2) | [shared](../gitops/helm-values/influxdb2.yaml) · [server2](../gitops/helm-values/server2/influxdb2.yaml) | [values.yaml](https://github.com/influxdata/helm-charts/blob/master/charts/influxdb2/values.yaml) |
-| iot-applications | Shared Helm chart for custom IoT apps; supports multi-app deployments, Jinja2 config templates, secretRefs, optional Argo Rollouts | server2 | ArgoCD `apps` | — | [chart](../gitops/helm-charts/iot-applications/) | — |
-| miot-bridge-api | MIOT device bridge API; HTTP + UDP ingress; MQTT + MongoDB; auto-provisioned credentials via PostSync Jobs | server2 | ArgoCD `apps` | — | [base](../gitops/helm-values/apps/miot-bridge-api/base.yaml) · [production](../gitops/helm-values/apps/miot-bridge-api/production.yaml) · [sandbox](../gitops/helm-values/apps/miot-bridge-api/sandbox.yaml) · [cluster](../gitops/helm-values/server2/apps/common/production.yaml) | — |
-| interactive-map-feeder-api | Interactive map feeder API; HTTP ingress only; no secrets | server2 | ArgoCD `apps` | — | [base](../gitops/helm-values/apps/interactive-map-feeder-api/base.yaml) · [production](../gitops/helm-values/apps/interactive-map-feeder-api/production.yaml) · [sandbox](../gitops/helm-values/apps/interactive-map-feeder-api/sandbox.yaml) · [cluster](../gitops/helm-values/server2/apps/common/production.yaml) | — |
-| qr-manager-api | QR code redirect + admin CRUD API; HTTP ingress + `qr.irha.cz` shortcut; MongoDB for slug storage; auto-provisioned MongoDB credentials via PostSync Jobs | server2 | ArgoCD `apps` | — | [base](../gitops/helm-values/apps/qr-manager-api/base.yaml) · [production](../gitops/helm-values/apps/qr-manager-api/production.yaml) · [sandbox](../gitops/helm-values/apps/qr-manager-api/sandbox.yaml) · [cluster](../gitops/helm-values/server2/apps/common/production.yaml) | — |
-| qr-manager-ui | QR code admin SPA (React + nginx); served at `apps.server2.homelab.irha.cz/qr-manager`; runtime `config.json` via ConfigMap subPath mount; no secrets | server2 | ArgoCD `apps` | — | [base](../gitops/helm-values/apps/qr-manager-ui/base.yaml) · [production](../gitops/helm-values/apps/qr-manager-ui/production.yaml) · [sandbox](../gitops/helm-values/apps/qr-manager-ui/sandbox.yaml) · [cluster](../gitops/helm-values/server2/apps/common/production.yaml) | — |
+| [MongoDB](https://www.mongodb.com/) | Document database | server1 | ArgoCD `databases` | [mongodb](https://artifacthub.io/packages/helm/bitnami/mongodb) | [shared](../gitops/helm-values/mongodb.yaml) · [server1](../gitops/helm-values/server1/mongodb.yaml) | [values.yaml](https://github.com/bitnami/charts/blob/main/bitnami/mongodb/values.yaml) |
+| [EMQX](https://www.emqx.io/) | MQTT broker for IoT message routing | server1 | ArgoCD `iot` | [emqx](https://artifacthub.io/packages/helm/emqx/emqx) | [shared](../gitops/helm-values/emqx.yaml) · [server1](../gitops/helm-values/server1/emqx.yaml) | [values.yaml](https://github.com/emqx/emqx/blob/master/deploy/charts/emqx/values.yaml) |
+| [InfluxDB2](https://www.influxdata.com/) | Time-series database for IoT data | server1 | ArgoCD `iot` | [influxdb2](https://artifacthub.io/packages/helm/influxdata/influxdb2) | [shared](../gitops/helm-values/influxdb2.yaml) · [server1](../gitops/helm-values/server1/influxdb2.yaml) | [values.yaml](https://github.com/influxdata/helm-charts/blob/master/charts/influxdb2/values.yaml) |
+| [Telegraf](https://www.influxdata.com/time-series-platform/telegraf/) | MQTT consumer → InfluxDB2 writer; no inbound ports | server1 | ArgoCD `iot` | [telegraf](https://artifacthub.io/packages/helm/influxdata/telegraf) | [shared](../gitops/helm-values/telegraf.yaml) · [server1](../gitops/helm-values/server1/telegraf.yaml) | [values.yaml](https://github.com/influxdata/helm-charts/blob/master/charts/telegraf/values.yaml) |
+| iot-infra | Raw manifests at `sync-wave: -1` — carries the shared `openbao-provision-token` Secret into the `iot` namespace so the PostSync provisioner Jobs have a writer token before InfluxDB2 and EMQX sync | server1 | ArgoCD `iot` | — | [manifests](../gitops/k8s-manifests/server1/iot/) | — |
+| provisioner | In-repo chart rendering the idempotent PostSync Jobs that create per-app datastore credentials and write them to OpenBao; added as an extra `sources` entry on each datastore ApplicationSet rather than deployed on its own. Image pinned by digest | server1 | ArgoCD `iot` · `databases` | — | [chart](../gitops/helm-charts/provisioner/) · [server1](../gitops/helm-values/server1/provisioner/) | — |
+| network-policies | Default-deny plus the egress allow-list for `production` and `sandbox`; raw manifests, **manual-sync on purpose** so a rollback is not undone by `selfHeal` | server1 | ArgoCD `network-policies` | — | [manifests](../gitops/k8s-manifests/server1/network-policies/) | — |
+| iot-applications | Shared Helm chart for custom IoT apps; supports multi-app deployments, Jinja2 config templates, secretRefs, optional Argo Rollouts | server1 | ArgoCD `apps` | — | [chart](../gitops/helm-charts/iot-applications/) | — |
+| miot-bridge-api | MIOT device bridge API; HTTP + UDP ingress; MQTT + MongoDB; auto-provisioned credentials via PostSync Jobs | server1 | ArgoCD `apps` | — | [base](../gitops/helm-values/apps/miot-bridge-api/base.yaml) · [production](../gitops/helm-values/apps/miot-bridge-api/production.yaml) · [sandbox](../gitops/helm-values/apps/miot-bridge-api/sandbox.yaml) · [cluster](../gitops/helm-values/server1/apps/common/production.yaml) | — |
+| interactive-map-feeder-api | Interactive map feeder API; HTTP ingress only; no secrets | server1 | ArgoCD `apps` | — | [base](../gitops/helm-values/apps/interactive-map-feeder-api/base.yaml) · [production](../gitops/helm-values/apps/interactive-map-feeder-api/production.yaml) · [sandbox](../gitops/helm-values/apps/interactive-map-feeder-api/sandbox.yaml) · [cluster](../gitops/helm-values/server1/apps/common/production.yaml) | — |
+| qr-manager-api | QR code redirect + admin CRUD API; HTTP ingress + `qr.irha.cz` shortcut; MongoDB for slug storage; auto-provisioned MongoDB credentials via PostSync Jobs | server1 | ArgoCD `apps` | — | [base](../gitops/helm-values/apps/qr-manager-api/base.yaml) · [production](../gitops/helm-values/apps/qr-manager-api/production.yaml) · [sandbox](../gitops/helm-values/apps/qr-manager-api/sandbox.yaml) · [cluster](../gitops/helm-values/server1/apps/common/production.yaml) | — |
+| homelab-dashboard-ui | Homelab landing page (React + nginx) at `dashboard.server3.homelab.irha.cz`; rendered by the `iot-applications` chart; OIDC via Authentik | server3 | ArgoCD `server3/dashboards` | — | [server3](../gitops/helm-values/server3/homelab-dashboard-ui.yaml) | — |
+| qr-manager-ui | QR code admin SPA (React + nginx); served at `apps.server1.homelab.irha.cz/qr-manager`; runtime `config.json` via ConfigMap subPath mount; no secrets | server1 | ArgoCD `apps` | — | [base](../gitops/helm-values/apps/qr-manager-ui/base.yaml) · [production](../gitops/helm-values/apps/qr-manager-ui/production.yaml) · [sandbox](../gitops/helm-values/apps/qr-manager-ui/sandbox.yaml) · [cluster](../gitops/helm-values/server1/apps/common/production.yaml) | — |
 | [Prometheus](https://prometheus.io/) | TSDB receiving OTLP metrics; no scraping (remote-write only) | server3 | ArgoCD `observability` | [prometheus](https://artifacthub.io/packages/helm/prometheus-community/prometheus) | [shared](../gitops/helm-values/prometheus.yaml) · [server3](../gitops/helm-values/server3/prometheus.yaml) | [values.yaml](https://github.com/prometheus-community/helm-charts/blob/main/charts/prometheus/values.yaml) |
-| [Grafana](https://grafana.com/) | Observability dashboards; datasources: Prometheus, Loki, Tempo, InfluxDB2 (server2) | server3 | ArgoCD `observability` | [grafana](https://artifacthub.io/packages/helm/grafana-community/grafana) | [shared](../gitops/helm-values/grafana.yaml) · [server3](../gitops/helm-values/server3/grafana.yaml) | [values.yaml](https://github.com/grafana-community/helm-charts/blob/main/charts/grafana/values.yaml) |
+| [Grafana](https://grafana.com/) | Observability dashboards; datasources: Prometheus, Loki, Tempo, InfluxDB2 (server1) | server3 | ArgoCD `observability` | [grafana](https://artifacthub.io/packages/helm/grafana-community/grafana) | [shared](../gitops/helm-values/grafana.yaml) · [server3](../gitops/helm-values/server3/grafana.yaml) | [values.yaml](https://github.com/grafana-community/helm-charts/blob/main/charts/grafana/values.yaml) |
 | [Loki](https://grafana.com/oss/loki/) | Log aggregation backend; ingest via the native OTLP endpoint `/otlp/v1/logs` (not the Loki push API) | server3 | ArgoCD `observability` | [loki](https://artifacthub.io/packages/helm/grafana-community/loki) | [shared](../gitops/helm-values/loki.yaml) | [values.yaml](https://github.com/grafana-community/helm-charts/blob/main/charts/loki/values.yaml) |
 | [Tempo](https://grafana.com/oss/tempo/) | Distributed tracing backend; OTLP gRPC/HTTP receiver | server3 | ArgoCD `observability` | [tempo](https://artifacthub.io/packages/helm/grafana-community/tempo) | [shared](../gitops/helm-values/tempo.yaml) | [values.yaml](https://github.com/grafana-community/helm-charts/blob/main/charts/tempo/values.yaml) |
 | [k8s-monitoring (Grafana Alloy)](https://grafana.com/docs/k8s-monitoring) | Infrastructure + app observability; cluster/host/pod metrics, logs, events; OTLP receiver (alloy-receiver); server3: fan-out to Prometheus (remote-write), Loki (native OTLP) and Tempo (OTLP gRPC); server1/server2: forward all signals to otel.server3.homelab.irha.cz:4317 | server1 · server2 · server3 | ArgoCD `observability` (AppSet) | [k8s-monitoring](https://artifacthub.io/packages/helm/grafana/k8s-monitoring) | [shared](../gitops/helm-values/k8s-monitoring.yaml) · [server1](../gitops/helm-values/server1/k8s-monitoring.yaml) · [server2](../gitops/helm-values/server2/k8s-monitoring.yaml) · [server3](../gitops/helm-values/server3/k8s-monitoring.yaml) | [values.yaml](https://github.com/grafana/k8s-monitoring-helm/blob/main/charts/k8s-monitoring/values.yaml) |
@@ -62,8 +67,8 @@ names that are, or may become, publicly reachable.
 | Apex | `<svc>.irha.cz` | `qr.irha.cz`, `grafana.irha.cz`, `auth.irha.cz` (Authentik 2026.8.1, deployed on server3 2026-09-04) |
 
 App routes generated by the `iot-applications` chart follow the same rule, with the stage label
-left of the component: `api.server2.homelab.irha.cz` for production,
-`api.sandbox.server2.homelab.irha.cz` for sandbox. That ordering means sandbox is not a
+left of the component: `api.server1.homelab.irha.cz` for production,
+`api.sandbox.server1.homelab.irha.cz` for sandbox. That ordering means sandbox is not a
 subdomain of production — cookie scope, HSTS `includeSubDomains` and wildcard-scoped policy stop
 leaking across the boundary — and one wildcard covers a whole stage rather than one per
 component.
@@ -81,6 +86,10 @@ A certificate wildcard matches exactly one label (RFC 6125), which is why the fo
 names need their own SAN. A *DNS* wildcard matches at any depth (RFC 4592) — the two are spelled
 alike and behave differently.
 
+server2's sandbox SAN currently matches nothing — that cluster has had no `sandbox` namespace since
+its IoT estate was removed on 2026-09-13. It is carried rather than dropped so a future workload
+needs no certificate reissue.
+
 **Split horizon.** ExternalDNS writes A records to UniFi and only to UniFi, so LAN clients and
 cluster nodes get `192.168.1.x`. cert-manager writes `_acme-challenge` TXT records to Cloudflare
 and only during issuance — created, validated, deleted, roughly 90 seconds. The two never touch
@@ -95,11 +104,14 @@ the node IPs — what is defined in `ports:` is what the LAN can reach.
 |------|---------|-------|
 | 443 | all | TLS, cluster certificate |
 | 80 | all | plaintext, no redirect — see below |
-| 27017 MongoDB | server1 · server2 | **TLS only**, terminated at Traefik against the cluster certificate; `mongod` itself is untouched. Compass connects with `?tls=true` |
-| 1883 MQTT | server1 · server2 | plaintext, authenticated |
-| 8883 MQTTS | server1 · server2 | TLS, same broker behind it |
+| 27017 MongoDB | server1 | **TLS only**, terminated at Traefik against the cluster certificate; `mongod` itself is untouched. Compass connects with `?tls=true` |
+| 1883 MQTT | server1 | plaintext, authenticated |
+| 8883 MQTTS | server1 | TLS, same broker behind it |
 | 4317 OTLP gRPC | server3 | **TLS**, terminated at Traefik; unauthenticated |
-| 4000-4001 | server1 · server2 | UDP, miot |
+| 4000-4001 | server1 | UDP, miot |
+
+server2 opens 443 and 80 only. Its `ports:` block was removed on 2026-09-13 with the IoT estate —
+every TCP/UDP entrypoint above routed to nothing once the `IngressRouteTCP` objects went.
 
 Both MQTT ports stay open on purpose. TLS termination selects the router by the SNI the client
 sends, and it is not established that the Loxone Miniserver and the ESP32 devices can do MQTT
@@ -129,9 +141,9 @@ Each backend API has a dedicated Kubernetes ServiceAccount (preparation for futu
 
 | Service | ServiceAccount Name | Environment | Namespace | Scope |
 |---------|-------------------|-------------|-----------|-------|
-| miot-bridge-api | `api-iot-miot-bridge-api` | production / sandbox | `production` / `sandbox` | server2; receives MQTT messages and stores in MongoDB |
-| interactive-map-feeder-api | `api-iot-interactive-map-feeder-api` | production / sandbox | `production` / `sandbox` | server2; feeds map state from external sources |
-| qr-manager-api | `api-iot-qr-manager-api` | production / sandbox | `production` / `sandbox` | server2; manages QR code shortcuts and stores in MongoDB |
+| miot-bridge-api | `api-iot-miot-bridge-api` | production / sandbox | `production` / `sandbox` | server1; receives MQTT messages and stores in MongoDB |
+| interactive-map-feeder-api | `api-iot-interactive-map-feeder-api` | production / sandbox | `production` / `sandbox` | server1; feeds map state from external sources |
+| qr-manager-api | `api-iot-qr-manager-api` | production / sandbox | `production` / `sandbox` | server1; manages QR code shortcuts and stores in MongoDB |
 
 All ServiceAccounts have `automountServiceAccountToken: false` — tokens are not auto-mounted. When API-to-API communication is enabled, projected tokens will be mounted on-demand via the Deployment spec.
 
@@ -160,7 +172,7 @@ Longhorn provides durable PersistentVolumes for OpenBao. The overhead (≈500 MB
 | Cluster | Covered by the offsite dumps | **Not** covered |
 |---|---|---|
 | server1 | InfluxDB2 25Gi · MongoDB 10Gi · etcd | EMQX 20Mi |
-| server2 | InfluxDB2 25Gi · MongoDB 10Gi · etcd | EMQX 20Mi |
+| server2 | etcd | — (no application PVCs since 2026-09-13) |
 | server3 | OpenBao 10Gi (raft snapshot) · Authentik PostgreSQL 10Gi · etcd | Prometheus 20Gi · Loki 20Gi · Tempo 20Gi · Grafana 5Gi |
 
 The server3 exclusions are deliberate: Prometheus, Loki and Tempo hold reconstructible telemetry, and Grafana is fully provisioned from git. EMQX's 20Mi is broker runtime state, not configuration.
@@ -209,13 +221,15 @@ MinIO is the intended S3-compatible backend for Terraform state, and would itsel
 │     b. kubectl apply Bootstrap.yaml  → meta App-of-Apps over roots/     │
 │        wave 1  RootInfra            (ESO + CRDs)                        │
 │        wave 2  RootGateway          (Traefik + ExternalDNS)             │
-│        wave 2  server3/RootDashboards (OpenBao HTTPRoute)               │
+│        wave 2  server3/RootDashboards (OpenBao HTTPRoute, dashboard UI) │
 │        wave 3  RootObservability    (k8s-monitoring)                      │
 │        wave 3  server3/RootObservability (Prometheus, Grafana, Loki, Tempo) │
 │        wave 3  RootIoT              (InfluxDB2, EMQX, Telegraf, IotInfra)│
 │        wave 3  RootDatabases        (MongoDB)                           │
 │        wave 3  RootDashboards       (Headlamp, Hubble, Longhorn)        │
+│        wave 3  server3/RootIdentity (Authentik + authentik-blueprints)  │
 │        wave 4  RootApps             (miot-bridge, interactive-map-feeder, qr-manager-api, qr-manager-ui) │
+│        wave 5  RootNetworkPolicies  (default-deny + egress allow-list)  │
 │     [manual: terraform init -migrate-state for all server3 modules]     │
 │  6. Register server1 + server2 kubeconfigs in server3 ArgoCD            │
 └─────────────────────────────────────────────────────────────────────────┘
@@ -231,11 +245,13 @@ MinIO is the intended S3-compatible backend for Terraform state, and would itsel
 │     b. Register Kubernetes auth mount (one per cluster)                 │
 │     c. ESO read-only policy + role                                      │
 │     d. Provisioner write policy + long-lived token → OpenBao KV        │
-│     e. Seed all KV secrets (external-dns, influxdb2, emqx, mongodb, …) │
+│     e. Seed all KV secrets (external-dns, plus influxdb2/emqx/mongodb  │
+│        only on a cluster that runs them — server1 today)               │
 │     See docs/iac.md step 3 for full commands.                           │
 │  4. Register kubeconfig in server3 ArgoCD                               │
 │  5. Add cluster to ApplicationSet list generators, commit               │
-│     → server3 ArgoCD deploys: ESO → Traefik → EMQX + InfluxDB2 → MongoDB → Headlamp │
+│     → server3 ArgoCD deploys: ESO → Traefik → Headlamp (+ EMQX,        │
+│       InfluxDB2, MongoDB and the IoT apps only where listed — server1) │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 

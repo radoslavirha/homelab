@@ -1,6 +1,9 @@
 # EMQX storage expansion — spec
 
 **Status:** proposed, not scheduled. Nothing here has been applied.
+**Superseded in part (2026-09-13):** server2's entire IoT estate was removed, EMQX included, so
+every server2 column and step below is moot. What survives is the server1 half and the two
+values-file defects, which live in the shared `gitops/helm-values/emqx.yaml` and so still apply.
 **Scope:** the size of the EMQX data volume on server1 and server2, and two values-file defects found alongside it. Enabling `emqx_prometheus` is a separate item (`4.2` in the dashboard plan) and is deliberately out of scope.
 **Audience:** whoever picks this up next. Everything below was verified against the live clusters on 2026-08-14; re-verify before acting, the numbers move.
 
@@ -74,7 +77,9 @@ Good news: the `longhorn` StorageClass has `allowVolumeExpansion: true` (verifie
 
 ## Procedure for option A
 
-Per cluster, one at a time, server2 first (server1 carries the Loxone integration). Substitute `<ctx>` with `admin@server1` / `admin@server2`.
+Written for two clusters; server1 is the only one left. Substitute `<ctx>` with `admin@server1`.
+There is no longer a second cluster to rehearse on — see the canary-fixture spec before doing this
+unrehearsed on the cluster that carries the Loxone integration.
 
 **1. Land the values change** — the two defect fixes plus the new size — and commit.
 
@@ -138,7 +143,7 @@ If the StatefulSet recreation goes wrong, the data is safe: it lives in the PVC,
 ## Open questions for whoever picks this up
 
 1. **Is 1Gi the right target?** It is a guess — 50× headroom on a workload using 1.2 MB. 256Mi would also be defensible and wastes less of a thin-provisioned pool. Longhorn allocates lazily, so the larger claim costs nothing until written.
-2. **Does the orphan-delete actually avoid a pod restart?** Worth testing on server2 and recording the answer here.
+2. **Does the orphan-delete actually avoid a pod restart?** Still unanswered, and now harder to answer — server2 was the place to test it and no longer runs EMQX.
 3. **Should `persistence.size` be per-cluster?** Both clusters run identical EMQX workloads today, so shared base values are right; the per-cluster override file exists and is currently empty of Helm values.
 4. **Is there a retention setting that bounds mnesia growth instead?** Retained-message expiry and session expiry are EMQX config, not storage. Bounding growth may be a better answer than a bigger volume, and it is not investigated here.
 5. **Do the same defects exist for the other charts?** `persistence.storageClass` vs `storageClassName` is a per-chart spelling. InfluxDB2 and MongoDB values are worth the same 30-second check.

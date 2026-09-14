@@ -1,6 +1,8 @@
 # Network egress — what app pods are allowed to reach
 
-`production` and `sandbox` on **server1 and server2** run under a default-deny NetworkPolicy.
+`production` and `sandbox` on **server1** run under a default-deny NetworkPolicy. Those are the
+only namespaces this page covers — server2 had an identical set until its IoT estate was removed
+on 2026-09-13, which took both namespaces with it.
 An app pod can only reach what is explicitly allowed below. Everything else is dropped
 silently — there is no error, no refusal, no log line. The call just hangs until the client's
 own timeout fires.
@@ -43,8 +45,7 @@ A policy drop looks like this — note `DROPPED` and `Policy denied`:
 production/api-iot-my-api-xxxx:41234 -> 203.0.113.10:8443 (world) Policy denied DROPPED (TCP Flags: SYN)
 ```
 
-Swap `admin@server1` for `admin@server2` and `production` for `sandbox` as needed. Both
-clusters and both namespaces carry an identical policy set.
+Swap `production` for `sandbox` as needed. Both namespaces carry an identical policy set.
 
 ## What is allowed today
 
@@ -95,8 +96,11 @@ miot-bridge UDP listener on 4000 was removed in part because the policy permits 
 Use the **`network-egress`** skill (`.apm/skills/network-egress/`) — it carries the procedure
 and, importantly, the verification step. Rough shape:
 
-1. Edit the right file under `gitops/k8s-manifests/server1/network-policies/<ns>/` **and** copy
-   it to `server2/`. Keep the two identical.
+1. Edit the right file under `gitops/k8s-manifests/server1/network-policies/<ns>/`. There is one
+   cluster to edit today. The two clusters' sets were required to stay byte-identical until
+   2026-09-13; if a second cluster is ever added back, restore that rule — tailoring each set to
+   what a cluster happens to run is how the LAN rule ends up missing on the one that later needs
+   it.
 2. Update the table on this page in the same commit.
 3. Sync `network-policies-<cluster>-<ns>` in ArgoCD — these Applications are **manual-sync** on
    purpose.

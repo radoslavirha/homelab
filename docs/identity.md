@@ -143,10 +143,11 @@ grant. "Remove their access" means removing the *lowest* membership they hold, n
 
 | Application | UI | Roles | Environments |
 |-------------|-----|-------|--------------|
-| `qr-manager` | `qr-manager-ui` at `apps.<cluster>…/qr-manager` | admin → editor → reader | server1 · server2 × sandbox · production, + local |
-| `miot-bridge` | none — REST surface operated by hand | admin → editor → reader | server1 · server2 × sandbox · production, + local |
-| `interactive-map-feeder` | none — reads of public CHMU data | admin → editor → reader | server1 · server2 × sandbox · production, + local |
+| `qr-manager` | `qr-manager-ui` at `apps.<cluster>…/qr-manager` | admin → editor → reader | server1 × sandbox · production, + local |
+| `miot-bridge` | none — REST surface operated by hand | admin → editor → reader | server1 × sandbox · production, + local |
+| `interactive-map-feeder` | none — reads of public CHMU data | admin → editor → reader | server1 × sandbox · production, + local |
 | `homelab-dashboard` | `dashboard.server3.homelab.irha.cz` | admin → editor → reader | server3 production, + local |
+| `argocd` | `argocd.server3.homelab.irha.cz` | admin → editor → reader | server3 production |
 | `postman` | none — a client, not an API | `user` (the access gate only) | one client, every environment |
 | `interactive-map` | none — an ESP32, `kind: device` | none of its own; holds `interactive-map-feeder.reader` | one client: server1 production + local |
 
@@ -311,8 +312,7 @@ nothing works end to end until it lands.
 One config on the **collection**, and one Postman environment per homelab environment. Do this once.
 
 1. **Create a Postman environment per homelab environment** you will call — `server1-sandbox`,
-   `server1-production`, `server2-sandbox`, `server2-production`, `server3-production`, `local`. Each
-   needs one variable, the API host:
+   `server1-production`, `server3-production`, `local`. Each needs one variable, the API host:
 
    | Variable | Example (`server1-sandbox`) |
    |---|---|

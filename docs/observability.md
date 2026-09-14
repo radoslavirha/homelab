@@ -342,7 +342,7 @@ metrics:
 
 ### Why access logs are JSON
 
-The chart default is `common` (CLF), a plain text line. The [Traefik dashboard](../gitops/k8s-manifests/server3/grafana/ConfigMap.grafana.dashboard.traefik-opentelemetry.yaml) parses every log panel with `| json` and reads Traefik's field names (`OriginStatus`, `RequestMethod`, `RequestPath`, `ServiceAddr`), so under CLF all of them render empty while the metric panels look healthy. JSON also emits `"level":"info"`, which is what turns `detected_level` from `unknown` into a usable filter for the error-log panel.
+The chart default is `common` (CLF), a plain text line. The [Traefik dashboard](../gitops/k8s-manifests/server3/grafana/ConfigMap.grafana.dashboard.traefik.opentelemetry.yaml) parses every log panel with `| json` and reads Traefik's field names (`OriginStatus`, `RequestMethod`, `RequestPath`, `ServiceAddr`), so under CLF all of them render empty while the metric panels look healthy. JSON also emits `"level":"info"`, which is what turns `detected_level` from `unknown` into a usable filter for the error-log panel.
 
 Request headers are dropped wholesale by Traefik's default (`fields.headers.defaultmode: drop`); the three the dashboard reads are kept by name. Loki's `| json` rewrites `-` to `_`, so `request_X-Real-Ip` is queried as `request_X_Real_Ip`. The `Cf-*` pair only populates behind Cloudflare and is simply absent on the private network.
 

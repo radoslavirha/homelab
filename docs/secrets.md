@@ -16,13 +16,15 @@ Every stage in `docs/iac.md` and `gitops/README.md` that requires secrets links 
 | `secret/<cluster>/external-dns` | `api-key` | gateway stage | any |
 | `secret/server3/grafana` | `admin-user`, `admin-password` | observability stage | server3 |
 | `secret/server3/grafana-image-renderer` | `token` | *optional — image-renderer pods only* | server3 |
-| `secret/<cluster>/influxdb2` | `admin-password`, `admin-token` | iot stage | any |
-| `secret/<cluster>/emqx` | `dashboard-username`, `dashboard-password` | iot stage | any |
-| `secret/<cluster>/mongodb` | `root-password` | databases stage | any |
+| `secret/<cluster>/influxdb2` | `admin-password`, `admin-token` | iot stage | server1 |
+| `secret/<cluster>/emqx` | `dashboard-username`, `dashboard-password` | iot stage | server1 |
+| `secret/<cluster>/mongodb` | `root-password` | databases stage | server1 |
 | `secret/otel-gateway/auth-token` | `token` | observability stage | server1, server2 |
-| `secret/<cluster>/influxdb2-grafana` | `token` | *provisioned at runtime* | server1, server2 |
+| `secret/<cluster>/influxdb2-grafana` | `token` | *provisioned at runtime* | server1 |
 
-`<cluster>` is the short cluster name: `server2`, `server3`, etc.
+`<cluster>` is the short cluster name: `server1`, `server2`, `server3`. *any* means every cluster
+needs it; a named cluster means only that one does. The datastore paths were `any` until
+2026-09-13, when server2's IoT estate was removed and server1 became the only cluster running them.
 
 ---
 

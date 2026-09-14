@@ -35,7 +35,7 @@ Chart location: `gitops/helm-charts/provisioner/`
 Added as a 4th `sources` entry in each datastore ApplicationSet. Per-cluster values live at `gitops/helm-values/<cluster>/provisioner/<datastore>.yaml`. To add a new resource, add an entry to the values file — no new Job YAML needed.
 
 ```yaml
-# gitops/helm-values/server2/provisioner/influxdb2.yaml
+# gitops/helm-values/server1/provisioner/influxdb2.yaml
 influxdb2:
   jobs:
     my-new-app:              # → renders Job: influxdb2-provision-my-new-app
@@ -50,7 +50,7 @@ influxdb2:
             - my-bucket
           baoPath: my-app/influxdb2
           baoKey: token
-          baoCluster: server2          # optional: override target OpenBao path prefix (default: global.cluster)
+          baoCluster: server1          # optional: override target OpenBao path prefix (default: global.cluster)
                                        # use baoCluster: server3 when a credential is consumed by server3 ESO
 ```
 
@@ -97,9 +97,9 @@ Then **sync each datastore app explicitly** — a hook-only change never shows a
 Provisioner Jobs need a long-lived OpenBao token with write access to write credentials back after calling each datastore's API. This token is stored in OpenBao and synced into the `iot` namespace as a Secret by the `IotInfra` ApplicationSet — which runs at `sync-wave: -1` so it is available before InfluxDB2 and EMQX sync.
 
 ```
-gitops/k8s-manifests/server2/iot/ExternalSecret.provisioner-token.yaml
+gitops/k8s-manifests/server1/iot/ExternalSecret.provisioner-token.yaml
   → Secret: openbao-provision-token (namespace: iot)
-  → remoteRef: secret/server2/provisioner-token → token
+  → remoteRef: secret/server1/provisioner-token → token
 ```
 
 **One-time setup (per cluster):**
@@ -107,21 +107,21 @@ gitops/k8s-manifests/server2/iot/ExternalSecret.provisioner-token.yaml
 # `read` and `patch` are not optional: the Jobs call `bao kv get` to decide whether a
 # credential already exists before rotating it. A create/update-only token authenticates
 # fine and then fails partway through a run.
-bao policy write server2-provisioner - <<'EOF'
-path "secret/data/server2/*"     { capabilities = ["create", "read", "update", "patch"] }
-path "secret/metadata/server2/*" { capabilities = ["read", "list"] }
+bao policy write server1-provisioner - <<'EOF'
+path "secret/data/server1/*"     { capabilities = ["create", "read", "update", "patch"] }
+path "secret/metadata/server1/*" { capabilities = ["read", "list"] }
 EOF
 
 # -orphan is mandatory: a child token is revoked together with the login/root token that
 # created it, which takes down every provisioner Job at once. See Troubleshooting below.
 TOKEN=$(bao token create \
-  -policy=server2-provisioner \
+  -policy=server1-provisioner \
   -period=8760h \
   -orphan \
-  -display-name="server2-provisioner" \
+  -display-name="server1-provisioner" \
   -field=token)
 
-bao kv put secret/server2/provisioner-token token="${TOKEN}"
+bao kv put secret/server1/provisioner-token token="${TOKEN}"
 ```
 
 > **There is no cross-cluster write path, and there never was a working one.** Earlier revisions of this document granted `secret/data/server3/<cluster>-influxdb2-grafana` so the InfluxDB2 provisioner could write the Grafana datasource token into server3's tree. No provisioner token has ever been allowed to write there — each is scoped to `secret/data/<own cluster>/*` — so every run 403'd silently while Grafana kept working off a value seeded at bootstrap. The token is now written to the provisioner's **own** cluster tree as `influxdb2-grafana`, and server3's ESO reads it from there (`key: server1/influxdb2-grafana`). See [`gitops/helm-values/server1/provisioner/influxdb2.yaml`](../gitops/helm-values/server1/provisioner/influxdb2.yaml). Do not re-add the grant.
@@ -145,24 +145,24 @@ bao kv put secret/<cluster>/influxdb2 \
 
 ### Loxone buckets + task + Telegraf write token (PostSync Jobs)
 
-Declared in [`gitops/helm-values/server2/provisioner/influxdb2.yaml`](../gitops/helm-values/server2/provisioner/influxdb2.yaml), rendered by the provisioner chart.
+Declared in [`gitops/helm-values/server1/provisioner/influxdb2.yaml`](../gitops/helm-values/server1/provisioner/influxdb2.yaml), rendered by the provisioner chart.
 
 **Job `influxdb2-provision-loxone`** (wave 0):
 
 1. Ensures `loxone` bucket exists (14-day retention)
 2. Ensures `loxone_downsample` bucket exists (infinite retention)
 3. Ensures Flux task `Downsample Loxone` exists (10m aggregation loxone → loxone_downsample)
-4. Checks if token `server2-grafana-read` already exists in OpenBao at `secret/server2/influxdb2-grafana` → skip if yes
+4. Checks if token `server1-grafana-read` already exists in OpenBao at `secret/server1/influxdb2-grafana` → skip if yes
 5. Creates a read-only token scoped to `loxone` + `loxone_downsample` buckets (`readBuckets`)
-6. Writes `token` to OpenBao: `secret/server2/influxdb2-grafana` — this cluster's **own** tree
+6. Writes `token` to OpenBao: `secret/server1/influxdb2-grafana` — this cluster's **own** tree
 
-Note: this used to target `secret/server3/server2-influxdb2-grafana` via a `baoCluster: server3` override, which **no provisioner token has ever been allowed to write** — each is scoped to `secret/data/<own cluster>/*`. Every run 403'd silently while Grafana kept working off a value seeded at bootstrap. server3's ESO reads `key: server2/influxdb2-grafana` ([`ExternalSecret.server2.influxdb2.yaml`](../gitops/k8s-manifests/server3/grafana/ExternalSecret.server2.influxdb2.yaml)), so consuming it from the writer's own tree works identically. Do not reintroduce `baoCluster` here.
+Note: this used to target `secret/server3/server1-influxdb2-grafana` via a `baoCluster: server3` override, which **no provisioner token has ever been allowed to write** — each is scoped to `secret/data/<own cluster>/*`. Every run 403'd silently while Grafana kept working off a value seeded at bootstrap. server3's ESO reads `key: server1/influxdb2-grafana` ([`ExternalSecret.server1.influxdb2.yaml`](../gitops/k8s-manifests/server3/grafana/ExternalSecret.server1.influxdb2.yaml)), so consuming it from the writer's own tree works identically. Do not reintroduce `baoCluster` here.
 
 **Job `influxdb2-provision-telegraf`** (wave 1, after loxone):
 
 1. Checks if token with description `telegraf-write` already exists → skip if yes
 2. Creates a write-only token scoped to the `loxone` bucket
-3. Writes `token` to OpenBao: `secret/server2/telegraf-influxdb2`
+3. Writes `token` to OpenBao: `secret/server1/telegraf-influxdb2`
 
 Consumed by `ExternalSecret telegraf-influxdb2-credentials` in the `telegraf` namespace.
 
@@ -195,7 +195,7 @@ bao kv put secret/<cluster>/emqx \
 
 ### MQTT users (PostSync Jobs)
 
-Declared in [`gitops/helm-values/server2/provisioner/emqx.yaml`](../gitops/helm-values/server2/provisioner/emqx.yaml), rendered by the provisioner chart.
+Declared in [`gitops/helm-values/server1/provisioner/emqx.yaml`](../gitops/helm-values/server1/provisioner/emqx.yaml), rendered by the provisioner chart.
 
 Each job group:
 
@@ -204,7 +204,7 @@ Each job group:
 3. Generates a random 24-char password and creates (or rotates) the user
 4. Writes `username` + `password` to the service-owned OpenBao path
 
-`telegraf` job (idempotencyStrategy: `api-check`) → `secret/server2/telegraf-mqtt`
+`telegraf` job (idempotencyStrategy: `api-check`) → `secret/server1/telegraf-mqtt`
 Consumed by `ExternalSecret telegraf-mqtt-credentials` in the `telegraf` namespace.
 
 ### EMQX API reference
@@ -290,28 +290,28 @@ This is the cleanest solution for MongoDB: zero manual intervention after initia
 
 OpenBao KV layout:
 
-- `secret/server2/production/miot-bridge-api-emqx` → `mqtt-username`, `mqtt-password`
-- `secret/server2/sandbox/miot-bridge-api-emqx` → `mqtt-username`, `mqtt-password`
-- `secret/server2/production/miot-bridge-api-mongodb` → `mongodb-database`, `mongodb-username`, `mongodb-password`
-- `secret/server2/sandbox/miot-bridge-api-mongodb` → `mongodb-database`, `mongodb-username`, `mongodb-password`
+- `secret/server1/production/miot-bridge-api-emqx` → `mqtt-username`, `mqtt-password`
+- `secret/server1/sandbox/miot-bridge-api-emqx` → `mqtt-username`, `mqtt-password`
+- `secret/server1/production/miot-bridge-api-mongodb` → `mongodb-database`, `mongodb-username`, `mongodb-password`
+- `secret/server1/sandbox/miot-bridge-api-mongodb` → `mongodb-database`, `mongodb-username`, `mongodb-password`
 
 ### EMQX MQTT user (PostSync Job)
 
-Declared in [`gitops/helm-values/server2/provisioner/emqx.yaml`](../gitops/helm-values/server2/provisioner/emqx.yaml) under `emqx.jobs.miot-bridge-production` and `emqx.jobs.miot-bridge-sandbox`. Runs in `iot` namespace (where `openbao-provision-token` and `emqx-credentials` already exist):
+Declared in [`gitops/helm-values/server1/provisioner/emqx.yaml`](../gitops/helm-values/server1/provisioner/emqx.yaml) under `emqx.jobs.miot-bridge-production` and `emqx.jobs.miot-bridge-sandbox`. Runs in `iot` namespace (where `openbao-provision-token` and `emqx-credentials` already exist):
 
-1. Checks if `mqtt-username` already exists in `secret/server2/{env}/miot-bridge-api-emqx` → skip if yes (idempotencyStrategy: `bao-check`)
+1. Checks if `mqtt-username` already exists in `secret/server1/{env}/miot-bridge-api-emqx` → skip if yes (idempotencyStrategy: `bao-check`)
 2. Generates a random 24-char password and creates (or rotates) MQTT user `miot-bridge-{env}`
-3. Writes `mqtt-username` + `mqtt-password` to OpenBao at `secret/server2/{env}/miot-bridge-api-emqx`
+3. Writes `mqtt-username` + `mqtt-password` to OpenBao at `secret/server1/{env}/miot-bridge-api-emqx`
 
 ### MongoDB database + user (PostSync Job)
 
-Declared in [`gitops/helm-values/server2/provisioner/mongodb.yaml`](../gitops/helm-values/server2/provisioner/mongodb.yaml) under `mongodb.jobs.miot-bridge-production` and `mongodb.jobs.miot-bridge-sandbox`. Runs in `mongodb` namespace (where `mongodb` root password secret exists):
+Declared in [`gitops/helm-values/server1/provisioner/mongodb.yaml`](../gitops/helm-values/server1/provisioner/mongodb.yaml) under `mongodb.jobs.miot-bridge-production` and `mongodb.jobs.miot-bridge-sandbox`. Runs in `mongodb` namespace (where `mongodb` root password secret exists):
 
-1. Checks if `mongodb-password` already exists in `secret/server2/{env}/miot-bridge-api-mongodb` → skip if yes
+1. Checks if `mongodb-password` already exists in `secret/server1/{env}/miot-bridge-api-mongodb` → skip if yes
 2. Generates a random 24-char password, creates (or rotates) MongoDB user `miot-bridge-{env}` in database `miot-bridge-{env}`
-3. Writes `mongodb-database` + `mongodb-username` + `mongodb-password` to OpenBao at `secret/server2/{env}/miot-bridge-api-mongodb`
+3. Writes `mongodb-database` + `mongodb-username` + `mongodb-password` to OpenBao at `secret/server1/{env}/miot-bridge-api-mongodb`
 
-> **Note:** The provisioner token `openbao-provision-token` must exist in both `iot` and `mongodb` namespaces. The `iot` copy is deployed by `IotInfra`. The `mongodb` copy is deployed by the MongoDB ApplicationSet via [`gitops/k8s-manifests/server2/mongodb/ExternalSecret.provisioner-token.yaml`](../gitops/k8s-manifests/server2/mongodb/ExternalSecret.provisioner-token.yaml).
+> **Note:** The provisioner token `openbao-provision-token` must exist in both `iot` and `mongodb` namespaces. The `iot` copy is deployed by `IotInfra`. The `mongodb` copy is deployed by the MongoDB ApplicationSet via [`gitops/k8s-manifests/server1/mongodb/ExternalSecret.provisioner-token.yaml`](../gitops/k8s-manifests/server1/mongodb/ExternalSecret.provisioner-token.yaml).
 
 ### No manual seeding required
 
@@ -325,16 +325,16 @@ Unlike InfluxDB2/EMQX/MongoDB root credentials, `miot-bridge-api` credentials ar
 
 OpenBao KV layout:
 
-- `secret/server2/production/qr-manager-api-mongodb` → `mongodb-database`, `mongodb-username`, `mongodb-password`
-- `secret/server2/sandbox/qr-manager-api-mongodb` → `mongodb-database`, `mongodb-username`, `mongodb-password`
+- `secret/server1/production/qr-manager-api-mongodb` → `mongodb-database`, `mongodb-username`, `mongodb-password`
+- `secret/server1/sandbox/qr-manager-api-mongodb` → `mongodb-database`, `mongodb-username`, `mongodb-password`
 
 ### MongoDB database + user (PostSync Job)
 
-Declared in [`gitops/helm-values/server2/provisioner/mongodb.yaml`](../gitops/helm-values/server2/provisioner/mongodb.yaml) under `mongodb.jobs.qr-manager-production` and `mongodb.jobs.qr-manager-sandbox`. Runs in `mongodb` namespace:
+Declared in [`gitops/helm-values/server1/provisioner/mongodb.yaml`](../gitops/helm-values/server1/provisioner/mongodb.yaml) under `mongodb.jobs.qr-manager-production` and `mongodb.jobs.qr-manager-sandbox`. Runs in `mongodb` namespace:
 
-1. Checks if `mongodb-password` already exists in `secret/server2/{env}/qr-manager-api-mongodb` → skip if yes
+1. Checks if `mongodb-password` already exists in `secret/server1/{env}/qr-manager-api-mongodb` → skip if yes
 2. Generates a random 24-char password, creates (or rotates) MongoDB user `qr-manager-{env}` in database `qr-manager-{env}`
-3. Writes `mongodb-database` + `mongodb-username` + `mongodb-password` to OpenBao at `secret/server2/{env}/qr-manager-api-mongodb`
+3. Writes `mongodb-database` + `mongodb-username` + `mongodb-password` to OpenBao at `secret/server1/{env}/qr-manager-api-mongodb`
 
 ### No manual seeding required
 
