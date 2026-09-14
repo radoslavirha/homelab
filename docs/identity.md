@@ -148,6 +148,8 @@ grant. "Remove their access" means removing the *lowest* membership they hold, n
 | `interactive-map-feeder` | none — reads of public CHMU data | admin → editor → reader | server1 × sandbox · production, + local |
 | `homelab-dashboard` | `dashboard.server3.homelab.irha.cz` | admin → editor → reader | server3 production, + local |
 | `argocd` | `argocd.server3.homelab.irha.cz` | admin → editor → reader | server3 production |
+| `grafana` | `grafana.irha.cz` | admin → editor → reader | server3 production |
+| `openbao` | `vault.server3.homelab.irha.cz` — **confidential**, see [OpenBao](#openbao) | admin → editor → reader | server3 production |
 | `postman` | none — a client, not an API | `user` (the access gate only) | one client, every environment |
 | `interactive-map` | none — an ESP32, `kind: device` | none of its own; holds `interactive-map-feeder.reader` | one client: server1 production + local |
 
@@ -158,7 +160,7 @@ grant. "Remove their access" means removing the *lowest* membership they hold, n
 | | `api` (default) | `client` | `device` |
 |---|---|---|---|
 | Who drives it | a human's browser | a human | a machine |
-| Authentik `client_type` | public | public | **confidential** |
+| Authentik `client_type` | public — or confidential with `confidential: true` | public | **confidential** |
 | Grants | code + refresh | code | **client_credentials** |
 | Redirect URIs | derived from the host | `redirectUris` | **none** |
 | Roles claim from | its own groups | the human's groups at the target | **the role named in `accesses`** |
@@ -373,6 +375,105 @@ The gate group `postman-user` is the only membership Postman itself needs. It gr
 access: what the token can *do* still comes from the target applications' own role groups. It is the
 switch that revokes Postman in one environment without touching anyone's application roles, and the
 only revocation faster than token expiry.
+
+## OpenBao
+
+The OpenBao UI logs in through Authentik via OpenBao's own `oidc` auth method. The Authentik side is the
+`openbao` entry in the matrix; the OpenBao side is **not in git** — like every other OpenBao auth method
+here ([docs/iac.md](iac.md) step 3), it is configured by hand with `bao`.
+
+**Why confidential.** OpenBao's jwt/oidc method refuses an `oidc_client_id` without an
+`oidc_client_secret` and has no PKCE-only mode, so this is the one `api` entry with `confidential: true`.
+The secret Authentik generates goes straight into `auth/oidc/config` — not into KV, no ExternalSecret.
+
+**The fallback stays.** Authentik's own secrets come from OpenBao, so OpenBao must never *need* Authentik
+to be administered. Keep `userpass` and the root token working; this adds a login, it replaces none.
+
+| Claim | OpenBao external group | Policy | Grants |
+|-------|------------------------|--------|--------|
+| `openbao.admin` | `openbao.admin` | `oidc-admin` | everything — `sys/`, `auth/`, policies, KV |
+| `openbao.editor` | `openbao.editor` | `oidc-editor` | KV v2 read/write/delete under `secret/` |
+| `openbao.reader` | `openbao.reader` | `oidc-reader` | KV v2 read under `secret/` |
+
+The ladder does the rest: an `openbao-server3-production-admin` member's token carries all three claims,
+so OpenBao attaches all three policies.
+
+**Only the UI callback is registered.** The CLI's `http://localhost:8250/oidc/callback` is not — a
+loopback URI on a production client is what `local` environments exist to avoid. For the CLI, log in on
+the UI, *Copy token* from the user menu, then `bao login <token>`.
+
+### Setting it up
+
+Once, after the blueprint has landed (the `openbao-server3-production` provider exists in Authentik):
+
+```bash
+# Admin session — userpass or root, NOT oidc (it does not exist yet)
+kubectl --context admin@server3 -n openbao port-forward svc/openbao 8200:8200
+export BAO_ADDR=http://127.0.0.1:8200
+bao login -method=userpass username=<admin>
+
+# Client secret: Authentik UI → Applications → Providers → openbao-server3-production → Edit
+read -rs OIDC_SECRET
+
+bao auth enable oidc
+bao auth tune -listing-visibility=unauth oidc     # shows "OIDC" on the login page
+
+bao write auth/oidc/config \
+  oidc_discovery_url="https://auth.irha.cz/application/o/openbao-server3-production/" \
+  oidc_client_id="openbao-server3-production" \
+  oidc_client_secret="$OIDC_SECRET" \
+  default_role="authentik"
+unset OIDC_SECRET
+
+# `openid` is added by OpenBao itself. `roles` is NOT implied by `profile` — omit it and every
+# login succeeds with no group, i.e. with only the `default` policy.
+bao write auth/oidc/role/authentik \
+  role_type=oidc \
+  user_claim=sub \
+  groups_claim=roles \
+  oidc_scopes="profile,email,roles" \
+  bound_audiences="openbao-server3-production" \
+  allowed_redirect_uris="https://vault.server3.homelab.irha.cz/ui/vault/auth/oidc/oidc/callback" \
+  token_policies=default \
+  token_ttl=1h \
+  token_max_ttl=8h
+
+bao policy write oidc-admin - <<'EOF'
+path "*" { capabilities = ["create", "read", "update", "patch", "delete", "list", "sudo"] }
+EOF
+
+bao policy write oidc-editor - <<'EOF'
+path "secret/data/*"     { capabilities = ["create", "read", "update", "patch", "delete"] }
+path "secret/metadata/*" { capabilities = ["read", "list", "delete"] }
+path "secret/delete/*"   { capabilities = ["update"] }
+path "secret/undelete/*" { capabilities = ["update"] }
+EOF
+
+bao policy write oidc-reader - <<'EOF'
+path "secret/data/*"     { capabilities = ["read"] }
+path "secret/metadata/*" { capabilities = ["read", "list"] }
+EOF
+
+# External groups: an alias whose name equals a `roles` claim value puts the user in that group.
+ACCESSOR=$(bao auth list -format=json | jq -r '."oidc/".accessor')
+for role in admin editor reader; do
+  bao write identity/group/name/openbao.$role type=external policies=oidc-$role
+  bao write identity/group-alias \
+    name=openbao.$role \
+    mount_accessor="$ACCESSOR" \
+    canonical_id="$(bao read -field=id identity/group/name/openbao.$role)"
+done
+```
+
+Then add yourself to `openbao-server3-production-admin` in Authentik.
+
+**Verify:** open `https://vault.server3.homelab.irha.cz/ui/`, method *OIDC*, role empty, *Sign in with
+OIDC Provider*. Then *Copy token* and run `bao token lookup` with it: `identity_policies` must list
+`oidc-admin`, `oidc-editor`, `oidc-reader`. Only `default` means the `roles` claim did not arrive — check
+`oidc_scopes` first, then group membership.
+
+**Rotating the secret** is Authentik *Regenerate* followed by the `auth/oidc/config` write above. Both
+halves at once: between them, every OIDC login fails.
 
 ## Adding an application
 

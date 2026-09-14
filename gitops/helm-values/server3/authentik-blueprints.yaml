@@ -215,6 +215,42 @@ applications:
     environments:
       - { cluster: server3, stage: production }
 
+  - name: openbao
+    title: OpenBao
+    # Explicit host, same reasoning as argocd: server3 is the control cluster and does not
+    # follow the apps.<cluster> convention. LAN-only (the exposure spec's LAN-only list).
+    # No `local` environment -- nobody runs a local OpenBao against this IdP.
+    host: vault.server3.homelab.irha.cz
+    # The UI's callback for an auth method mounted at path `oidc`:
+    # /ui/vault/auth/<mount>/oidc/callback. Mount it anywhere else and this moves with it.
+    #
+    # The CLI's loopback callback (http://localhost:8250/oidc/callback) is deliberately NOT
+    # registered: an api-kind entry carries one redirect, and a loopback URI on a
+    # production client is exactly what `local` environments exist to avoid. For the CLI,
+    # log in on the UI, copy the token from the user menu, `bao login <token>`.
+    redirectPath: /ui/vault/auth/oidc/oidc/callback
+    # Confidential, unlike argocd and grafana. OpenBao's jwt/oidc auth method refuses an
+    # oidc_client_id without an oidc_client_secret ("both 'oidc_client_id' and
+    # 'oidc_client_secret' must be set for OIDC") and has no PKCE-only mode.
+    #
+    # The generated secret goes from the Authentik provider page straight into
+    # auth/oidc/config -- not into KV, so there is no ExternalSecret. OpenBao is the only
+    # consumer and already stores it encrypted. Runbook: docs/identity.md, "OpenBao".
+    confidential: true
+    # Each rung becomes an OpenBao external group named after the claim (openbao.admin ->
+    # policy oidc-admin, ...): admin is everything including sys/, auth/ and policies,
+    # editor is KV read/write under secret/, reader is KV read. userpass and the root token
+    # stay as the fallback -- Authentik's own secrets come FROM OpenBao, so OpenBao must
+    # never need Authentik to be administered.
+    roles:
+      - name: admin
+        inherits: editor
+      - name: editor
+        inherits: reader
+      - name: reader
+    environments:
+      - { cluster: server3, stage: production }
+
   - name: homelab-dashboard
     title: Homelab Dashboard
     # Explicit host: server3 is the control cluster and does not follow the

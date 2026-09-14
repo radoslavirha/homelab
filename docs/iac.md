@@ -139,6 +139,8 @@ path "*" { capabilities = ["create", "read", "update", "delete", "list", "sudo"]
 EOF
 bao write auth/userpass/users/<username> password=<password> policies=admin
 # Later: bao login -method=userpass username=<username>
+# Keep this even after OIDC: Authentik's secrets come from OpenBao, so OpenBao must stay
+# administrable without Authentik. OIDC login via Authentik: docs/identity.md → "OpenBao".
 
 # Apply ArgoCD (Terraform reads admin hash from OpenBao via vault provider):
 export VAULT_ADDR=http://127.0.0.1:8200
