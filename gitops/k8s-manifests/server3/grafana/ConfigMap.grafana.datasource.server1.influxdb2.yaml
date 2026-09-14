@@ -11,6 +11,27 @@ metadata:
 data:
   datasource-influxdb2.yaml: |-
     apiVersion: 1
+
+    # Removes the orphaned server2 datasource. server2's InfluxDB2 was removed on
+    # 2026-09-13 and this ConfigMap's server2 sibling went with it -- but Grafana does NOT
+    # delete a provisioned datasource when its provisioning file disappears, so
+    # "InfluxDB2 Server2" survived in Grafana's database, read-only (so the UI and the API
+    # both refuse to delete it) and pointing at a host that no longer answers.
+    #
+    # deleteDatasources runs before the datasources list below, and deleting one that is
+    # already gone is a no-op -- so this is safe to leave in place, and safe to drop once
+    # you have confirmed `GET /api/datasources` no longer lists it.
+    #
+    # The general fix is `prune: true` at the root of this file, which makes Grafana delete
+    # any provisioned datasource no longer present in a provisioning file. Do NOT add it
+    # while the datasource sidecar runs as a plain container: it has no init container
+    # (sidecar.datasources.initDatasources is unset, chart default false), so Grafana can
+    # start before any datasource file is on disk and would prune all four. Setting
+    # initDatasources: true first would make prune safe.
+    deleteDatasources:
+      - name: InfluxDB2 Server2
+        orgId: 1
+
     datasources:
       - name: InfluxDB2 server1
         type: influxdb
