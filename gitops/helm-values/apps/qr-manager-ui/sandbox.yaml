@@ -6,7 +6,7 @@
 apps:
   qr-manager-ui:
     image:
-      tag: "0.13.0"
+      tag: "0.13.1"
     templates:
       config:
         # The auth block is templated, not spelled out. The ApplicationSet is a
