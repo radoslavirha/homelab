@@ -1,6 +1,39 @@
 # Grafana — server3 cluster overrides
 # Shared base values: gitops/helm-values/grafana.yaml
 
+# Authentik SSO. Public client + PKCE (no clientSecret) — same shape as ArgoCD's
+# oidc.config in server3/argocd.yaml. Grafana's own backend does the code exchange, but
+# its shipped defaults.ini ships client_secret empty and grafana/grafana's own bundled
+# devenv docs run this exact shape against Authentik, so no confidential client is
+# needed here (unlike Headlamp — see docs/identity.md).
+#
+# client_id is the rendered slug: <app>-<cluster>-<stage>, no `local` environment
+# exists for this application (see gitops/helm-values/server3/authentik-blueprints.yaml).
+#
+# admin/password login (grafana-admin ExternalSecret, see admin: below) is kept on as a
+# fallback: if Authentik or the network path to it is down, admin still gets in.
+grafana.ini:
+  auth.generic_oauth:
+    name: Authentik
+    enabled: true
+    client_id: grafana-server3-production
+    # Deliberately absent. Authentik's client_type for this provider is `public` — no
+    # secret exists to set. Grafana's own default for this key is also empty, so an
+    # absent key here and an explicit empty one render identically.
+    scopes: openid profile email roles
+    auth_url: https://auth.irha.cz/application/o/authorize/
+    token_url: https://auth.irha.cz/application/o/token/
+    api_url: https://auth.irha.cz/application/o/userinfo/
+    use_pkce: true
+    # roles claim is already filtered to this application and already flattened by the
+    # role ladder (docs/identity.md): ["grafana.admin"] or ["grafana.admin",
+    # "grafana.editor", "grafana.reader"] for an admin, down to ["grafana.reader"] for a
+    # reader. JMESPath, evaluated top-to-bottom against the /userinfo response.
+    role_attribute_path: "contains(roles[*], 'grafana.admin') && 'Admin' || contains(roles[*], 'grafana.editor') && 'Editor' || 'Viewer'"
+    # RP-initiated logout: ends the Authentik-side session for this application (not
+    # every application — see invalidation_flow in the blueprint chart) and returns here.
+    signout_redirect_url: https://auth.irha.cz/application/o/grafana-server3-production/end-session/
+
 extraSecretMounts:
   - name: server1-influxdb2-grafana
     secretName: server1-influxdb2-grafana

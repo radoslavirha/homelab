@@ -124,7 +124,7 @@ data:
     ---------- `kind`: what sort of client this is ----------
 
     Three kinds, and `kind` is OURS -- it is not Authentik's `client_type`, which stays
-    public/confidential and is DERIVED from this.
+    public/confidential and is DERIVED from this (plus `confidential`, below).
 
       api     (default)  Serves a host. A human's browser logs in. Public + PKCE.
       client             A human drives it, and it calls other applications' APIs
@@ -132,6 +132,23 @@ data:
       device             A machine. No browser, no human. Confidential +
                          client_credentials, `accesses` carrying an explicit role,
                          a blueprint-declared service account, no redirect URIs.
+
+    `confidential: true` on a kind: api entry -- a human still logs in via redirect, but
+    the app's OWN backend does the code exchange and can hold a secret server-side, unlike
+    a browser SPA, which cannot keep one at all (Grafana's `auth.generic_oauth`, Headlamp's
+    `config.oidc` -- both run the exchange in their own backend and both ship examples that
+    set a secret). `client_type` becomes confidential and grant stays authorization_code --
+    everything else about an api-kind entry (one Application per environment, host
+    derivation, roles, redirect_uris) is unchanged.
+
+    Like a device, `client_secret` is deliberately NOT set here: Authentik generates one
+    when it creates the provider, and a blueprint leaves a field it does not mention
+    exactly as it found it, so the value survives every re-apply. UNLIKE a device, this
+    secret does not go to a human to hand-copy into firmware once -- it belongs in a
+    long-running Deployment, so read it once from the provider page in the Authentik UI
+    and wire it OpenBao -> ExternalSecret -> that app's own env/volume, in that app's own
+    gitops files. Only kind: api may set it -- client is deliberately always public (see
+    postman's reasoning below), and device is already confidential by definition.
 
     A device, like a client, declares several environments and gets ONE client whose
     audience covers all of them -- one client_id, one secret to flash, one service account
@@ -195,6 +212,9 @@ data:
       {{- $kind := default "api" $a.kind }}
       {{- if not (has $kind (list "api" "client" "device")) }}
         {{- fail (printf "application %q has kind %q: must be one of api, client, device" $a.name $kind) }}
+      {{- end }}
+      {{- if and $a.confidential (ne $kind "api") }}
+        {{- fail (printf "application %q sets `confidential: true` but is kind %q: only kind api can be confidential -- client is deliberately always public (see its own reasoning in values), and device is already confidential by definition" $a.name $kind) }}
       {{- end }}
       {{- if eq $kind "api" }}
         {{- if $a.accesses }}
@@ -288,6 +308,7 @@ data:
       {{- $kind := default "api" $app.kind }}
       {{- $isDevice := eq $kind "device" }}
       {{- $isBroad := ne $kind "api" }}
+      {{- $isConfidential := or $isDevice $app.confidential }}
       {{- if and (not $app.roles) (not $isDevice) }}
         {{- fail (printf "application %q has no roles: it would render an Application with no policy binding, which is open to every user" $app.name) }}
       {{- end }}
@@ -651,6 +672,20 @@ data:
           #
           # What that costs: rebuild Authentik WITHOUT its database and every device gets
           # a new secret and must be reflashed.
+          client_type: confidential
+        {{- else if $app.confidential }}
+          # A human still logs in via redirect, but THIS app's own backend does the code
+          # exchange and can hold a secret server-side -- unlike a browser SPA, which
+          # cannot keep one at all. Confidential lets Authentik authenticate the client
+          # itself instead of relying on PKCE alone.
+          #
+          # `client_secret` is deliberately NOT set here -- same trick as a device:
+          # Authentik generates one when it creates the provider, and a blueprint leaves
+          # a field it does not mention exactly as it found it, so the value survives
+          # every re-apply. UNLIKE a device, this secret does not go to a human to
+          # hand-copy into firmware once -- it belongs in a long-running Deployment. Read
+          # it once from the provider page in the UI and wire it OpenBao -> ExternalSecret
+          # -> env/volume in that app's OWN gitops files, not here.
           client_type: confidential
         {{- else }}
           # SPA: public client, PKCE, no secret to store or rotate.

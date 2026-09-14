@@ -191,6 +191,30 @@ applications:
     environments:
       - { cluster: server3, stage: production }
 
+  - name: grafana
+    title: Grafana
+    # Explicit host: grafana is apex tier (the exposure spec's Public list), so
+    # grafana.irha.cz -- not grafana.server3.homelab.irha.cz, same reasoning as the
+    # HTTPRoute. No `local` environment -- nobody runs a local Grafana instance.
+    host: grafana.irha.cz
+    # Grafana's OAuth callback is fixed at /login/generic_oauth. logoutPath stays the
+    # default (/) -- Grafana's own signout_redirect_url (set on the Grafana side, not
+    # here) is what drives RP-initiated logout; this is only the ordinary post-logout
+    # landing page.
+    redirectPath: /login/generic_oauth
+    # Public + PKCE, same as every other api-kind entry: Grafana's own backend does the
+    # code exchange, but its own shipped defaults.ini ships client_secret empty and its
+    # bundled devenv docs run this exact shape against Authentik -- no `confidential`
+    # needed here, unlike Headlamp.
+    roles:
+      - name: admin
+        inherits: editor
+      - name: editor
+        inherits: reader
+      - name: reader
+    environments:
+      - { cluster: server3, stage: production }
+
   - name: homelab-dashboard
     title: Homelab Dashboard
     # Explicit host: server3 is the control cluster and does not follow the
