@@ -110,7 +110,7 @@ challenges by writing `_acme-challenge.<name>` TXT records into the **`irha.cz` 
 Cloudflare**. Without this token no certificate is ever issued and every `Certificate` sits
 `Pending`.
 
-Design and rationale: [`docs/architecture.md` → Hostnames and TLS](architecture.md#hostnames-and-tls). The DNSSEC failure this zone hit once is written up in [the postmortem](postmortems/2026-09-02-irha-cz-dnssec-servfail.md).
+Design and rationale: [`docs/architecture.md` → Hostnames and TLS](architecture.md#hostnames-and-tls). The zone was DNSSEC-broken once (2026-09-02): the registrar's DS record still matched the pre-Cloudflare key, so every validating resolver returned `SERVFAIL`. If public resolution fails again, compare `dig DS irha.cz` against `dig DNSKEY irha.cz` first.
 
 ### Create the token (Cloudflare dashboard — manual, outside this repo)
 

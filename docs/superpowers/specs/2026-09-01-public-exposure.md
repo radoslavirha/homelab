@@ -48,7 +48,7 @@ instantly, at every depth. It is an argument for dropping the wildcard now rathe
 The zone briefly looked safer than this: until 2026-09-02 a stale DS at the registrar made every
 validating resolver `SERVFAIL` the whole zone. That was a fault, not a control, and it had to be
 repaired before any certificate could issue — see the
-[DNSSEC postmortem](../../postmortems/2026-09-02-irha-cz-dnssec-servfail.md), since fixed.
+DNSSEC DS/DNSKEY mismatch at the registrar, since fixed.
 It is fixed. The wildcard is live.
 
 **The wildcard matches at any depth.** A wildcard in a *zone* is not the single-label wildcard
