@@ -4,6 +4,13 @@
 name: Validate Renovate config
 
 on:
+  # push as well as pull_request: changes land on main directly, not through PRs, so a
+  # pull_request-only trigger meant this job had never run once (found 2026-09-14).
+  push:
+    branches: [main]
+    paths:
+      - "renovate.json5"
+      - ".github/workflows/renovate*.yaml"
   pull_request:
     paths:
       - "renovate.json5"
