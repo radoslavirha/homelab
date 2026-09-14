@@ -13,6 +13,20 @@
 # admin/password login (grafana-admin ExternalSecret, see admin: below) is kept on as a
 # fallback: if Authentik or the network path to it is down, admin still gets in.
 grafana.ini:
+  # Chart's default `server.domain`/`root_url` templating derives from `ingress.hosts[0]`
+  # -- this repo uses `httpRoute`, not `ingress`, so that default came up empty
+  # (`domain = ''`, no root_url at all) and Grafana fell back to its built-in template
+  # (http://<empty>:3000/...) for every absolute URL it constructs, OAuth redirect_uri
+  # included. Authentik's registered redirect_uri is a STRICT match against
+  # https://grafana.irha.cz/login/generic_oauth, so the wrong one Grafana was sending
+  # got the "Redirect URI Error" banner. Pre-existing gap -- nothing used an absolute
+  # URL before OAuth needed one.
+  server:
+    domain: grafana.irha.cz
+    # root_url, not just domain: Grafana's own domain-derived default still guesses
+    # http:// and appends :3000 (the pod's own listen port), both wrong behind Traefik's
+    # TLS-terminated :443. Setting root_url directly is what fixes the redirect_uri.
+    root_url: https://grafana.irha.cz/
   auth.generic_oauth:
     name: Authentik
     enabled: true
