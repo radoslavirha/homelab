@@ -1,3 +1,0 @@
-# server2 cluster VARs — sandbox namespace
-# Shared across all apps deployed to the sandbox namespace on server2.
-VAR_SUBDOMAIN: sandbox

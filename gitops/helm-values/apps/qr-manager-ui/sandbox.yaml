@@ -10,8 +10,8 @@ apps:
     templates:
       config:
         # The auth block is templated, not spelled out. The ApplicationSet is a
-        # cluster x env matrix and this file is shared by server1 and server2, so a
-        # literal client_id here would hand server2 server1's Authentik application
+        # cluster x env matrix and this file is shared by every cluster in it, so a
+        # literal client_id here would hand a second cluster server1's Authentik application
         # and a redirect URI for a host it is not served on — a Redirect URI Error at
         # /authorize, on the cluster nobody was looking at.
         #
@@ -22,10 +22,9 @@ apps:
         # cannot drift from the host the app is actually served on. apiBaseURL directly
         # above already works this way.
         #
-        # NAMESPACE is the release namespace, which is the stage. VAR_CLUSTER lives in
-        # gitops/helm-values/<cluster>/apps/common/values.yaml. Renders to:
+        # NAMESPACE is the release namespace, which is the stage. VAR_CLUSTER is set by
+        # the ApplicationSet generator (helm.parameters). Renders to:
         #   qr-manager-server1-sandbox @ apps.sandbox.server1.homelab.irha.cz
-        #   qr-manager-server2-sandbox @ apps.sandbox.server2.homelab.irha.cz
         content: |
           {
               "apiBaseURL": "{{ VAR_PROTOCOL }}://api.{{ VAR_SUBDOMAIN }}.{{ VAR_PUBLIC_DOMAIN }}/iot/qr-manager",

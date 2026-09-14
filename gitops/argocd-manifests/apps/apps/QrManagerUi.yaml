@@ -16,8 +16,12 @@ spec:
                   clusterServer: https://192.168.1.200:6443
           - list:
               elements:
+                # subdomain feeds VAR_SUBDOMAIN below. Empty for production on purpose: the
+                # chart skips an empty VAR_, so production renders exactly as if it were unset.
                 - env: production
+                  subdomain: ""
                 - env: sandbox
+                  subdomain: sandbox
   template:
     metadata:
       name: qr-manager-ui-{{cluster}}-{{env}}
@@ -33,9 +37,21 @@ spec:
               - $values/gitops/helm-values/apps/qr-manager-ui/base.yaml
               - $values/gitops/helm-values/apps/qr-manager-ui/{{env}}.yaml
               - $values/gitops/helm-values/apps/common/values.yaml
-              - $values/gitops/helm-values/apps/common/{{env}}.yaml
-              - $values/gitops/helm-values/{{cluster}}/apps/common/values.yaml
-              - $values/gitops/helm-values/{{cluster}}/apps/common/{{env}}.yaml
+            # The VAR_ that differ per cluster or per stage come from the generator, not from
+            # values files: they are all derivable from {{cluster}} and {{env}}, so adding a
+            # cluster needs a generator element and no new files. Parameters override every
+            # valueFile; nothing else sets these keys. Until 2026-09-14 they lived in four
+            # per-cluster/per-env files, three of which held nothing but a comment.
+            parameters:
+              - name: VAR_CLUSTER
+                value: '{{cluster}}'
+                forceString: true
+              - name: VAR_PUBLIC_DOMAIN
+                value: '{{cluster}}.homelab.irha.cz'
+                forceString: true
+              - name: VAR_SUBDOMAIN
+                value: '{{subdomain}}'
+                forceString: true
         - repoURL: https://github.com/radoslavirha/homelab
           targetRevision: HEAD
           ref: values

@@ -74,7 +74,10 @@ spec:
             - name: JINJA_DEST_FILE
               value: "/config/{{ $template.file }}"
             {{- range $key, $value := $.Values | default dict }}
-            {{- if hasPrefix "VAR_" $key }}
+            {{- /* An empty VAR_ is the same as an absent one: the subdomain helper already treats it so,
+                   and emitting it would change the pod template (and restart the pods) for no effect.
+                   Lets the ApplicationSet pass VAR_SUBDOMAIN="" for production. */}}
+            {{- if and (hasPrefix "VAR_" $key) (ne (toString $value) "") }}
             - name: JINJA_VAR_{{ $key }}
               value: {{ $value | quote }}
             {{- end }}

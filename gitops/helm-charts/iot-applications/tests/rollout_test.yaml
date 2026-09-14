@@ -212,3 +212,31 @@ tests:
     asserts:
       - notExists:
           path: spec.template.spec.volumes
+
+  # An empty VAR_ must not become an env var: the apps ApplicationSets pass VAR_SUBDOMAIN=""
+  # for production, and emitting it would change the pod template and restart every
+  # production pod for no effect. A non-empty VAR_ must still come through.
+  - it: should skip empty VAR_ values and keep non-empty ones in the jinja2 initContainer
+    set:
+      apps.my-app.image.repository: ghcr.io/example/my-app
+      apps.my-app.labels.component: api
+      apps.my-app.labels.partOf: iot
+      apps.my-app.ingress.enabled: false
+      apps.my-app.rollout.enabled: true
+      apps.my-app.rollout.strategy: canary
+      apps.my-app.templates.config.file: config.json
+      apps.my-app.templates.config.path: /app/config
+      apps.my-app.templates.config.content: '{"key":"value"}'
+      VAR_KEEP: kept
+      VAR_EMPTY: ""
+    asserts:
+      - contains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: JINJA_VAR_VAR_KEEP
+            value: kept
+      - notContains:
+          path: spec.template.spec.initContainers[0].env
+          content:
+            name: JINJA_VAR_VAR_EMPTY
+            value: ""

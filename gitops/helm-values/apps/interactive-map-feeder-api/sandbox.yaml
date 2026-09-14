@@ -1,5 +1,5 @@
 # interactive-map-feeder-api — sandbox overrides
-# Cluster-specific VAR_* (VAR_PUBLIC_DOMAIN, VAR_SUBDOMAIN, VAR_PROTOCOL) are in server2/apps/common/sandbox.yaml
+# VAR_CLUSTER, VAR_PUBLIC_DOMAIN and VAR_SUBDOMAIN come from the ApplicationSet generator; shared VAR_* are in apps/common/values.yaml
 #
 # Probes, lifecycle and strategy live in base.yaml — they were staged here first and
 # promoted once a sandbox rollout had been watched.

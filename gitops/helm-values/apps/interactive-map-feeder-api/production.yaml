@@ -1,5 +1,5 @@
 # interactive-map-feeder-api — production overrides
-# Cluster-specific VAR_* (VAR_PUBLIC_DOMAIN, VAR_PROTOCOL) are in server2/apps/interactive-map-feeder-api/production.yaml
+# VAR_CLUSTER, VAR_PUBLIC_DOMAIN and VAR_SUBDOMAIN come from the ApplicationSet generator; shared VAR_* are in apps/common/values.yaml
 
 apps:
   interactive-map-feeder-api:

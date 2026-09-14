@@ -1,5 +1,5 @@
 # miot-bridge-api — production overrides
-# Cluster-specific VAR_* (VAR_PUBLIC_DOMAIN, VAR_MQTT_URL, etc.) are in server2/apps/miot-bridge-api/production.yaml
+# VAR_CLUSTER, VAR_PUBLIC_DOMAIN and VAR_SUBDOMAIN come from the ApplicationSet generator; shared VAR_* are in apps/common/values.yaml
 
 apps:
   miot-bridge-api:

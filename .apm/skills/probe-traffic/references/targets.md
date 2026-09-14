@@ -56,14 +56,14 @@ dependencies directly. Do not try to drive them through the HTTP API.
 From `gitops/helm-charts/iot-applications/templates/httproute.yaml`:
 
 ```
-http://[<VAR_SUBDOMAIN>.]<component>.<VAR_PUBLIC_DOMAIN>/<pathName>/<app path>
+https://<component>.[<VAR_SUBDOMAIN>.]<VAR_PUBLIC_DOMAIN>/<pathName>/<app path>
 ```
 
 | Piece | Where it comes from | Values today |
 |---|---|---|
-| `VAR_SUBDOMAIN` | `gitops/helm-values/apps/common/<env>.yaml` | production: unset · sandbox: `sandbox.` |
+| `VAR_SUBDOMAIN` | `helm.parameters` in `gitops/argocd-manifests/apps/apps/<App>.yaml`, from the env generator element | production: `""` (skipped by the chart) · sandbox: `sandbox` |
 | `component` | `labels.component` in `gitops/helm-values/apps/<app>/base.yaml` | `api` for the three APIs · `apps` for qr-manager-ui |
-| `VAR_PUBLIC_DOMAIN` | `gitops/helm-values/<cluster>/apps/common/values.yaml` | `server1.home` · `server2.home` |
+| `VAR_PUBLIC_DOMAIN` | `helm.parameters` in the same ApplicationSet — `{{cluster}}.homelab.irha.cz` | `server1.homelab.irha.cz` (server1 is the only cluster running apps) |
 | `pathName` | `ingress.pathName` in the app's `base.yaml` | see table |
 
 | App | pathName | stripPrefix |

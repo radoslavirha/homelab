@@ -90,14 +90,13 @@ gitops/
                             metadata — BOTH stage.json and stage.structured_metadata must live
                             there; the chart renders its own structuredMetadata: key earlier
     apps/
-      common/               values.yaml (cluster-agnostic VAR_PROTOCOL, VAR_MQTT_URL, VAR_MONGODB_URL), production.yaml, sandbox.yaml
+      common/               values.yaml only — VAR_PROTOCOL, VAR_MQTT_URL, VAR_MONGODB_URL. Per-cluster/per-stage
+                            VARs (VAR_CLUSTER, VAR_PUBLIC_DOMAIN, VAR_SUBDOMAIN) are helm.parameters in the apps AppSets
       miot-bridge-api/  base.yaml, production.yaml, sandbox.yaml
       interactive-map-feeder-api/ base.yaml, production.yaml, sandbox.yaml
       qr-manager-api/   base.yaml, production.yaml, sandbox.yaml
       qr-manager-ui/    base.yaml, production.yaml, sandbox.yaml
     server1/              the only cluster running datastores and custom apps
-      apps/
-        common/             values.yaml, production.yaml, sandbox.yaml (shared VAR_* per namespace)
       provisioner/          influxdb2.yaml, emqx.yaml, mongodb.yaml — provisioner chart values per datastore
       cert-manager.yaml     cluster-specific overrides
       emqx.yaml             server1 EMQX overrides
@@ -279,7 +278,8 @@ Helm values use a two-layer approach:
 
 For custom apps deployed via the `apps` stage, a third layer is used:
 - **App-level values**: `gitops/helm-values/apps/<app>/` — shared + env-specific (base.yaml, production.yaml, sandbox.yaml)
-- **Cluster+namespace common**: `gitops/helm-values/<cluster>/apps/common/{env}.yaml` — shared VAR_* for all apps in a namespace (e.g. VAR_PUBLIC_DOMAIN, VAR_SUBDOMAIN)
+- **Shared VARs**: `gitops/helm-values/apps/common/values.yaml` — VAR_* identical for every app, cluster and stage
+- **Cluster/stage VARs**: `VAR_CLUSTER`, `VAR_PUBLIC_DOMAIN`, `VAR_SUBDOMAIN` are **not in any values file** — each apps ApplicationSet sets them as `helm.parameters` from the generator (`{{cluster}}`, `{{subdomain}}`). Production passes `VAR_SUBDOMAIN=""`; the chart skips empty VARs so that renders as unset. Adding a cluster needs a generator element, no new values files
 
 Raw Kubernetes manifests live in `gitops/k8s-manifests/<cluster>/<app>/`.
 

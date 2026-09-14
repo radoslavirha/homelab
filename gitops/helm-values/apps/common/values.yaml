@@ -1,5 +1,6 @@
-# cluster VARs
-# Shared across all apps deployed on cluster.
+# VAR_* shared by every custom app, on every cluster and in every stage.
+# The per-cluster and per-stage VARs (VAR_CLUSTER, VAR_PUBLIC_DOMAIN, VAR_SUBDOMAIN) are
+# not here: the apps ApplicationSets set them from the generator via helm.parameters.
 # https everywhere. Traefik terminates on the websecure listener against the
 # per-cluster certificate; the app Services behind it still speak plain HTTP.
 # This feeds every rendered app config (publicURL, apiBaseURL, redirect baseURL),
