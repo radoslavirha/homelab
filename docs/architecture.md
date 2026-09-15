@@ -231,7 +231,10 @@ MinIO is the intended S3-compatible backend for Terraform state, and would itsel
 │        wave 4  RootApps             (miot-bridge, interactive-map-feeder, qr-manager-api, qr-manager-ui) │
 │        wave 5  RootNetworkPolicies  (default-deny + egress allow-list)  │
 │     [manual: terraform init -migrate-state for all server3 modules]     │
-│  6. Register server1 + server2 kubeconfigs in server3 ArgoCD            │
+│  6. terraform vault-config → OpenBao auth: OIDC login via Authentik     │
+│     [after RootIdentity is healthy and the blueprint has landed;        │
+│      manual: copy the client secret from Authentik into KV first]       │
+│  7. Register server1 + server2 kubeconfigs in server3 ArgoCD            │
 └─────────────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────────────────┐

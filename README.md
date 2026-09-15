@@ -50,6 +50,10 @@ export KUBECONFIG=iac/clusters/server3/credentials/kubeconfig
 kubectl apply -f gitops/argocd-manifests/ArgoCD.yaml
 kubectl apply -f gitops/argocd-manifests/Bootstrap.yaml
 
+# After Authentik is up: OpenBao configuration (OIDC login) — needs the client secret in KV first,
+# see docs/iac.md step 6
+cd iac/clusters/server3/vault-config && terraform init && terraform apply
+
 # Bootstrap server1 / server2 (run in order)
 cd iac/clusters/<cluster>/bootstrap && terraform init && terraform apply -auto-approve
 cd iac/clusters/<cluster>/platform  && terraform init && terraform apply -auto-approve

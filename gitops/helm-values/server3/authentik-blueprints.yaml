@@ -233,9 +233,10 @@ applications:
     # oidc_client_id without an oidc_client_secret ("both 'oidc_client_id' and
     # 'oidc_client_secret' must be set for OIDC") and has no PKCE-only mode.
     #
-    # The generated secret goes from the Authentik provider page straight into
-    # auth/oidc/config -- not into KV, so there is no ExternalSecret. OpenBao is the only
-    # consumer and already stores it encrypted. Runbook: docs/identity.md, "OpenBao".
+    # The generated secret is copied once into KV (secret/server3/openbao), and Terraform hands
+    # it to OpenBao (iac/clusters/server3/vault-config) as a write-only argument, so it is never
+    # in Terraform state. No ExternalSecret: OpenBao is the only consumer.
+    # Runbook: docs/identity.md, "OpenBao".
     confidential: true
     # Each rung becomes an OpenBao external group named after the claim (openbao.admin ->
     # policy oidc-admin, ...): admin is everything including sys/, auth/ and policies,

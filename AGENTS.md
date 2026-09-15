@@ -30,11 +30,14 @@ iac/
     platform/     Cilium, Longhorn, Gateway API CRDs (reusable module)
     vault/      OpenBao (server3 only)
     apps/         ArgoCD install + self-management bootstrap (reusable module, server3 only)
+    vault-config/ OpenBao's own configuration via the vault provider: auth methods, policies,
+                  identity groups (server3 only). Today: OIDC login via Authentik. Runs AFTER
+                  GitOps bootstrap, because the OIDC client secret exists only once Authentik is up
   clusters/
     helm-values/  Shared Cilium + Longhorn values (all clusters)
     server1/      bootstrap/ platform/ helm-values/
     server2/      bootstrap/ platform/ helm-values/
-    server3/      bootstrap/ platform/ vault/ apps/ helm-values/
+    server3/      bootstrap/ platform/ vault/ apps/ vault-config/ helm-values/
 gitops/
   helm-charts/
     authentik-blueprints/   renders the Authentik configuration graph (applications, OAuth2 providers,
@@ -215,7 +218,7 @@ cd iac/clusters/<name>/<stage> && terraform validate
 
 ## Two installation paths
 
-### 1. Terraform-managed (bootstrap / platform / vault / apps)
+### 1. Terraform-managed (bootstrap / platform / vault / apps / vault-config)
 
 | Component | Version location |
 |-----------|-----------------|
@@ -227,7 +230,7 @@ cd iac/clusters/<name>/<stage> && terraform validate
 | ArgoCD | `iac/clusters/server3/apps/main.tf` — `argocd_chart_version` (server3 only) |
 | OpenBao | `iac/clusters/server3/vault/main.tf` — `openbao_version` (server3 only) |
 | Provisioner image | `gitops/helm-charts/provisioner/values.yaml` — `image.digest` (**not** a `*_version` variable, and **not** Terraform — it is a chart value) |
-| Terraform providers | `iac/modules/<module>/versions.tf` — exact pins. `clusters/server3/apps/main.tf` duplicates the helm pin; keep both in step |
+| Terraform providers | `iac/modules/<module>/versions.tf` — exact pins. `clusters/server3/apps/main.tf` duplicates the helm pin; keep both in step. `modules/vault-config` pins vault `5.11.0` while `modules/apps` stays on `~> 4.0` — separate roots and lock files, deliberately (5.x has the ephemeral KV read and write-only secret arguments) |
 
 To apply a version change: `cd iac/clusters/<cluster>/<stage> && terraform apply -auto-approve`
 
@@ -386,6 +389,19 @@ OpenBao is deployed via `iac/clusters/server3/vault/` (Terraform-managed, server
 App secrets are stored in OpenBao and synced to all clusters via External Secrets Operator.
 After `terraform apply`, run the init ceremony manually (see `iac/clusters/server3/vault/main.tf` header).
 See [docs/secrets.md](docs/secrets.md) for the full secrets path inventory and seeding commands per stage.
+
+OpenBao's own configuration (auth methods, policies, identity groups) is Terraform too:
+`iac/clusters/server3/vault-config/`, module `iac/modules/vault-config/`.
+
+- **Today it holds only OIDC login via Authentik.** It runs **last** on a fresh server3, after GitOps
+  bootstrap, because Authentik generates the OIDC client secret (docs/iac.md step 6).
+- **Nothing that must exist before ArgoCD belongs in it** without its own toggle or stage.
+- **The older auth config is still hand-made** per docs/iac.md step 3: ESO's `kubernetes-*` mounts,
+  `read-secrets`, the provisioner policies and userpass. Move it in deliberately with `terraform
+  import`, never by recreating a live mount; a recreated `kubernetes-*` mount breaks every
+  ExternalSecret on that cluster.
+- **Keep userpass and the root token.** Authentik's secrets come from OpenBao, so OpenBao must stay
+  administrable without Authentik.
 
 ## Backups — what exists, and what it does not cover
 

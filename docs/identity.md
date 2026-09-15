@@ -379,12 +379,15 @@ only revocation faster than token expiry.
 ## OpenBao
 
 The OpenBao UI logs in through Authentik via OpenBao's own `oidc` auth method. The Authentik side is the
-`openbao` entry in the matrix; the OpenBao side is **not in git** — like every other OpenBao auth method
-here ([docs/iac.md](iac.md) step 3), it is configured by hand with `bao`.
+`openbao` entry in the matrix; the OpenBao side is Terraform: the `vault-config` stage
+([`iac/clusters/server3/vault-config/`](../iac/clusters/server3/vault-config/main.tf), module
+[`iac/modules/vault-config/`](../iac/modules/vault-config/oidc.tf)).
 
 **Why confidential.** OpenBao's jwt/oidc method refuses an `oidc_client_id` without an
 `oidc_client_secret` and has no PKCE-only mode, so this is the one `api` entry with `confidential: true`.
-The secret Authentik generates goes straight into `auth/oidc/config` — not into KV, no ExternalSecret.
+Authentik generates the secret. It is copied once into KV at `secret/server3/openbao`, and Terraform
+reads it ephemerally and passes it as a write-only argument, so it is **never in Terraform state**. No
+ExternalSecret: OpenBao is its only consumer.
 
 **The fallback stays.** Authentik's own secrets come from OpenBao, so OpenBao must never *need* Authentik
 to be administered. Keep `userpass` and the root token working; this adds a login, it replaces none.
@@ -396,7 +399,8 @@ to be administered. Keep `userpass` and the root token working; this adds a logi
 | `openbao.reader` | `openbao.reader` | `oidc-reader` | KV v2 read under `secret/` |
 
 The ladder does the rest: an `openbao-server3-production-admin` member's token carries all three claims,
-so OpenBao attaches all three policies.
+so OpenBao attaches all three policies. The policy documents live in
+[`iac/clusters/server3/vault-config/policies/`](../iac/clusters/server3/vault-config/policies/).
 
 **Only the UI callback is registered.** The CLI's `http://localhost:8250/oidc/callback` is not — a
 loopback URI on a production client is what `local` environments exist to avoid. For the CLI, log in on
@@ -404,66 +408,35 @@ the UI, *Copy token* from the user menu, then `bao login <token>`.
 
 ### Setting it up
 
-Once, after the blueprint has landed (the `openbao-server3-production` provider exists in Authentik):
+Once, after the blueprint has landed. On a fresh server3 this is [docs/iac.md](iac.md) step 6, the last
+step of the build.
 
 ```bash
-# Admin session — userpass or root, NOT oidc (it does not exist yet)
-kubectl --context admin@server3 -n openbao port-forward svc/openbao 8200:8200
-export BAO_ADDR=http://127.0.0.1:8200
+# Admin session — userpass or root, NOT oidc (this is what creates it)
+export VAULT_ADDR=https://vault.server3.homelab.irha.cz
 bao login -method=userpass username=<admin>
+export VAULT_TOKEN=$(cat ~/.vault-token)
+
+# Provider exists? 404 until the blueprint has landed:
+curl -s -o /dev/null -w '%{http_code}\n' \
+  https://auth.irha.cz/application/o/openbao-server3-production/.well-known/openid-configuration
 
 # Client secret: Authentik UI → Applications → Providers → openbao-server3-production → Edit
-read -rs OIDC_SECRET
+read -rs S && bao kv put secret/server3/openbao oidc-client-secret="$S"; unset S
 
-bao auth enable oidc
-bao auth tune -listing-visibility=unauth oidc     # shows "OIDC" on the login page
-
-bao write auth/oidc/config \
-  oidc_discovery_url="https://auth.irha.cz/application/o/openbao-server3-production/" \
-  oidc_client_id="openbao-server3-production" \
-  oidc_client_secret="$OIDC_SECRET" \
-  default_role="authentik"
-unset OIDC_SECRET
-
-# `openid` is added by OpenBao itself. `roles` is NOT implied by `profile` — omit it and every
-# login succeeds with no group, i.e. with only the `default` policy.
-bao write auth/oidc/role/authentik \
-  role_type=oidc \
-  user_claim=sub \
-  groups_claim=roles \
-  oidc_scopes="profile,email,roles" \
-  bound_audiences="openbao-server3-production" \
-  allowed_redirect_uris="https://vault.server3.homelab.irha.cz/ui/vault/auth/oidc/oidc/callback" \
-  token_policies=default \
-  token_ttl=1h \
-  token_max_ttl=8h
-
-bao policy write oidc-admin - <<'EOF'
-path "*" { capabilities = ["create", "read", "update", "patch", "delete", "list", "sudo"] }
-EOF
-
-bao policy write oidc-editor - <<'EOF'
-path "secret/data/*"     { capabilities = ["create", "read", "update", "patch", "delete"] }
-path "secret/metadata/*" { capabilities = ["read", "list", "delete"] }
-path "secret/delete/*"   { capabilities = ["update"] }
-path "secret/undelete/*" { capabilities = ["update"] }
-EOF
-
-bao policy write oidc-reader - <<'EOF'
-path "secret/data/*"     { capabilities = ["read"] }
-path "secret/metadata/*" { capabilities = ["read", "list"] }
-EOF
-
-# External groups: an alias whose name equals a `roles` claim value puts the user in that group.
-ACCESSOR=$(bao auth list -format=json | jq -r '."oidc/".accessor')
-for role in admin editor reader; do
-  bao write identity/group/name/openbao.$role type=external policies=oidc-$role
-  bao write identity/group-alias \
-    name=openbao.$role \
-    mount_accessor="$ACCESSOR" \
-    canonical_id="$(bao read -field=id identity/group/name/openbao.$role)"
-done
+cd iac/clusters/server3/vault-config
+terraform init && terraform plan && terraform apply
+terraform plan     # must come back clean
 ```
+
+The apply creates:
+
+- the `oidc` auth mount, listed on the login page
+- the `authentik` role: `groups_claim=roles`, scopes `profile email roles`, audience bound to the
+  client_id, UI callback only, 1h/8h tokens. `roles` is not implied by `profile`; without it every
+  login succeeds with only the `default` policy
+- the three `oidc-*` policies
+- one external group plus one group alias per claim
 
 Then add yourself to `openbao-server3-production-admin` in Authentik.
 
@@ -472,8 +445,20 @@ OIDC Provider*. Then *Copy token* and run `bao token lookup` with it: `identity_
 `oidc-admin`, `oidc-editor`, `oidc-reader`. Only `default` means the `roles` claim did not arrive — check
 `oidc_scopes` first, then group membership.
 
-**Rotating the secret** is Authentik *Regenerate* followed by the `auth/oidc/config` write above. Both
-halves at once: between them, every OIDC login fails.
+**Rotating the secret:**
+
+1. Authentik *Regenerate*.
+2. `bao kv put secret/server3/openbao oidc-client-secret=…`.
+3. Bump `oidc_client_secret_version` in `iac/clusters/server3/vault-config/main.tf`.
+4. `terraform apply`.
+
+The bump is not optional: a write-only value is never read back, so without it the plan is empty and
+OpenBao keeps the old secret. Between *Regenerate* and the apply, every OIDC login fails.
+
+**A mount created by hand first** (the pre-Terraform runbook) makes the apply fail with "path is already in
+use". Import it (`terraform import module.vault_config.vault_jwt_auth_backend.oidc oidc`, and likewise the
+role, policies, groups and aliases) or disable it first. Never disable ESO's `kubernetes-*` mounts that
+way: that breaks every ExternalSecret.
 
 ## Adding an application
 
@@ -553,3 +538,4 @@ and its binding. Delete the old group in the UI and re-add its members.
 | Blueprint chart | [`gitops/helm-charts/authentik-blueprints/`](../gitops/helm-charts/authentik-blueprints/) |
 | Secrets + HTTPRoute | [`gitops/k8s-manifests/server3/authentik/`](../gitops/k8s-manifests/server3/authentik/) |
 | OpenBao KV path | `secret/server3/authentik` — see [docs/iac.md](iac.md) step 4 |
+| OpenBao side of OpenBao's OIDC login | [`iac/clusters/server3/vault-config/`](../iac/clusters/server3/vault-config/main.tf) — [docs/iac.md](iac.md) step 6 |
