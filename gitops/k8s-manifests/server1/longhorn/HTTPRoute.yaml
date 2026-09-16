@@ -17,7 +17,27 @@ spec:
   hostnames:
     - longhorn.server1.homelab.irha.cz
   rules:
-    - backendRefs:
+    # Everything: Authentik first (Middleware.authentik.yaml), then Longhorn.
+    - filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: traefik.io
+            kind: Middleware
+            name: authentik
+      backendRefs:
         - name: longhorn-frontend
           namespace: longhorn-system
           port: 80
+    # The outpost's own endpoints on this host, the login callback above all. Without this rule the
+    # callback is itself forward-authed and handed to Longhorn instead of the outpost, so the login
+    # never completes. The longer prefix wins over the rule above, and it carries no filter.
+    # Crossing into `traefik` is permitted by
+    # gitops/k8s-manifests/server1/traefik/ReferenceGrant.authentik-outpost.yaml.
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /outpost.goauthentik.io/
+      backendRefs:
+        - name: authentik-outpost
+          namespace: traefik
+          port: 9000
