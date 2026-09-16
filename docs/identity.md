@@ -318,6 +318,23 @@ unauthenticated on 2026-09-16, before the change.
 
 Guarded today: Longhorn on all three clusters, Hubble and the Traefik dashboard on server2.
 
+**A tab that was open before the guard — or when the session expired — cannot log itself in.** A
+single-page UI retries in the background with `fetch`, and a `fetch` cannot follow the cross-origin
+redirect to `auth.irha.cz`: the browser shows a network error ("Failed to fetch", "data streams are
+reconnecting") and **no login prompt ever appears**, because the page never navigates. Measured on
+hubble.server2, 2026-09-16: the outpost logged a stream of `/auth/traefik` 302s from the browser and
+not one callback attempt. Reload the tab — a top-level navigation is what starts the login, and with
+an Authentik session already open it bounces straight through.
+
+It follows that a **session expiring under an open tab looks like an outage** rather than a logout,
+and the fix is always a reload. That is the real cost of the eight-hour session below, and the reason
+it is not shorter.
+
+Related: several auth flows racing each other (parallel tabs, a retry loop, an impatient reload) can
+overwrite one another's state cookie, and the callback then fails with `oauth state does not match
+the session` — seen three times on longhorn.server2 before a clean login succeeded. Reload once and
+let it finish.
+
 **Sessions last `proxyAccessTokenValidity` — eight hours.** Verified 2026-09-16 on longhorn.server2:
 the outpost's cookie came back `Max-Age=28801`. Long on purpose, because the UIs behind a proxy are XHR-
 and websocket-heavy and an expiry mid-page breaks them until a reload. It is also the revocation
