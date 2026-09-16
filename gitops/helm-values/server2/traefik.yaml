@@ -50,8 +50,35 @@ providers:
     statusAddress:
       ip: "192.168.1.201"
 
-# No `ports:` block. server1's Traefik opens 1883/8883/27017 and UDP 4000/4001 for the
+# No TCP/UDP entrypoints. server1's Traefik opens 1883/8883/27017 and UDP 4000/4001 for the
 # IoT estate; server2's entire IoT estate was removed on 2026-09-13, so every one of those
 # entrypoints routed to nothing. The IngressRouteTCP objects that backed them went with it.
 # If server2 ever needs a TCP/UDP entrypoint again, copy the block from
 # gitops/helm-values/server1/traefik.yaml and read the hostNetwork note there first.
+#
+# ── Removing the chart's own `traefik` entrypoint ────────────────────────────────────
+# Under hostNetwork it binds :8080 on the node IP. It served NOTHING — `api.insecure: false`
+# in the shared values keeps the API and dashboard off it, and /, /dashboard/,
+# /api/http/routers and /api/overview all answered 404 on all three nodes (measured
+# 2026-09-16). An open socket that serves nothing is still worth removing.
+#
+# ALL THREE KEYS MOVE TOGETHER or the pod dies: both probes default to `ports.traefik.port`
+# and Traefik serves /ping on that entrypoint (chart 41.5.0). So the entrypoint goes, ping
+# moves to `web`, and healthchecksPort follows it to 80. Rendered against all three clusters
+# before landing: server1 keeps mongodb/mqtt/mqtts and both UDP entrypoints, server3 keeps
+# otlp-grpc, and every dashboard IngressRoute already runs on websecure.
+#
+# server2 only, for now: updateStrategy is Recreate, so this bounces the cluster's ingress
+# for a few seconds, and the shared values file would have bounced all three at once. Once
+# server1 and server3 follow, these three keys belong in gitops/helm-values/traefik.yaml.
+#
+# The side effect: /ping is now answered on :80 for any Host. It returns "OK" and nothing
+# else, and it is what the kubelet probes.
+ports:
+  traefik: null
+
+deployment:
+  healthchecksPort: 80
+
+additionalArguments:
+  - "--ping.entryPoint=web"
