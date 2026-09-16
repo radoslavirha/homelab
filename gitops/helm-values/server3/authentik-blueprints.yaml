@@ -301,6 +301,33 @@ applications:
       - { cluster: server2, stage: production }
       - { cluster: server3, stage: production }
 
+  - name: hubble
+    title: Hubble UI
+    kind: proxy
+    # hubble.<cluster>.homelab.irha.cz -- the Cilium network observability UI, served from
+    # kube-system. Read-only, but it maps every flow between every pod in the cluster.
+    hostPrefix: hubble
+    roles:
+      - admin
+    environments:
+      - { cluster: server2, stage: production }
+
+  - name: traefik
+    title: Traefik Dashboard
+    kind: proxy
+    # traefik.<cluster>.homelab.irha.cz. Unlike the other two this is NOT a hand-written
+    # HTTPRoute: the Traefik chart renders an IngressRoute (ingressRoute.dashboard in
+    # gitops/helm-values/<cluster>/traefik.yaml), so the Middleware is attached there and the
+    # callback path gets its own HTTPRoute next to the outpost in the traefik namespace.
+    #
+    # /api on this host hands out every router, service and middleware in the cluster, which
+    # is why `api.insecure` stays false and this host is worth gating.
+    hostPrefix: traefik
+    roles:
+      - admin
+    environments:
+      - { cluster: server2, stage: production }
+
   # ---------------------------------------------------------------------------------
   # Devices. A machine identity, not a person -- no browser, no redirect, no password
   # prompt. It presents a client_id and a client_secret and gets a signed JWT back.
