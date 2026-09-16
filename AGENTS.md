@@ -40,15 +40,18 @@ iac/
     server3/      bootstrap/ platform/ vault/ apps/ vault-config/ helm-values/
 gitops/
   helm-charts/
-    authentik-blueprints/   renders the Authentik configuration graph (applications, OAuth2 providers,
-                            role groups, policy bindings) from the matrix in
+    authentik-blueprints/   renders the Authentik configuration graph (applications, OAuth2 and proxy
+                            providers, proxy outposts, role groups, policy bindings) from the matrix in
                             helm-values/server3/authentik-blueprints.yaml. Roles are a LADDER:
                             `{ name: admin, inherits: editor }` becomes Authentik group parentage, and
                             membership flows UPWARD, so admin is the CHILD of editor and an admin-only
                             member gets all three roles in the claim. `kind` says what an entry is:
                             api (default, a human's browser logs in), client (a human drives it and it
                             calls other APIs -- Postman), device (a machine: confidential,
-                            client_credentials, blueprint-declared service account).
+                            client_credentials, blueprint-declared service account), proxy (a UI with
+                            no login of its own: forward_single proxy provider per host, served by
+                            outpost `homelab-proxy-<cluster>`, whose Deployment is hand-written in
+                            k8s-manifests/<cluster>/traefik/).
                             Both non-api kinds carry `accesses` -- the APIs their token's aud names,
                             resolved within ONE environment. A client's roles come from the human's
                             groups; a device's access must name the role. See docs/identity.md.

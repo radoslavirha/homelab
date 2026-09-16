@@ -123,7 +123,7 @@ data:
     {{- /*
     ---------- `kind`: what sort of client this is ----------
 
-    Three kinds, and `kind` is OURS -- it is not Authentik's `client_type`, which stays
+    Four kinds, and `kind` is OURS -- it is not Authentik's `client_type`, which stays
     public/confidential and is DERIVED from this (plus `confidential`, below).
 
       api     (default)  Serves a host. A human's browser logs in. Public + PKCE.
@@ -132,6 +132,12 @@ data:
       device             A machine. No browser, no human. Confidential +
                          client_credentials, `accesses` carrying an explicit role,
                          a blueprint-declared service account, no redirect URIs.
+      proxy              A UI with no login of its own (Longhorn). Not an OAuth2
+                         provider of ours: Authentik's proxy provider in forward_single
+                         mode, one per host, enforced by its cluster's outpost. Shaped
+                         like an api -- one Application per environment, host
+                         derivation, role groups, bindings -- minus every OAuth2 field,
+                         which Authentik sets itself.
 
     `confidential: true` on a kind: api entry -- a human still logs in via redirect, but
     the app's OWN backend does the code exchange and can hold a secret server-side, unlike
@@ -191,16 +197,24 @@ data:
         {{- end }}
       {{- end }}
     {{- end }}
+    {{- if ne (len $appNames) (len (uniq $appNames)) }}
+      {{- fail (printf "application names must be unique, got %v: two entries with one name render the same slugs, and the second silently overwrites the first" $appNames) }}
+    {{- end }}
     {{- /*
     The SHARED `homelab roles` mapping strips `<client_id>-` off a group name, which is a
     prefix rule: if one api's name prefixed another's, a group of the longer would match
     the shorter and render a role out of the leftover. Broad clients enumerate exact pairs
     and are immune; these are not, so the collision is refused here instead.
+
+    A proxy takes part on both sides. Its groups are shaped exactly like an api's
+    (<name>-<cluster>-<stage>-<role>), so an api's prefix rule matches them the same way.
+    As the shorter name it binds no roles mapping and could not collide -- refusing it
+    anyway costs nothing and keeps the rule to one sentence.
     */ -}}
     {{- range $a := .Values.applications }}
-      {{- if eq (default "api" $a.kind) "api" }}
+      {{- if has (default "api" $a.kind) (list "api" "proxy") }}
         {{- range $b := $root.Values.applications }}
-          {{- if and (eq (default "api" $b.kind) "api") (ne $a.name $b.name) }}
+          {{- if and (has (default "api" $b.kind) (list "api" "proxy")) (ne $a.name $b.name) }}
             {{- if hasPrefix (printf "%s-" $a.name) $b.name }}
               {{- fail (printf "application %q is a prefix of %q: the shared roles mapping strips %q off a group name, so %q's groups would match it and render a role from the leftover" $a.name $b.name (printf "%s-" $a.name) $b.name) }}
             {{- end }}
@@ -210,15 +224,36 @@ data:
     {{- end }}
     {{- range $a := .Values.applications }}
       {{- $kind := default "api" $a.kind }}
-      {{- if not (has $kind (list "api" "client" "device")) }}
-        {{- fail (printf "application %q has kind %q: must be one of api, client, device" $a.name $kind) }}
+      {{- if not (has $kind (list "api" "client" "device" "proxy")) }}
+        {{- fail (printf "application %q has kind %q: must be one of api, client, device, proxy" $a.name $kind) }}
       {{- end }}
       {{- if and $a.confidential (ne $kind "api") }}
-        {{- fail (printf "application %q sets `confidential: true` but is kind %q: only kind api can be confidential -- client is deliberately always public (see its own reasoning in values), and device is already confidential by definition" $a.name $kind) }}
+        {{- fail (printf "application %q sets `confidential: true` but is kind %q: only kind api can be confidential -- client is deliberately always public (see its own reasoning in values), device is already confidential by definition, and a proxy's OAuth2 side is set by Authentik itself" $a.name $kind) }}
       {{- end }}
       {{- if eq $kind "api" }}
         {{- if $a.accesses }}
           {{- fail (printf "application %q declares `accesses` but is kind api: an application that calls other applications' APIs is kind client (a human drives it) or kind device (a machine does)" $a.name) }}
+        {{- end }}
+      {{- else if eq $kind "proxy" }}
+        {{- if $a.accesses }}
+          {{- fail (printf "application %q is kind proxy and declares `accesses`: a proxy guards the UI behind it and calls nothing" $a.name) }}
+        {{- end }}
+        {{- if has $a.name $targetNames }}
+          {{- fail (printf "application %q is kind proxy and is named as another application's target: a proxy issues no token an API could verify, so there is nothing to add to anyone's audience" $a.name) }}
+        {{- end }}
+        {{- if or $a.basePath $a.redirectPath $a.logoutPath $a.redirectUris $a.localPort }}
+          {{- fail (printf "application %q is kind proxy and declares basePath, redirectPath, logoutPath, redirectUris or localPort: forward_single guards the whole host, and Authentik derives the callback from the host itself" $a.name) }}
+        {{- end }}
+        {{- if not (or $a.host $a.hostPrefix) }}
+          {{- fail (printf "application %q is kind proxy and declares neither `host` nor `hostPrefix`: the host is the thing a proxy provider guards" $a.name) }}
+        {{- end }}
+        {{- if and $a.host (gt (len $a.environments) 1) }}
+          {{- fail (printf "application %q is kind proxy with an explicit `host` and %d environments: every environment would claim the same host, and the outpost picks a provider by host" $a.name (len $a.environments)) }}
+        {{- end }}
+        {{- range $e := $a.environments }}
+          {{- if or (not $e.cluster) (not $e.stage) (eq (toString $e.stage) "local") }}
+            {{- fail (printf "application %q is kind proxy and lists an environment without both a cluster and a stage, or with stage local: a proxy is enforced by the outpost in its cluster, and a developer machine has none" $a.name) }}
+          {{- end }}
         {{- end }}
       {{- else }}
         {{- if not $a.accesses }}
@@ -307,7 +342,9 @@ data:
     {{- range $app := $orderedApps }}
       {{- $kind := default "api" $app.kind }}
       {{- $isDevice := eq $kind "device" }}
-      {{- $isBroad := ne $kind "api" }}
+      {{- $isProxy := eq $kind "proxy" }}
+      {{- /* Broad = one Application spanning environments. A proxy is per host, so per environment, like an api. */ -}}
+      {{- $isBroad := has $kind (list "client" "device") }}
       {{- $isConfidential := or $isDevice $app.confidential }}
       {{- if and (not $app.roles) (not $isDevice) }}
         {{- fail (printf "application %q has no roles: it would render an Application with no policy binding, which is open to every user" $app.name) }}
@@ -610,6 +647,42 @@ data:
                 }),
             }
         {{- end }}
+        {{- if $isProxy }}
+
+      # A forward-auth proxy provider. Authentik OWNS its OAuth2 side:
+      # ProxyProviderSerializer.create() and update() both call set_oauth_defaults(), which
+      # forces client_type (confidential), grant_types, signing_key, redirect_uris (derived
+      # from external_host) and the shipped openid/profile/email/entitlements/proxy scope
+      # mappings on EVERY apply (read from the 2026.8.1 source). None of those appear here:
+      # anything written would be overwritten by that same save. tests/proxy_test.yaml keeps
+      # it that way.
+      #
+      # So the local `homelab profile` / `homelab roles` pair is not bound either. Nothing
+      # reads a token from this provider: the outpost holds the session, and the UI behind
+      # it never sees one.
+      - model: authentik_providers_proxy.proxyprovider
+        id: prov-{{ $slug }}
+        identifiers:
+          name: {{ $slug }}
+        attrs:
+          authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-implicit-consent]]
+          # Same flow as the OAuth2 providers, for the same reason: sign-out at
+          # /outpost.goauthentik.io/sign_out ends the Authentik session, not just this host's.
+          invalidation_flow: !Find [authentik_flows.flow, [slug, default-invalidation-flow]]
+          # forward_single: Traefik asks the outpost about every request to THIS host, and the
+          # session cookie is scoped to this host alone. One provider per host is what keeps
+          # access per UI -- forward_domain would put every guarded UI behind one Application
+          # and one set of bindings.
+          mode: forward_single
+          external_host: {{ $base }}
+          # The Authorization header belongs to nobody here: the UIs behind a proxy have no
+          # API clients. Left on (the model default), a Basic or Bearer header would be taken
+          # by the outpost as a login attempt.
+          intercept_header_auth: false
+          # The outpost's session length for this host. Why it is long: proxyAccessTokenValidity
+          # in values.yaml.
+          access_token_validity: {{ default $root.Values.proxyAccessTokenValidity $app.accessTokenValidity }}
+        {{- else }}
 
       - model: authentik_providers_oauth2.oauth2provider
         id: prov-{{ $slug }}
@@ -803,6 +876,7 @@ data:
             - !KeyOf pm-roles
         {{- end }}
           signing_key: !Find [authentik_crypto.certificatekeypair, [name, {{ $root.Values.signingKeyName }}]]
+        {{- end }}
 
       - model: authentik_core.application
         id: app-{{ $slug }}
@@ -896,4 +970,57 @@ data:
           {{- end }}
         {{- end }}
       {{- end }}
+    {{- end }}
+
+    {{- /*
+    ---------- outposts: one per cluster that runs a proxy ----------
+
+    A proxy provider does nothing until an outpost serves it, and a cluster's Traefik can
+    only ask an outpost it can reach. So every cluster with at least one `kind: proxy`
+    environment gets its own outpost, `homelab-proxy-<cluster>`, listing exactly that
+    cluster's providers. Its Deployment is hand-written in that cluster's gitops
+    (gitops/k8s-manifests/<cluster>/traefik/Deployment.authentik-outpost.yaml), which is why
+    `service_connection` is left unset: unset means a manually deployed outpost, and
+    Authentik reaches into no cluster.
+
+    Not the embedded outpost on server3. Every guarded request on another cluster would
+    cross to server3 through its Traefik, which is not configured to trust forwarded headers
+    from other hosts -- and the outpost picks the provider by X-Forwarded-Host.
+
+    `providers` is the WHOLE list, rewritten on every apply: a provider assigned to one of
+    these outposts in the UI lasts until the next apply. Assign here, never there.
+
+    Emitted LAST, after devices: `!KeyOf prov-*` resolves only against providers already
+    applied. A cluster with no proxy renders no outpost -- Authentik refuses an empty
+    `providers` list on a non-embedded outpost anyway.
+    */ -}}
+    {{- $outposts := dict }}
+    {{- range $a := $root.Values.applications }}
+      {{- if eq (default "api" $a.kind) "proxy" }}
+        {{- range $e := $a.environments }}
+          {{- $slugs := default (list) (get $outposts $e.cluster) }}
+          {{- $_ := set $outposts $e.cluster (append $slugs (printf "%s-%s-%s" $a.name $e.cluster $e.stage)) }}
+        {{- end }}
+      {{- end }}
+    {{- end }}
+    {{- range $cluster := keys $outposts | sortAlpha }}
+
+      # ---------- outpost: {{ $cluster }} ----------
+      - model: authentik_outposts.outpost
+        id: outpost-{{ $cluster }}
+        identifiers:
+          name: homelab-proxy-{{ $cluster }}
+        attrs:
+          type: proxy
+          # The WHOLE list. A provider assigned to this outpost in the UI is dropped on the
+          # next apply.
+          providers:
+          {{- range $s := get $outposts $cluster }}
+            - !KeyOf prov-{{ $s }}
+          {{- end }}
+          config:
+            # Where browsers are sent to log in. The outpost's own API connection comes from
+            # AUTHENTIK_HOST in its Deployment instead.
+            authentik_host: {{ $root.Values.authentikHost }}
+            authentik_host_insecure: false
     {{- end }}

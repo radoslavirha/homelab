@@ -49,4 +49,23 @@ accessTokenValidity: minutes=30
 # six token requests an hour and ten-minute revocation.
 deviceAccessTokenValidity: minutes=10
 
+# Session length for kind: proxy providers, overridable per application with
+# `accessTokenValidity`.
+#
+# The outpost sizes the session it keeps for a guarded host from the provider's
+# access_token_validity, so this is how long a login to Longhorn lasts before Authentik is
+# asked again. LONG, unlike the SPAs above: the UIs behind a proxy are XHR- and
+# websocket-heavy, and when the session expires mid-page their background requests get a
+# 302 to auth.irha.cz they cannot follow -- the page breaks until a reload. Eight hours is
+# about one working session.
+#
+# The cost is the usual one: removing someone from the gate group takes up to this long
+# to bite.
+proxyAccessTokenValidity: hours=8
+
+# Where a proxy outpost sends browsers to log in (its config.authentik_host). HTTPS,
+# explicitly: the embedded outpost Authentik created on first boot carries
+# http://auth.irha.cz, and nothing here should inherit that.
+authentikHost: https://auth.irha.cz
+
 applications: []

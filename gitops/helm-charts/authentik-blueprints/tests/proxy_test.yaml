@@ -1,0 +1,388 @@
+suite: kind proxy
+templates:
+  - templates/configmap.yaml
+tests:
+  # ---------- what a proxy renders ----------
+
+  - it: renders a forward_single proxy provider for the derived host
+    set:
+      applications:
+        - name: longhorn
+          title: Longhorn
+          kind: proxy
+          hostPrefix: longhorn
+          roles: [admin]
+          environments:
+            - { cluster: server2, stage: production }
+    asserts:
+      - matchRegex:
+          path: data["homelab-applications.yaml"]
+          pattern: "- model: authentik_providers_proxy.proxyprovider\\n\\s+id: prov-longhorn-server2-production\\n\\s+identifiers:\\n\\s+name: longhorn-server2-production\\n"
+      - matchRegex:
+          path: data["homelab-applications.yaml"]
+          pattern: "\\n\\s+mode: forward_single\\n"
+      - matchRegex:
+          path: data["homelab-applications.yaml"]
+          pattern: "\\n\\s+external_host: https://longhorn.server2.homelab.irha.cz\\n"
+      - matchRegex:
+          path: data["homelab-applications.yaml"]
+          pattern: "\\n\\s+intercept_header_auth: false\\n"
+      - matchRegex:
+          path: data["homelab-applications.yaml"]
+          pattern: "\\n\\s+access_token_validity: hours=8\\n"
+
+  - it: leaves every field set_oauth_defaults() owns to Authentik
+    set:
+      applications:
+        - name: longhorn
+          title: Longhorn
+          kind: proxy
+          hostPrefix: longhorn
+          roles: [admin]
+          environments:
+            - { cluster: server2, stage: production }
+    asserts:
+      - notMatchRegex:
+          path: data["homelab-applications.yaml"]
+          pattern: "authentik_providers_oauth2.oauth2provider"
+      - notMatchRegex:
+          path: data["homelab-applications.yaml"]
+          pattern: "(client_type|grant_types|redirect_uris|signing_key|property_mappings|client_id):"
+
+  - it: gates the proxy Application with its role group, like an api
+    set:
+      applications:
+        - name: longhorn
+          title: Longhorn
+          kind: proxy
+          hostPrefix: longhorn
+          roles: [admin]
+          environments:
+            - { cluster: server2, stage: production }
+    asserts:
+      - matchRegex:
+          path: data["homelab-applications.yaml"]
+          pattern: "- model: authentik_core.group\\n\\s+id: grp-longhorn-server2-production-admin\\n"
+      - matchRegex:
+          path: data["homelab-applications.yaml"]
+          pattern: "target: !KeyOf app-longhorn-server2-production\\n\\s+group: !KeyOf grp-longhorn-server2-production-admin\\n"
+      - matchRegex:
+          path: data["homelab-applications.yaml"]
+          pattern: "\\n\\s+name: Longhorn \\(server2/production\\)\\n\\s+provider: !KeyOf prov-longhorn-server2-production\\n"
+      - matchRegex:
+          path: data["homelab-applications.yaml"]
+          pattern: "\\n\\s+meta_launch_url: https://longhorn.server2.homelab.irha.cz/\\n"
+
+  - it: honours a per-application accessTokenValidity
+    set:
+      applications:
+        - name: longhorn
+          title: Longhorn
+          kind: proxy
+          hostPrefix: longhorn
+          accessTokenValidity: hours=1
+          roles: [admin]
+          environments:
+            - { cluster: server2, stage: production }
+    asserts:
+      - matchRegex:
+          path: data["homelab-applications.yaml"]
+          pattern: "\\n\\s+access_token_validity: hours=1\\n"
+
+  # ---------- outposts ----------
+
+  - it: renders one outpost per cluster, listing only that cluster's proxy providers
+    set:
+      applications:
+        - name: qr-manager
+          title: QR Manager
+          hostPrefix: apps
+          roles: [reader]
+          environments:
+            - { cluster: server1, stage: production }
+        - name: longhorn
+          title: Longhorn
+          kind: proxy
+          hostPrefix: longhorn
+          roles: [admin]
+          environments:
+            - { cluster: server1, stage: production }
+            - { cluster: server2, stage: production }
+        - name: hubble
+          title: Hubble
+          kind: proxy
+          hostPrefix: hubble
+          roles: [admin]
+          environments:
+            - { cluster: server2, stage: production }
+    asserts:
+      - matchRegex:
+          path: data["homelab-applications.yaml"]
+          pattern: "id: outpost-server1\\n\\s+identifiers:\\n\\s+name: homelab-proxy-server1\\n\\s+attrs:\\n\\s+type: proxy\\n(\\s+#.*\\n)*\\s+providers:\\n\\s+- !KeyOf prov-longhorn-server1-production\\n\\s+config:\\n"
+      - matchRegex:
+          path: data["homelab-applications.yaml"]
+          pattern: "id: outpost-server2\\n\\s+identifiers:\\n\\s+name: homelab-proxy-server2\\n\\s+attrs:\\n\\s+type: proxy\\n(\\s+#.*\\n)*\\s+providers:\\n\\s+- !KeyOf prov-longhorn-server2-production\\n\\s+- !KeyOf prov-hubble-server2-production\\n\\s+config:\\n"
+      - matchRegex:
+          path: data["homelab-applications.yaml"]
+          pattern: "\\n\\s+authentik_host: https://auth.irha.cz\\n"
+      - notMatchRegex:
+          path: data["homelab-applications.yaml"]
+          pattern: "prov-qr-manager-server1-production\\n\\s+config:"
+
+  - it: emits outposts after every provider they reference, devices included
+    set:
+      applications:
+        - name: feeder
+          title: Feeder
+          hostPrefix: apps
+          roles: [reader]
+          environments:
+            - { cluster: server1, stage: production }
+        - name: map
+          title: Map
+          kind: device
+          accesses:
+            - { app: feeder, role: reader }
+          environments:
+            - { cluster: server1, stage: production }
+        - name: longhorn
+          title: Longhorn
+          kind: proxy
+          hostPrefix: longhorn
+          roles: [admin]
+          environments:
+            - { cluster: server1, stage: production }
+    asserts:
+      - matchRegex:
+          path: data["homelab-applications.yaml"]
+          pattern: "id: prov-longhorn-server1-production[\\s\\S]*id: sa-map[\\s\\S]*id: outpost-server1\\n"
+
+  - it: renders no outpost when the matrix has no proxy
+    set:
+      applications:
+        - name: qr-manager
+          title: QR Manager
+          hostPrefix: apps
+          roles: [reader]
+          environments:
+            - { cluster: server1, stage: production }
+    asserts:
+      - notMatchRegex:
+          path: data["homelab-applications.yaml"]
+          pattern: "authentik_outposts.outpost|authentik_providers_proxy"
+
+  # ---------- what a proxy refuses ----------
+  # helm-unittest 0.4.4 has no errorPattern: errorMessage is compared whole.
+
+  - it: refuses a proxy with no roles, because an unbound Application is open to everyone
+    set:
+      applications:
+        - name: longhorn
+          title: Longhorn
+          kind: proxy
+          hostPrefix: longhorn
+          environments:
+            - { cluster: server2, stage: production }
+    asserts:
+      - failedTemplate:
+          errorMessage: "application \"longhorn\" has no roles: it would render an Application with no policy binding, which is open to every user"
+
+  - it: refuses `accesses` on a proxy
+    set:
+      applications:
+        - name: qr-manager
+          title: QR Manager
+          hostPrefix: apps
+          roles: [reader]
+          environments:
+            - { cluster: server1, stage: production }
+        - name: longhorn
+          title: Longhorn
+          kind: proxy
+          hostPrefix: longhorn
+          accesses: [qr-manager]
+          roles: [admin]
+          environments:
+            - { cluster: server1, stage: production }
+    asserts:
+      - failedTemplate:
+          errorMessage: "application \"longhorn\" is kind proxy and declares `accesses`: a proxy guards the UI behind it and calls nothing"
+
+  - it: refuses a proxy named as a client's target
+    set:
+      applications:
+        - name: longhorn
+          title: Longhorn
+          kind: proxy
+          hostPrefix: longhorn
+          roles: [admin]
+          environments:
+            - { cluster: server1, stage: production }
+        - name: postman
+          title: Postman
+          kind: client
+          accesses: [longhorn]
+          redirectUris: [https://oauth.pstmn.io/v1/callback]
+          roles: [user]
+          environments:
+            - { cluster: server1, stage: production }
+    asserts:
+      - failedTemplate:
+          errorMessage: "application \"longhorn\" is kind proxy and is named as another application's target: a proxy issues no token an API could verify, so there is nothing to add to anyone's audience"
+
+  - it: refuses a path-scoped proxy
+    set:
+      applications:
+        - name: longhorn
+          title: Longhorn
+          kind: proxy
+          hostPrefix: longhorn
+          basePath: /ui
+          roles: [admin]
+          environments:
+            - { cluster: server2, stage: production }
+    asserts:
+      - failedTemplate:
+          errorMessage: "application \"longhorn\" is kind proxy and declares basePath, redirectPath, logoutPath, redirectUris or localPort: forward_single guards the whole host, and Authentik derives the callback from the host itself"
+
+  - it: refuses a proxy with a redirectPath
+    set:
+      applications:
+        - name: longhorn
+          title: Longhorn
+          kind: proxy
+          hostPrefix: longhorn
+          redirectPath: /auth/callback
+          roles: [admin]
+          environments:
+            - { cluster: server2, stage: production }
+    asserts:
+      - failedTemplate:
+          errorMessage: "application \"longhorn\" is kind proxy and declares basePath, redirectPath, logoutPath, redirectUris or localPort: forward_single guards the whole host, and Authentik derives the callback from the host itself"
+
+  - it: refuses a proxy with no host
+    set:
+      applications:
+        - name: longhorn
+          title: Longhorn
+          kind: proxy
+          roles: [admin]
+          environments:
+            - { cluster: server2, stage: production }
+    asserts:
+      - failedTemplate:
+          errorMessage: "application \"longhorn\" is kind proxy and declares neither `host` nor `hostPrefix`: the host is the thing a proxy provider guards"
+
+  - it: refuses an explicit host shared by several environments
+    set:
+      applications:
+        - name: longhorn
+          title: Longhorn
+          kind: proxy
+          host: longhorn.example.test
+          roles: [admin]
+          environments:
+            - { cluster: server1, stage: production }
+            - { cluster: server2, stage: production }
+    asserts:
+      - failedTemplate:
+          errorMessage: "application \"longhorn\" is kind proxy with an explicit `host` and 2 environments: every environment would claim the same host, and the outpost picks a provider by host"
+
+  - it: refuses a local proxy environment
+    set:
+      applications:
+        - name: longhorn
+          title: Longhorn
+          kind: proxy
+          hostPrefix: longhorn
+          roles: [admin]
+          environments:
+            - { stage: local }
+    asserts:
+      - failedTemplate:
+          errorMessage: "application \"longhorn\" is kind proxy and lists an environment without both a cluster and a stage, or with stage local: a proxy is enforced by the outpost in its cluster, and a developer machine has none"
+
+  - it: refuses a proxy environment with no stage
+    set:
+      applications:
+        - name: longhorn
+          title: Longhorn
+          kind: proxy
+          hostPrefix: longhorn
+          roles: [admin]
+          environments:
+            - { cluster: server2 }
+    asserts:
+      - failedTemplate:
+          errorMessage: "application \"longhorn\" is kind proxy and lists an environment without both a cluster and a stage, or with stage local: a proxy is enforced by the outpost in its cluster, and a developer machine has none"
+
+  - it: refuses `confidential` on a proxy
+    set:
+      applications:
+        - name: longhorn
+          title: Longhorn
+          kind: proxy
+          hostPrefix: longhorn
+          confidential: true
+          roles: [admin]
+          environments:
+            - { cluster: server2, stage: production }
+    asserts:
+      - failedTemplate:
+          errorMessage: "application \"longhorn\" sets `confidential: true` but is kind \"proxy\": only kind api can be confidential -- client is deliberately always public (see its own reasoning in values), device is already confidential by definition, and a proxy's OAuth2 side is set by Authentik itself"
+
+  # ---------- invariants shared with the other kinds ----------
+
+  - it: refuses an api whose name prefixes a proxy's
+    set:
+      applications:
+        - name: longhorn
+          title: Longhorn API
+          hostPrefix: apps
+          roles: [reader]
+          environments:
+            - { cluster: server1, stage: production }
+        - name: longhorn-ui
+          title: Longhorn UI
+          kind: proxy
+          hostPrefix: longhorn
+          roles: [admin]
+          environments:
+            - { cluster: server1, stage: production }
+    asserts:
+      - failedTemplate:
+          errorMessage: "application \"longhorn\" is a prefix of \"longhorn-ui\": the shared roles mapping strips \"longhorn-\" off a group name, so \"longhorn-ui\"'s groups would match it and render a role from the leftover"
+
+  - it: refuses two applications with one name
+    set:
+      applications:
+        - name: longhorn
+          title: Longhorn
+          hostPrefix: apps
+          roles: [reader]
+          environments:
+            - { cluster: server1, stage: production }
+        - name: longhorn
+          title: Longhorn
+          kind: proxy
+          hostPrefix: longhorn
+          roles: [admin]
+          environments:
+            - { cluster: server2, stage: production }
+    asserts:
+      - failedTemplate:
+          errorMessage: "application names must be unique, got [longhorn longhorn]: two entries with one name render the same slugs, and the second silently overwrites the first"
+
+  - it: refuses an unknown kind and names proxy among the valid ones
+    set:
+      applications:
+        - name: longhorn
+          title: Longhorn
+          kind: forward
+          hostPrefix: longhorn
+          roles: [admin]
+          environments:
+            - { cluster: server2, stage: production }
+    asserts:
+      - failedTemplate:
+          errorMessage: "application \"longhorn\" has kind \"forward\": must be one of api, client, device, proxy"

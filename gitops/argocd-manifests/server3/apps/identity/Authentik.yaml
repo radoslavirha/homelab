@@ -6,6 +6,10 @@
 # Renovate is not configured in this repo yet (see plans/2026-09-03-renovate-dependency-automation.md);
 # until it is, this pin is bumped by hand like every other chart here.
 #
+# The forward-auth proxy outposts on the other clusters pin the SAME version, by hand, as an
+# image tag: gitops/k8s-manifests/<cluster>/traefik/Deployment.authentik-outpost.yaml. Bump
+# them together.
+#
 # No ServerSideApply: the chart ships no oversized CRDs, and enabling it would
 # require ServerSideDiff=true as well or the ExternalSecrets sit OutOfSync forever
 # (see apps/infra/CertManager.yaml for that story).
