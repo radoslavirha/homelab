@@ -1,0 +1,38 @@
+---
+# The login callback for the Traefik dashboard host.
+#
+# Every other guarded UI carries this as a second rule on its own HTTPRoute. The dashboard
+# cannot: its route is the chart's IngressRoute, whose matchRule only covers /dashboard and
+# /api. So the callback path gets its own Gateway API route here, on the same hostname.
+#
+# The two do not overlap — the IngressRoute matches /dashboard and /api, this matches
+# /outpost.goauthentik.io/ — and this one carries NO forward-auth filter, which is the point:
+# the callback must be reachable without being authenticated, or the login cannot complete.
+#
+# Same namespace as the outpost Service, so no ReferenceGrant is involved.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: authentik-outpost
+  namespace: traefik
+  labels:
+    app.kubernetes.io/name: authentik-outpost
+    app.kubernetes.io/component: forward-auth
+    app.kubernetes.io/part-of: authentik
+  annotations:
+    argocd.argoproj.io/sync-wave: "100"
+spec:
+  parentRefs:
+    - name: traefik-gateway
+      namespace: traefik
+  hostnames:
+    - traefik.server2.homelab.irha.cz
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /outpost.goauthentik.io/
+      backendRefs:
+        - name: authentik-outpost
+          namespace: traefik
+          port: 9000
