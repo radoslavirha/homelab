@@ -577,6 +577,20 @@ token, every API. The `roles` claim is `app.role` with no environment in it, so 
 union of the holder's roles across those environments; with identical roles everywhere that is a no-op.
 Each target API needs one trusted-issuer row for that client, the same value in every deployment.
 
+A **proxy** entry (`kind: proxy` — a UI with no login of its own, like Longhorn) renders an Authentik
+proxy provider in `forward_single` mode for one host, with role groups and bindings like an `api`, plus
+one outpost per cluster (`homelab-proxy-<cluster>`) listing that cluster's providers. Authentik owns
+every OAuth2 field on such a provider — `set_oauth_defaults()` rewrites `client_type`, `grant_types`,
+`signing_key`, `redirect_uris` and the mappings on every apply — so the entry carries no `basePath`,
+`redirectPath`, `redirectUris` or `confidential`, and no `{ stage: local }` environment. Two extra
+steps per CLUSTER, once: add that cluster's outpost objects in
+`gitops/k8s-manifests/<cluster>/traefik/`, and copy the token Authentik generated with the outpost into
+`secret/<cluster>/authentik-outpost` (UI: Outposts → the outpost → View Deployment Info). One extra
+step per guarded UI: a `Middleware.authentik.yaml` in that UI's own namespace, an `ExtensionRef` filter
+on its HTTPRoute, and a second route rule sending `/outpost.goauthentik.io/` to the outpost — without
+that rule the login callback is forward-authed too and the login never completes. Verification
+commands: [docs/identity.md](docs/identity.md#proxies--uis-with-no-login-of-their-own).
+
 **Blueprints do not prune.** A role removed or renamed in values leaves its group, its members and its
 policy binding in place; delete the old group in the UI or it keeps granting access.
 

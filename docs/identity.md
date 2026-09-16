@@ -152,19 +152,20 @@ grant. "Remove their access" means removing the *lowest* membership they hold, n
 | `openbao` | `vault.server3.homelab.irha.cz` — **confidential**, see [OpenBao](#openbao) | admin → editor → reader | server3 production |
 | `postman` | none — a client, not an API | `user` (the access gate only) | one client, every environment |
 | `interactive-map` | none — an ESP32, `kind: device` | none of its own; holds `interactive-map-feeder.reader` | one client: server1 production + local |
+| `longhorn` | `longhorn.server2.homelab.irha.cz` — **`kind: proxy`**, see [Proxies](#proxies--uis-with-no-login-of-their-own) | `admin` (the access gate only) | server2 production |
 
 ## `kind` — what sort of client an entry is
 
 `kind` is **ours**, not Authentik's `client_type` (public/confidential), which is derived from it.
 
-| | `api` (default) | `client` | `device` |
-|---|---|---|---|
-| Who drives it | a human's browser | a human | a machine |
-| Authentik `client_type` | public — or confidential with `confidential: true` | public | **confidential** |
-| Grants | code + refresh | code | **client_credentials** |
-| Redirect URIs | derived from the host | `redirectUris` | **none** |
-| Roles claim from | its own groups | the human's groups at the target | **the role named in `accesses`** |
-| Environments | one Application each | **one client, spanning all** | **one client, spanning all** |
+| | `api` (default) | `client` | `device` | `proxy` |
+|---|---|---|---|---|
+| Who drives it | a human's browser | a human | a machine | a human's browser |
+| Authentik `client_type` | public — or confidential with `confidential: true` | public | **confidential** | confidential — **Authentik's choice, not ours** |
+| Grants | code + refresh | code | **client_credentials** | code + client_credentials + password, **all forced by Authentik** |
+| Redirect URIs | derived from the host | `redirectUris` | **none** | **derived by Authentik** from `external_host` |
+| Roles claim from | its own groups | the human's groups at the target | **the role named in `accesses`** | **nothing — no token ever reaches the app** |
+| Environments | one Application each | **one client, spanning all** | **one client, spanning all** | one Application each |
 
 The difference between `client` and `device` is *whose* groups fill the roles claim. A `client`
 borrows the human's, so it names bare applications. A `device` has no human, so each access names the
@@ -246,6 +247,81 @@ a day for one device. Fetch on expiry.
 applied. This is also why devices are not split into a second ConfigMap key to shorten the apply:
 `!KeyOf` does not cross blueprint files, and it would have to become `!Find` on group names — trading a
 render-time error for a runtime one.
+
+### Proxies — UIs with no login of their own
+
+Longhorn, Hubble and the Traefik dashboard authenticate nobody: anyone who could resolve the hostname
+had full control, and `curl` walks straight past whatever a frontend pretends to enforce. `kind: proxy`
+puts Authentik in front of the host itself.
+
+The mechanism is Authentik's **proxy provider** in `forward_single` mode plus an **outpost**. Traefik
+asks the outpost about every request through a forwardAuth Middleware: a 2xx passes to the UI, and
+anything else — the 302 to the login, a 403 for a non-member — goes back to the browser.
+
+```yaml
+  - name: longhorn
+    title: Longhorn
+    kind: proxy
+    hostPrefix: longhorn
+    roles:
+      - admin
+    environments:
+      - { cluster: server2, stage: production }
+```
+
+**One gate role, not a ladder.** These UIs have no RBAC of their own, so rungs would grant nothing they
+could tell apart. Membership of `<slug>-admin` *is* access to the UI — and like every other membership,
+it is UI work rather than git.
+
+**Authentik owns the OAuth2 half.** `ProxyProviderSerializer.create()` and `update()` both call
+`set_oauth_defaults()`, which rewrites `client_type`, `grant_types`, `signing_key`, `redirect_uris` and
+the property mappings on every apply. The chart therefore sets only `mode`, `external_host`, the two
+flows and `access_token_validity`; anything else would be overwritten by that same save, and the two
+writers would fight forever. Measured on the first apply: `client_type: confidential`, grants
+`authorization_code, client_credentials, password`, and the shipped
+openid/profile/email/entitlements/proxy mappings. That grant list is upstream's, not a choice of ours.
+The local `homelab profile` / `homelab roles` pair is **not** bound: nothing reads a token from a proxy
+provider, because the outpost holds the session and the UI behind it never sees one.
+
+**One outpost per cluster, deployed by hand.** Every cluster with a proxy entry gets
+`homelab-proxy-<cluster>`, and the chart writes its `providers` list whole — so a provider assigned to
+one of these outposts in the UI is dropped on the next apply. Assign in values, never there. The
+embedded outpost on server3 is deliberately unused: a guarded request on another cluster would cross to
+server3 through its Traefik, which trusts no forwarded headers, and the outpost picks its provider by
+`X-Forwarded-Host`.
+
+Per cluster that costs three objects, in that cluster's own `gitops/k8s-manifests/<cluster>/traefik/`:
+
+| Object | Why |
+|--------|-----|
+| `Deployment.authentik-outpost.yaml` | `ghcr.io/goauthentik/proxy`, tag pinned to Authentik's own `targetRevision` — **bump them together** |
+| `ExternalSecret.authentik-outpost.yaml` | the API token Authentik mints with the outpost, copied by hand into `secret/<cluster>/authentik-outpost` |
+| `ReferenceGrant.authentik-outpost.yaml` | lets guarded HTTPRoutes in other namespaces reach the outpost Service for the callback |
+
+And two per guarded UI, in that UI's own namespace:
+
+| Object | Why |
+|--------|-----|
+| `Middleware.authentik.yaml` | the forwardAuth call. It must live in the route's namespace — an HTTPRoute `ExtensionRef` is a local reference |
+| a second HTTPRoute rule | `/outpost.goauthentik.io/` straight to the outpost, unauthenticated. Without it the login callback is itself forward-authed and handed to the UI, so the login never completes |
+
+**Sessions last `proxyAccessTokenValidity` — eight hours.** Verified 2026-09-16 on longhorn.server2:
+the outpost's cookie came back `Max-Age=28801`. Long on purpose, because the UIs behind a proxy are XHR-
+and websocket-heavy and an expiry mid-page breaks them until a reload. It is also the revocation
+latency: removing someone from the gate group bites within eight hours, not at once.
+
+**Verifying a guarded host** — measured on the server2 canary, 2026-09-16:
+
+```bash
+# 302 to https://auth.irha.cz/application/o/authorize/?client_id=…
+curl -sI https://longhorn.server2.homelab.irha.cz/ | head -1
+# 204, answered by the outpost rather than the UI
+curl -s -o /dev/null -w '%{http_code}\n' \
+  https://longhorn.server2.homelab.irha.cz/outpost.goauthentik.io/ping
+```
+
+`ResolvedRefs=True` on the HTTPRoute is what says the cross-namespace callback was permitted. Without
+the ReferenceGrant it reads `RefNotPermitted` and the callback fails instead.
 
 ## Client-only applications — one token, several APIs
 
