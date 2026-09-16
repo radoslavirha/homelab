@@ -153,6 +153,8 @@ grant. "Remove their access" means removing the *lowest* membership they hold, n
 | `postman` | none — a client, not an API | `user` (the access gate only) | one client, every environment |
 | `interactive-map` | none — an ESP32, `kind: device` | none of its own; holds `interactive-map-feeder.reader` | one client: server1 production + local |
 | `longhorn` | `longhorn.<cluster>.homelab.irha.cz` — **`kind: proxy`**, see [Proxies](#proxies--uis-with-no-login-of-their-own) | `admin` (the access gate only) | server1 · server2 · server3, production |
+| `hubble` | `hubble.<cluster>.homelab.irha.cz` — **`kind: proxy`**, the Cilium flow UI in `kube-system` | `admin` (the access gate only) | server2 production |
+| `traefik` | `traefik.<cluster>.homelab.irha.cz` — **`kind: proxy`**, and the one guarded by an **IngressRoute** rather than an HTTPRoute | `admin` (the access gate only) | server2 production |
 
 ## `kind` — what sort of client an entry is
 
@@ -304,6 +306,17 @@ And two per guarded UI, in that UI's own namespace:
 |--------|-----|
 | `Middleware.authentik.yaml` | the forwardAuth call. It must live in the route's namespace — an HTTPRoute `ExtensionRef` is a local reference |
 | a second HTTPRoute rule | `/outpost.goauthentik.io/` straight to the outpost, unauthenticated. Without it the login callback is itself forward-authed and handed to the UI, so the login never completes |
+
+**The Traefik dashboard is the exception to that table.** Its route is not hand-written: the chart
+renders an IngressRoute, so the Middleware is attached through `ingressRoute.dashboard.middlewares`
+in `gitops/helm-values/<cluster>/traefik.yaml`, and the callback needs a whole HTTPRoute of its own
+(`k8s-manifests/<cluster>/traefik/HTTPRoute.authentik-outpost.yaml`) because the chart's `matchRule`
+covers only `/dashboard` and `/api`. Both objects sit in the `traefik` namespace beside the outpost,
+so no ReferenceGrant is involved. Guarding it matters for the same reason `api.insecure` is false:
+`/api/http/routers` returns every router, service and middleware in the cluster — verified
+unauthenticated on 2026-09-16, before the change.
+
+Guarded today: Longhorn on all three clusters, Hubble and the Traefik dashboard on server2.
 
 **Sessions last `proxyAccessTokenValidity` — eight hours.** Verified 2026-09-16 on longhorn.server2:
 the outpost's cookie came back `Max-Age=28801`. Long on purpose, because the UIs behind a proxy are XHR-
