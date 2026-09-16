@@ -287,13 +287,19 @@ applications:
   - name: longhorn
     title: Longhorn
     kind: proxy
-    # longhorn.<cluster>.homelab.irha.cz. server2 first: platform-only and the least used
-    # Longhorn, so it is the canary for the kind. server1 and server3 follow once it holds.
+    # longhorn.<cluster>.homelab.irha.cz. server2 was the canary for the kind on 2026-09-16
+    # (platform-only, the least used Longhorn); server1 and server3 followed once it held.
+    #
+    # One Application, provider and gate group per cluster, and each cluster's own outpost
+    # serves its own provider -- so losing one cluster's outpost locks that cluster's
+    # Longhorn and touches no other.
     hostPrefix: longhorn
     roles:
       - admin
     environments:
+      - { cluster: server1, stage: production }
       - { cluster: server2, stage: production }
+      - { cluster: server3, stage: production }
 
   # ---------------------------------------------------------------------------------
   # Devices. A machine identity, not a person -- no browser, no redirect, no password
