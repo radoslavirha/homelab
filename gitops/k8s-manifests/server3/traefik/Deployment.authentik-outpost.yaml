@@ -1,0 +1,81 @@
+---
+# Authentik proxy outpost for server3 — what Traefik's forwardAuth asks about every request to a
+# guarded UI on this cluster. It serves the `kind: proxy` providers assigned to the outpost
+# `homelab-proxy-server3` in gitops/helm-values/server3/authentik-blueprints.yaml, and fetches that
+# list from Authentik itself, so guarding another UI on this cluster needs no change here.
+#
+# Authentik runs on THIS cluster, yet this is still a dedicated outpost rather than the embedded one.
+# The embedded outpost is a managed object whose provider list is easy to have two writers for, and
+# keeping all three clusters the same shape means one runbook instead of two. Design:
+# docs/identity.md, "Proxies".
+#
+# AUTHENTIK_HOST is the public name even here, so this file is identical to the other clusters' and
+# the outpost's view of the issuer matches the browser's. It costs one hop out to Traefik and back.
+#
+# THE TAG MOVES WITH AUTHENTIK. Keep it equal to targetRevision in
+# gitops/argocd-manifests/server3/apps/identity/Authentik.yaml.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: authentik-outpost
+  namespace: traefik
+  labels:
+    app.kubernetes.io/name: authentik-outpost
+    app.kubernetes.io/component: forward-auth
+    app.kubernetes.io/part-of: authentik
+  annotations:
+    reloader.stakater.com/auto: "true"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: authentik-outpost
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: authentik-outpost
+        app.kubernetes.io/component: forward-auth
+        app.kubernetes.io/part-of: authentik
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: proxy
+          image: ghcr.io/goauthentik/proxy:2026.8.1
+          env:
+            - name: AUTHENTIK_HOST
+              value: https://auth.irha.cz
+            - name: AUTHENTIK_INSECURE
+              value: "false"
+            - name: AUTHENTIK_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: authentik-outpost
+                  key: AUTHENTIK_TOKEN
+          ports:
+            - name: http
+              containerPort: 9000
+              protocol: TCP
+            - name: http-metrics
+              containerPort: 9300
+              protocol: TCP
+          # The image's own Docker HEALTHCHECK. Readiness only, no liveness: an outpost that cannot
+          # reach Authentik should drop out of the Service — every guarded UI then fails closed with
+          # a 500 (measured on server2, 2026-09-16) — rather than restart in a loop.
+          readinessProbe:
+            exec:
+              command: ["/authentik", "healthcheck", "proxy"]
+            periodSeconds: 10
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 64Mi
+            limits:
+              memory: 256Mi

@@ -1,0 +1,23 @@
+---
+# Lets guarded HTTPRoutes in other namespaces send the login callback (/outpost.goauthentik.io/) to
+# the outpost Service in this namespace. Gateway API refuses a cross-namespace backendRef without a
+# grant — the route then reports ResolvedRefs=False, RefNotPermitted, and the login cannot complete.
+#
+# One `from` entry per guarded namespace: add kube-system when Hubble is guarded here. The Traefik
+# dashboard's IngressRoute already lives in `traefik` and needs none.
+#
+# v1beta1: the storage version of this CRD on these clusters. v1 is served too.
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: authentik-outpost
+  namespace: traefik
+spec:
+  from:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      namespace: longhorn-system
+  to:
+    - group: ""
+      kind: Service
+      name: authentik-outpost

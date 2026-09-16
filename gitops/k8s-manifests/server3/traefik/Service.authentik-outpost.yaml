@@ -1,0 +1,27 @@
+---
+# Two consumers, both Traefik:
+#   - every guarded route's forwardAuth Middleware calls
+#     http://authentik-outpost.traefik.svc.cluster.local:9000/outpost.goauthentik.io/auth/traefik
+#   - every guarded HTTPRoute sends /outpost.goauthentik.io/ (the login callback) here, which
+#     ReferenceGrant.authentik-outpost.yaml is what permits from other namespaces
+#
+# Only 9000. The image also listens on 9443 (TLS, unused — Traefik terminates) and 9300 (metrics,
+# not scraped yet).
+apiVersion: v1
+kind: Service
+metadata:
+  name: authentik-outpost
+  namespace: traefik
+  labels:
+    app.kubernetes.io/name: authentik-outpost
+    app.kubernetes.io/component: forward-auth
+    app.kubernetes.io/part-of: authentik
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: authentik-outpost
+  ports:
+    - name: http
+      port: 9000
+      targetPort: http
+      protocol: TCP
