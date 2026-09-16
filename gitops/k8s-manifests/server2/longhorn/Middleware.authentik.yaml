@@ -1,0 +1,32 @@
+---
+# Forward-auth for longhorn.server2.homelab.irha.cz. Before a request reaches Longhorn,
+# Traefik asks this cluster's Authentik proxy outpost about it: a 2xx lets it through,
+# anything else (the 302 to the login, a 403 for a non-member) goes back to the browser.
+#
+# Access is membership of `longhorn-server2-production-admin` in Authentik, rendered from the
+# `longhorn` entry in gitops/helm-values/server3/authentik-blueprints.yaml.
+#
+# HERE, not next to the outpost in `traefik`: an HTTPRoute ExtensionRef is a LOCAL reference,
+# so the Middleware has to live in the route's own namespace. Every guarded namespace gets
+# its own copy of this object, and they differ only in namespace.
+#
+# No authResponseHeaders. Longhorn has no idea who is logged in and would ignore
+# X-authentik-*; copying them upstream would only hand the backend the user's full
+# Authentik group list.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: authentik
+  namespace: longhorn-system
+  annotations:
+    # One wave ahead of HTTPRoute.yaml: Traefik rejects a route whose ExtensionRef points at
+    # a Middleware that does not exist yet.
+    argocd.argoproj.io/sync-wave: "99"
+spec:
+  forwardAuth:
+    address: http://authentik-outpost.traefik.svc.cluster.local:9000/outpost.goauthentik.io/auth/traefik
+    # The outpost picks the provider by X-Forwarded-Host and builds the post-login
+    # redirect from X-Forwarded-Proto/-Uri, so they must reach it. Nothing is trusted from
+    # the client: the websecure entrypoint has no forwardedHeaders.trustedIPs, so Traefik
+    # has already replaced whatever the browser sent before this middleware runs.
+    trustForwardHeader: true
