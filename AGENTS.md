@@ -567,6 +567,13 @@ the UI. Edit the matrix only:
    objects; the task log claims success either way.
 5. Add users to the new groups in the Authentik UI — memberships are deliberately not in git.
 
+**Removing one is two commits**, because blueprints do not prune — deleting the entry stops
+*managing* its objects rather than deleting them, which orphaned six providers with live credentials
+on 2026-09-13. First set `state: absent` on the entry and change nothing else (keep `roles` and
+`environments`: they name the groups and slugs to delete, and the chart refuses an absent entry
+without them). Let that apply land, confirming the objects are gone, then delete the entry in a
+second commit. A spent deletion entry is a no-op, so the second commit can wait.
+
 A **client** entry (`kind: client` — something a human drives that calls other applications' APIs)
 adds `accesses: [<app>, …]` and `redirectUris:` instead of a host: its token's `aud` names each target
 and its `roles` claim comes from the groups the human already holds there. A **device** entry

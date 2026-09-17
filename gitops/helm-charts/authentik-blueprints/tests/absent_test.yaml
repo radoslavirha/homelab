@@ -1,0 +1,387 @@
+suite: state absent
+templates:
+  - templates/configmap.yaml
+tests:
+  # ---------- what a removal renders ----------
+
+  - it: renders a deletion entry per object, Application before its provider
+    set:
+      applications:
+        - name: emqx
+          title: EMQX
+          hostPrefix: mqtt
+          state: absent
+          roles:
+            - name: admin
+              inherits: reader
+            - name: reader
+          environments:
+            - { cluster: server2, stage: production }
+    asserts:
+      - matchRegex:
+          path: data["homelab-applications.yaml"]
+          pattern: "- model: authentik_core.application\\n\\s+state: absent\\n\\s+identifiers:\\n\\s+slug: emqx-server2-production\\n"
+      # Application FIRST: Application.provider is a OneToOne with on_delete=SET_DEFAULT,
+      # so deleting the provider first would leave a provider-less Application behind.
+      - matchRegex:
+          path: data["homelab-applications.yaml"]
+          pattern: "slug: emqx-server2-production\\n[\\s\\S]*- model: authentik_providers_oauth2.oauth2provider\\n\\s+state: absent\\n\\s+identifiers:\\n\\s+name: emqx-server2-production\\n"
+      # Group.parents is m2m, so deleting a parent only drops the relation: every rung
+      # needs its own entry.
+      - matchRegex:
+          path: data["homelab-applications.yaml"]
+          pattern: "- model: authentik_core.group\\n\\s+state: absent\\n\\s+identifiers:\\n\\s+name: emqx-server2-production-admin\\n"
+      - matchRegex:
+          path: data["homelab-applications.yaml"]
+          pattern: "- model: authentik_core.group\\n\\s+state: absent\\n\\s+identifiers:\\n\\s+name: emqx-server2-production-reader\\n"
+
+  - it: renders the object nowhere else, so an apply does not create what it deletes
+    set:
+      applications:
+        - name: emqx
+          title: EMQX
+          hostPrefix: mqtt
+          state: absent
+          roles: [admin]
+          environments:
+            - { cluster: server2, stage: production }
+    asserts:
+      # No live entry: no ids to !KeyOf, no client_id, no bindings, no launch url.
+      - notMatchRegex:
+          path: data["homelab-applications.yaml"]
+          pattern: "id: (app|prov|grp)-emqx"
+      - notMatchRegex:
+          path: data["homelab-applications.yaml"]
+          pattern: "client_id: emqx"
+      - notMatchRegex:
+          path: data["homelab-applications.yaml"]
+          pattern: "authentik_policies.policybinding"
+      - notMatchRegex:
+          path: data["homelab-applications.yaml"]
+          pattern: "meta_launch_url"
+
+  - it: carries identifiers only, no attrs and no id
+    set:
+      applications:
+        - name: emqx
+          title: EMQX
+          hostPrefix: mqtt
+          state: absent
+          roles: [admin]
+          environments:
+            - { cluster: server2, stage: production }
+    asserts:
+      # The importer deletes what the identifiers find and does not need a valid
+      # serializer, so attrs would be noise that has to be kept correct forever.
+      - notMatchRegex:
+          path: data["homelab-applications.yaml"]
+          pattern: "state: absent\\n\\s+identifiers:\\n(\\s+\\S+: .*\\n)+\\s+attrs:"
+      - notMatchRegex:
+          path: data["homelab-applications.yaml"]
+          pattern: "state: absent\\n\\s+id:"
+
+  - it: deletes one Application per environment, local included
+    set:
+      applications:
+        - name: emqx
+          title: EMQX
+          hostPrefix: mqtt
+          state: absent
+          roles: [admin]
+          environments:
+            - { cluster: server2, stage: production }
+            - { cluster: server2, stage: sandbox }
+            - { stage: local }
+    asserts:
+      - matchRegex:
+          path: data["homelab-applications.yaml"]
+          pattern: "\\n\\s+slug: emqx-server2-production\\n"
+      - matchRegex:
+          path: data["homelab-applications.yaml"]
+          pattern: "\\n\\s+slug: emqx-server2-sandbox\\n"
+      - matchRegex:
+          path: data["homelab-applications.yaml"]
+          pattern: "\\n\\s+slug: emqx-local\\n"
+
+  - it: leaves a present application untouched beside an absent one
+    set:
+      applications:
+        - name: qr-manager
+          title: QR Manager
+          hostPrefix: apps
+          roles: [admin]
+          environments:
+            - { cluster: server1, stage: production }
+        - name: emqx
+          title: EMQX
+          hostPrefix: mqtt
+          state: absent
+          roles: [admin]
+          environments:
+            - { cluster: server1, stage: production }
+    asserts:
+      - matchRegex:
+          path: data["homelab-applications.yaml"]
+          pattern: "id: app-qr-manager-server1-production\\n"
+      - matchRegex:
+          path: data["homelab-applications.yaml"]
+          pattern: "client_id: qr-manager-server1-production\\n"
+      - matchRegex:
+          path: data["homelab-applications.yaml"]
+          pattern: "\\n\\s+slug: emqx-server1-production\\n"
+
+  - it: renders no removals at all when nothing is absent
+    set:
+      applications:
+        - name: qr-manager
+          title: QR Manager
+          hostPrefix: apps
+          roles: [admin]
+          environments:
+            - { cluster: server1, stage: production }
+    asserts:
+      - notMatchRegex:
+          path: data["homelab-applications.yaml"]
+          pattern: "state: absent"
+      - notMatchRegex:
+          path: data["homelab-applications.yaml"]
+          pattern: "REMOVED"
+
+  # ---------- the per-kind extras ----------
+
+  - it: deletes a client's own mapping pair, not the shared one
+    set:
+      applications:
+        - name: qr-manager
+          title: QR Manager
+          hostPrefix: apps
+          roles: [admin]
+          environments:
+            - { cluster: server1, stage: production }
+        - name: postman
+          title: Postman
+          kind: client
+          state: absent
+          accesses: [qr-manager]
+          redirectUris: [https://oauth.pstmn.io/v1/callback]
+          roles: [user]
+          environments:
+            - { cluster: server1, stage: production }
+    asserts:
+      # One object, not one per environment: a client spans them.
+      - matchRegex:
+          path: data["homelab-applications.yaml"]
+          pattern: "- model: authentik_core.application\\n\\s+state: absent\\n\\s+identifiers:\\n\\s+slug: postman\\n"
+      - matchRegex:
+          path: data["homelab-applications.yaml"]
+          pattern: "- model: authentik_providers_oauth2.scopemapping\\n\\s+state: absent\\n\\s+identifiers:\\n\\s+name: homelab profile \\(postman\\)\\n"
+      - matchRegex:
+          path: data["homelab-applications.yaml"]
+          pattern: "- model: authentik_providers_oauth2.scopemapping\\n\\s+state: absent\\n\\s+identifiers:\\n\\s+name: homelab roles \\(postman\\)\\n"
+      - matchRegex:
+          path: data["homelab-applications.yaml"]
+          pattern: "\\n\\s+name: postman-user\\n"
+      # The shared pair stays: every other provider binds it.
+      - notMatchRegex:
+          path: data["homelab-applications.yaml"]
+          pattern: "state: absent\\n\\s+identifiers:\\n\\s+name: homelab profile\\n"
+
+  - it: deletes a device's service account and none of its target's groups
+    set:
+      applications:
+        - name: qr-manager
+          title: QR Manager
+          hostPrefix: apps
+          roles: [admin]
+          environments:
+            - { cluster: server1, stage: production }
+        - name: old-sensor
+          title: Old Sensor
+          kind: device
+          state: absent
+          accesses:
+            - { app: qr-manager, role: admin }
+          environments:
+            - { cluster: server1, stage: production }
+    asserts:
+      - matchRegex:
+          path: data["homelab-applications.yaml"]
+          pattern: "- model: authentik_core.user\\n\\s+state: absent\\n\\s+identifiers:\\n\\s+username: ak-old-sensor-client_credentials\\n"
+      # A device carries its own mapping pair too, so it goes with it.
+      - matchRegex:
+          path: data["homelab-applications.yaml"]
+          pattern: "state: absent\\n\\s+identifiers:\\n\\s+name: homelab profile \\(old-sensor\\)\\n"
+      # A device declares no roles, so it owns no groups to delete.
+      - notMatchRegex:
+          path: data["homelab-applications.yaml"]
+          pattern: "name: old-sensor-[a-z]+\\n"
+      # The target keeps its group: other devices and humans may still be in it.
+      - notMatchRegex:
+          path: data["homelab-applications.yaml"]
+          pattern: "state: absent\\n\\s+identifiers:\\n\\s+name: qr-manager-server1-production-admin\\n"
+
+  - it: deletes a proxy through the proxyprovider model
+    set:
+      applications:
+        - name: hubble
+          title: Hubble
+          kind: proxy
+          state: absent
+          hostPrefix: hubble
+          roles: [admin]
+          environments:
+            - { cluster: server2, stage: production }
+    asserts:
+      - matchRegex:
+          path: data["homelab-applications.yaml"]
+          pattern: "- model: authentik_providers_proxy.proxyprovider\\n\\s+state: absent\\n\\s+identifiers:\\n\\s+name: hubble-server2-production\\n"
+      - notMatchRegex:
+          path: data["homelab-applications.yaml"]
+          pattern: "mode: forward_single"
+
+  # ---------- outposts ----------
+
+  - it: deletes the outpost of a cluster whose last proxy went absent
+    set:
+      applications:
+        - name: hubble
+          title: Hubble
+          kind: proxy
+          state: absent
+          hostPrefix: hubble
+          roles: [admin]
+          environments:
+            - { cluster: server2, stage: production }
+    asserts:
+      # Outpost.providers is m2m, so the provider deletion above only empties the list.
+      # Without this the outpost lingers, serving nothing.
+      - matchRegex:
+          path: data["homelab-applications.yaml"]
+          pattern: "- model: authentik_outposts.outpost\\n\\s+state: absent\\n\\s+identifiers:\\n\\s+name: homelab-proxy-server2\\n"
+
+  - it: keeps the outpost when the cluster still has a present proxy, and shrinks its list
+    set:
+      applications:
+        - name: longhorn
+          title: Longhorn
+          kind: proxy
+          hostPrefix: longhorn
+          roles: [admin]
+          environments:
+            - { cluster: server1, stage: production }
+        - name: traefik
+          title: Traefik
+          kind: proxy
+          state: absent
+          hostPrefix: traefik
+          roles: [admin]
+          environments:
+            - { cluster: server1, stage: production }
+    asserts:
+      - matchRegex:
+          path: data["homelab-applications.yaml"]
+          pattern: "id: outpost-server1\\n\\s+identifiers:\\n\\s+name: homelab-proxy-server1\\n\\s+attrs:\\n\\s+type: proxy\\n(\\s+#.*\\n)*\\s+providers:\\n\\s+- !KeyOf prov-longhorn-server1-production\\n\\s+config:\\n"
+      - notMatchRegex:
+          path: data["homelab-applications.yaml"]
+          pattern: "!KeyOf prov-traefik-server1-production"
+      - notMatchRegex:
+          path: data["homelab-applications.yaml"]
+          pattern: "state: absent\\n\\s+identifiers:\\n\\s+name: homelab-proxy-server1\\n"
+
+  # ---------- what a removal refuses ----------
+  # helm-unittest 0.4.4 has no errorPattern: errorMessage is compared whole.
+
+  - it: refuses an unknown state
+    set:
+      applications:
+        - name: emqx
+          title: EMQX
+          hostPrefix: mqtt
+          state: gone
+          roles: [admin]
+          environments:
+            - { cluster: server2, stage: production }
+    asserts:
+      - failedTemplate:
+          errorMessage: "application \"emqx\" has state \"gone\": must be \"present\" (the default) or \"absent\""
+
+  - it: refuses a present client that still points at an absent application
+    set:
+      applications:
+        - name: qr-manager
+          title: QR Manager
+          hostPrefix: apps
+          state: absent
+          roles: [admin]
+          environments:
+            - { cluster: server1, stage: production }
+        - name: postman
+          title: Postman
+          kind: client
+          accesses: [qr-manager]
+          redirectUris: [https://oauth.pstmn.io/v1/callback]
+          roles: [user]
+          environments:
+            - { cluster: server1, stage: production }
+    asserts:
+      - failedTemplate:
+          errorMessage: "application \"postman\" lists \"qr-manager\" in `accesses`, but \"qr-manager\" is `state: absent`: its objects are being deleted, so this client would carry a deleted application in its audience -- remove the access in the same commit"
+
+  - it: refuses a present device whose target is absent, before !KeyOf can fail at apply time
+    set:
+      applications:
+        - name: qr-manager
+          title: QR Manager
+          hostPrefix: apps
+          state: absent
+          roles: [admin]
+          environments:
+            - { cluster: server1, stage: production }
+        - name: sensor
+          title: Sensor
+          kind: device
+          accesses:
+            - { app: qr-manager, role: admin }
+          environments:
+            - { cluster: server1, stage: production }
+    asserts:
+      - failedTemplate:
+          errorMessage: "application \"sensor\" lists \"qr-manager\" in `accesses`, but \"qr-manager\" is `state: absent`: its objects are being deleted, so this client would carry a deleted application in its audience -- remove the access in the same commit"
+
+  # Stripping `roles` on the way out is the trap this rule exists for: the entry still
+  # renders, the Application and provider still go, and every role group is left behind --
+  # orphaned exactly like the objects the feature removes. It looks like it worked.
+  - it: still requires roles on an absent entry, because they name the groups to delete
+    set:
+      applications:
+        - name: emqx
+          title: EMQX
+          hostPrefix: mqtt
+          state: absent
+          environments:
+            - { cluster: server2, stage: production }
+    asserts:
+      - failedTemplate:
+          errorMessage: "application \"emqx\" is `state: absent` and declares no roles: the group names to delete are derived from `roles`, so this would delete the Application and the provider and leave every role group behind -- orphaned exactly like the objects this mechanism exists to remove. Keep the entry as it was and add nothing but `state: absent`"
+
+  - it: allows an absent device to declare no roles, since a device owns none
+    set:
+      applications:
+        - name: qr-manager
+          title: QR Manager
+          hostPrefix: apps
+          roles: [admin]
+          environments:
+            - { cluster: server1, stage: production }
+        - name: old-sensor
+          title: Old Sensor
+          kind: device
+          state: absent
+          accesses:
+            - { app: qr-manager, role: admin }
+          environments:
+            - { cluster: server1, stage: production }
+    asserts:
+      - matchRegex:
+          path: data["homelab-applications.yaml"]
+          pattern: "username: ak-old-sensor-client_credentials\\n"

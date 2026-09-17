@@ -201,6 +201,71 @@ data:
       {{- fail (printf "application names must be unique, got %v: two entries with one name render the same slugs, and the second silently overwrites the first" $appNames) }}
     {{- end }}
     {{- /*
+    ---------- `state`: how an entry is REMOVED ----------
+
+    Blueprints do not prune. Deleting an entry from the matrix stops MANAGING its objects;
+    it does not delete them. Measured on 2026-09-13, removing the IoT estate from server2:
+    six OAuth2 providers with live credentials were left behind, invisible to git, and had
+    to be deleted by hand in the Authentik UI.
+
+    So removal is two commits, not one:
+
+      1. set `state: absent` on the entry and leave everything else alone. The chart then
+         renders the same slugs it always did, as deletion entries, and Authentik deletes
+         the objects on the next apply.
+      2. once that apply has landed, delete the entry from the matrix entirely.
+
+    Step 2 is safe to forget and safe to delay: Authentik's ABSENT branch deletes the
+    instance if it finds one and logs "Entry to delete with no instance, skipping" if it
+    does not (read from the 2026.8.1 importer), so an absent entry that has already done
+    its work is a no-op on every subsequent apply.
+
+    What an absent entry must still carry: `roles` and `environments`. They are not
+    decoration -- they are how the chart knows which group names and which slugs to delete.
+    Strip them and the objects become unreachable by this chart forever. Every other
+    per-kind rule below therefore applies to absent entries unchanged.
+    */ -}}
+    {{- $absentNames := list }}
+    {{- range $a := .Values.applications }}
+      {{- $state := default "present" $a.state }}
+      {{- if not (has $state (list "present" "absent")) }}
+        {{- fail (printf "application %q has state %q: must be \"present\" (the default) or \"absent\"" $a.name $state) }}
+      {{- end }}
+      {{- if eq $state "absent" }}
+        {{- $absentNames = append $absentNames $a.name }}
+        {{- /*
+        Checked HERE, not in the rendering loop below: an absent entry skips that loop, so
+        the "no roles" rule that protects a live Application from being unbound never runs
+        for it. A different rule is needed anyway, because the danger is the opposite one.
+        An absent entry with no `roles` renders happily -- it deletes the Application and
+        the provider and simply emits no group entries, leaving every role group behind
+        with nothing in git managing them. That is the orphaning this whole mechanism
+        exists to prevent, and it would look like it had worked.
+        */ -}}
+        {{- if and (not $a.roles) (ne (default "api" $a.kind) "device") }}
+          {{- fail (printf "application %q is `state: absent` and declares no roles: the group names to delete are derived from `roles`, so this would delete the Application and the provider and leave every role group behind -- orphaned exactly like the objects this mechanism exists to remove. Keep the entry as it was and add nothing but `state: absent`" $a.name) }}
+        {{- end }}
+      {{- end }}
+    {{- end }}
+    {{- /*
+    A present client or device may not point at an absent application. Its audience and its
+    role table are baked from the target's slugs and role groups at render time, and a
+    device goes further: its service account's memberships are `!KeyOf grp-<target slug>-<role>`
+    references, which fail the WHOLE blueprint once those group entries are deletions rather
+    than objects. Refuse it here, where the message can say which pair is wrong.
+    */ -}}
+    {{- range $a := .Values.applications }}
+      {{- if eq (default "present" $a.state) "present" }}
+        {{- range $t := (default (list) $a.accesses) }}
+          {{- $tName := "" }}
+          {{- if kindIs "map" $t }}{{- $tName = $t.app }}{{- else }}{{- $tName = toString $t }}{{- end }}
+          {{- if has $tName $absentNames }}
+            {{- fail (printf "application %q lists %q in `accesses`, but %q is `state: absent`: its objects are being deleted, so this client would carry a deleted application in its audience -- remove the access in the same commit" $a.name $tName $tName) }}
+          {{- end }}
+        {{- end }}
+      {{- end }}
+    {{- end }}
+    {{- /*
     The SHARED `homelab roles` mapping strips `<client_id>-` off a group name, which is a
     prefix rule: if one api's name prefixed another's, a group of the longer would match
     the shorter and render a role out of the leftover. Broad clients enumerate exact pairs
@@ -327,14 +392,19 @@ data:
     apply: `!KeyOf` does not cross blueprint files. It would have to become `!Find` on
     group NAMES, trading a render-time error for a runtime one.)
     */ -}}
+    {{- /*
+    `state: absent` entries are skipped here and rendered as deletions at the very bottom
+    instead. They must not pass through this loop: it would emit the object and its
+    deletion in one blueprint, and the apply would create it again before removing it.
+    */ -}}
     {{- $orderedApps := list }}
     {{- range $a := .Values.applications }}
-      {{- if ne (default "api" $a.kind) "device" }}
+      {{- if and (ne (default "api" $a.kind) "device") (ne (default "present" $a.state) "absent") }}
         {{- $orderedApps = append $orderedApps $a }}
       {{- end }}
     {{- end }}
     {{- range $a := .Values.applications }}
-      {{- if eq (default "api" $a.kind) "device" }}
+      {{- if and (eq (default "api" $a.kind) "device") (ne (default "present" $a.state) "absent") }}
         {{- $orderedApps = append $orderedApps $a }}
       {{- end }}
     {{- end }}
@@ -995,11 +1065,22 @@ data:
     `providers` list on a non-embedded outpost anyway.
     */ -}}
     {{- $outposts := dict }}
+    {{- $absentClusters := dict }}
     {{- range $a := $root.Values.applications }}
       {{- if eq (default "api" $a.kind) "proxy" }}
         {{- range $e := $a.environments }}
-          {{- $slugs := default (list) (get $outposts $e.cluster) }}
-          {{- $_ := set $outposts $e.cluster (append $slugs (printf "%s-%s-%s" $a.name $e.cluster $e.stage)) }}
+          {{- if eq (default "present" $a.state) "absent" }}
+            {{- /*
+            Remembered, not listed. A cluster whose LAST proxy goes absent needs its
+            outpost deleted too -- Outpost.providers is m2m, so the provider deletions
+            below only empty the list and would leave an outpost serving nothing. A
+            cluster that still has a present proxy just renders a shorter list.
+            */ -}}
+            {{- $_ := set $absentClusters $e.cluster true }}
+          {{- else }}
+            {{- $slugs := default (list) (get $outposts $e.cluster) }}
+            {{- $_ := set $outposts $e.cluster (append $slugs (printf "%s-%s-%s" $a.name $e.cluster $e.stage)) }}
+          {{- end }}
         {{- end }}
       {{- end }}
     {{- end }}
@@ -1023,4 +1104,121 @@ data:
             # AUTHENTIK_HOST in its Deployment instead.
             authentik_host: {{ $root.Values.authentikHost }}
             authentik_host_insecure: false
+    {{- end }}
+
+    {{- /*
+    ---------- removals: `state: absent` ----------
+
+    Emitted LAST, and deliberately minimal: `model`, `state: absent` and the identifiers
+    that find the row. No `attrs`, no `id`.
+
+    No attrs, because the importer does not need a valid serializer to delete -- it reads
+    the instance the identifiers found and calls delete() on it ("For deleting objects we
+    don't need the serializer to be valid", 2026.8.1). No `id`, because `id` exists only
+    for `!KeyOf` to reference, and nothing may reference an object being deleted.
+
+    The order inside each slug is forced by the foreign keys, all read from the running
+    2026.8.1 models rather than assumed:
+
+      - Application FIRST. PolicyBinding.target and PolicyBinding.group are both CASCADE,
+        so deleting the Application deletes its bindings and they need no entries of their
+        own -- which is just as well, since bindings are identified by `!KeyOf`.
+      - the provider SECOND. Application.provider is a OneToOneField with
+        on_delete=SET_DEFAULT and null=True, so deleting the provider first would NOT
+        remove the Application; it would null the field and leave a provider-less
+        Application behind.
+      - the groups after both. Group.parents is m2m, so deleting a parent rung only drops
+        the relation -- every rung needs its own entry.
+
+    Each deletion is idempotent: with no instance found the importer logs "Entry to delete
+    with no instance, skipping". So these entries can sit here across as many applies as
+    it takes for someone to get round to the second commit.
+    */ -}}
+    {{- $absentApps := list }}
+    {{- range $a := $root.Values.applications }}
+      {{- if eq (default "present" $a.state) "absent" }}
+        {{- $absentApps = append $absentApps $a }}
+      {{- end }}
+    {{- end }}
+    {{- range $app := $absentApps }}
+      {{- $kind := default "api" $app.kind }}
+      {{- $isDevice := eq $kind "device" }}
+      {{- $isProxy := eq $kind "proxy" }}
+      {{- /* Same rule as above: a client or a device is ONE object spanning environments. */ -}}
+      {{- $isBroad := has $kind (list "client" "device") }}
+      {{- $roleNames := list }}
+      {{- range $r := (default (list) $app.roles) }}
+        {{- if kindIs "map" $r }}
+          {{- $roleNames = append $roleNames $r.name }}
+        {{- else }}
+          {{- $roleNames = append $roleNames (toString $r) }}
+        {{- end }}
+      {{- end }}
+      {{- $slugs := list }}
+      {{- if $isBroad }}
+        {{- $slugs = append $slugs $app.name }}
+      {{- else }}
+        {{- range $env := $app.environments }}
+          {{- $isLocal := eq (default "" $env.stage) "local" }}
+          {{- $slugs = append $slugs (printf "%s-%s" $app.name (ternary "local" (printf "%s-%s" (default "" $env.cluster) (default "" $env.stage)) $isLocal)) }}
+        {{- end }}
+      {{- end }}
+      {{- range $slug := $slugs }}
+
+      # ---------- {{ $slug }}: REMOVED, state: absent ----------
+      - model: authentik_core.application
+        state: absent
+        identifiers:
+          slug: {{ $slug }}
+
+      - model: {{ if $isProxy }}authentik_providers_proxy.proxyprovider{{ else }}authentik_providers_oauth2.oauth2provider{{ end }}
+        state: absent
+        identifiers:
+          name: {{ $slug }}
+        {{- if $roleNames }}
+        {{- range $role := $roleNames }}
+
+      - model: authentik_core.group
+        state: absent
+        identifiers:
+          name: {{ $slug }}-{{ $role }}
+        {{- end }}
+        {{- end }}
+        {{- if $app.accesses }}
+
+      # Anything with `accesses` -- a client OR a device -- carried its own copies of the
+      # two local mappings, named after its slug, so both go with it. The shared
+      # `homelab profile` / `homelab roles` pair is deliberately NOT touched: every other
+      # provider in this blueprint binds it.
+      - model: authentik_providers_oauth2.scopemapping
+        state: absent
+        identifiers:
+          name: homelab profile ({{ $slug }})
+
+      - model: authentik_providers_oauth2.scopemapping
+        state: absent
+        identifiers:
+          name: homelab roles ({{ $slug }})
+        {{- end }}
+        {{- if $isDevice }}
+
+      # The service account tokens were issued as. Deleting the user removes its
+      # memberships with it; the TARGET's role groups are left alone, which is the point --
+      # other devices and humans may still be in them.
+      - model: authentik_core.user
+        state: absent
+        identifiers:
+          username: ak-{{ $slug }}-client_credentials
+        {{- end }}
+      {{- end }}
+    {{- end }}
+    {{- range $cluster := keys $absentClusters | sortAlpha }}
+      {{- if not (hasKey $outposts $cluster) }}
+
+      # ---------- outpost: {{ $cluster }}: REMOVED, its last proxy went absent ----------
+      - model: authentik_outposts.outpost
+        state: absent
+        identifiers:
+          name: homelab-proxy-{{ $cluster }}
+      {{- end }}
     {{- end }}

@@ -649,6 +649,24 @@ and its binding. Delete the old group in the UI and re-add its members.
 - The import is **one transaction**, so the objects appear all at once at the end — an empty query
   midway means "still running", not "failed". Once it does run, the import itself took ~5 min for
   this matrix.
+- **Removing an application is TWO commits, because blueprints do not prune.** Deleting an entry
+  from the matrix stops *managing* its objects; it does not delete them. On 2026-09-13, removing the
+  IoT estate from server2 left six OAuth2 providers **with live credentials** behind — invisible to
+  git, and deleted by hand in the UI afterwards. So:
+  1. set `state: absent` on the entry and change **nothing else**. The chart re-renders the same
+     slugs as deletion entries — Application first (its policy bindings are CASCADE and go with
+     it), then the provider (`Application.provider` is `SET_DEFAULT`, so deleting it first would
+     leave a provider-less Application), then each role group (`Group.parents` is m2m, so a parent
+     deletion only drops the relation), plus a client's or device's own mapping pair, a device's
+     service account, and the cluster's outpost if its last proxy just went.
+  2. once that apply has landed, delete the entry from the matrix.
+
+  Keep `roles` and `environments` on the way out — they are how the chart knows which group names
+  and slugs to delete. The chart refuses an absent entry with no `roles` for exactly that reason,
+  and refuses a present client or device still naming an absent application in `accesses`.
+  Step 2 is safe to delay: Authentik's ABSENT branch deletes the instance if the identifiers find
+  one and logs *"Entry to delete with no instance, skipping"* if they do not, so a spent deletion
+  entry is a no-op on every later apply.
 - **Group parentage is a materialized view** (`authentik_core_groupancestry`), refreshed by a Postgres
   trigger on every parentage change. Nothing to configure, but if a claim looks stale after a
   parentage change, suspect that view rather than the mapping.

@@ -68,4 +68,15 @@ proxyAccessTokenValidity: hours=8
 # http://auth.irha.cz, and nothing here should inherit that.
 authentikHost: https://auth.irha.cz
 
+# REMOVING an application is two commits, because blueprints do not prune: deleting an
+# entry here stops managing its objects, it does not delete them. On 2026-09-13 that left
+# six OAuth2 providers with live credentials orphaned in Authentik, invisible to git.
+#
+#   1. set `state: absent` on the entry, changing nothing else. The chart re-renders the
+#      same slugs as deletion entries and Authentik deletes them on the next apply.
+#   2. after that apply lands, delete the entry from this file.
+#
+# Keep `roles` and `environments` on an absent entry -- they are how the chart knows which
+# group names and slugs to delete. An absent entry whose objects are already gone is a
+# no-op, so step 2 is safe to delay.
 applications: []
