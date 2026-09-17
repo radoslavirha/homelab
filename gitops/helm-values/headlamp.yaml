@@ -9,6 +9,20 @@ httpRoute:
     - name: traefik-gateway
       namespace: traefik
 
-# Default clusterRoleName is cluster-admin — full access needed for a cluster management UI.
+# NO ClusterRoleBinding for Headlamp's own ServiceAccount. Every user logs in through
+# Authentik (config.oidc in the per-cluster files) and acts as THEMSELVES: kube-apiserver
+# authenticates the forwarded id_token as oidc:<user>, and RBAC comes from
+# gitops/k8s-manifests/<cluster>/headlamp/ClusterRoleBinding.headlamp-oidc.yaml. See
+# docs/identity.md § Headlamp.
+#
+# The chart default binds this ServiceAccount to cluster-admin. That binding granted no
+# user anything, and it put a cluster-admin token in a LAN-reachable pod. Removed
+# 2026-09-17 after the apiserver audit logs on all three clusters showed ZERO requests
+# by system:serviceaccount:headlamp:headlamp -- across Headlamp restarting in OIDC mode
+# and active user sessions -- and after a server2 canary: pruned, the SA can no longer
+# list pods, and Headlamp came up with no errors.
+#
+# The ServiceAccount and its token mount stay (chart defaults): -in-cluster mode reads
+# the API server address and CA from that mount. Only the permissions are gone.
 clusterRoleBinding:
-  clusterRoleName: cluster-admin
+  create: false

@@ -15,6 +15,7 @@ config:
     clientID: headlamp-server3-production
     # NO clientSecret: public client + PKCE.
     issuerURL: https://auth.irha.cz/application/o/headlamp-server3-production/
-    scopes: "openid,profile,email,roles"
+    # No `openid`: Headlamp prepends it itself (listing it produced `openid openid`).
+    scopes: "profile,email,roles"
     callbackURL: https://headlamp.server3.homelab.irha.cz/oidc-callback
     usePKCE: true
