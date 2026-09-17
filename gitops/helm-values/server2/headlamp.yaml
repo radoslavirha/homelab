@@ -20,9 +20,23 @@ config:
     # `roles` is NOT implied by `profile` and must be asked for: it is the claim
     # kube-apiserver reads as the user's groups (--oidc-groups-claim=roles).
     # Comma-separated, which is Headlamp's format, not the space-separated OAuth one.
-    scopes: "openid,profile,email,roles"
+    # No `openid`: Headlamp prepends it itself, and listing it too produced
+    # `scope=openid openid profile email roles` on every login.
+    scopes: "profile,email,roles"
     # Explicit, not derived. Behind a proxy Headlamp builds the callback from
     # X-Forwarded-Proto, and without it emits http:// -- which then mismatches the
     # https redirect URI registered in Authentik and fails the login.
     callbackURL: https://headlamp.server2.homelab.irha.cz/oidc-callback
     usePKCE: true
+
+# CANARY for dropping Headlamp's own cluster-admin. With OIDC every user acts as
+# themselves, so the ServiceAccount's binding grants nobody anything -- it is just a
+# cluster-admin credential mounted in a LAN-reachable pod. The apiserver audit logs on
+# all three clusters showed ZERO requests by system:serviceaccount:headlamp:headlamp
+# across Headlamp restarting and active OIDC sessions (2026-09-17). Moves to the shared
+# file once server2 holds.
+#
+# The ServiceAccount and its token mount STAY: -in-cluster mode reads the API address
+# and CA from that mount. Only the permissions go.
+clusterRoleBinding:
+  create: false
