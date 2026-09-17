@@ -53,6 +53,22 @@ data "talos_machine_configuration" "controlplane" {
     [
       # Disable default CNI (Flannel) and kube-proxy — Cilium takes both over.
       file("${path.module}/patches/cilium.yaml"),
+      # Optional: make kube-apiserver trust an OIDC issuer (see var.apiserver_oidc).
+      # Controlplane only — a worker runs no kube-apiserver. Keys are quoted because
+      # HCL identifiers cannot contain dashes.
+      var.apiserver_oidc != null ? yamlencode({
+        cluster = {
+          apiServer = {
+            extraArgs = {
+              "oidc-issuer-url"      = var.apiserver_oidc.issuer_url
+              "oidc-client-id"       = var.apiserver_oidc.client_id
+              "oidc-username-claim"  = var.apiserver_oidc.username_claim
+              "oidc-username-prefix" = var.apiserver_oidc.username_prefix
+              "oidc-groups-claim"    = var.apiserver_oidc.groups_claim
+            }
+          }
+        }
+      }) : null,
       yamlencode({
         machine = {
           install = {
@@ -133,6 +149,22 @@ resource "talos_machine_configuration_apply" "controlplane" {
 
   client_configuration        = talos_machine_secrets.this.client_configuration
   machine_configuration_input = data.talos_machine_configuration.controlplane[count.index].machine_configuration
+
+  # Never reboot a node as a side effect of a config change. The provider's own
+  # description: "performs a dry-run and uses 'staged' mode if reboot is needed,
+  # 'auto' otherwise" — so a reboot-requiring change is written and applied on the
+  # next reboot instead of rebooting now. Unset, the default is 'auto', which
+  # reboots whenever the change cannot be applied live.
+  #
+  # This matters most on server3: a reboot reseals OpenBao, and it then needs 3 of
+  # 5 unseal keys entered by hand before ESO can serve any secret to any cluster.
+  # Every cluster here has a SINGLE control plane, so there is no HA cushion either.
+  #
+  # The cost: a change that does need a reboot applies SILENTLY LATER rather than
+  # failing now. After an apply that touches machine config, check whether it was
+  # staged (`talosctl get machineconfig` still shows the old value) before
+  # concluding the change is live.
+  apply_mode = "staged_if_needing_reboot"
   node                        = var.controlplane_ips[count.index]
   endpoint                    = var.controlplane_ips[count.index]
 
@@ -149,6 +181,11 @@ resource "talos_machine_configuration_apply" "worker" {
 
   client_configuration        = talos_machine_secrets.this.client_configuration
   machine_configuration_input = data.talos_machine_configuration.worker[count.index].machine_configuration
+
+  # Same reasoning as the controlplane resource above: no config change may reboot
+  # a node on its own. There are no workers in this fleet today, so this is here to
+  # keep the two paths identical rather than because it currently does anything.
+  apply_mode = "staged_if_needing_reboot"
   node                        = var.worker_ips[count.index]
   endpoint                    = var.worker_ips[count.index]
 

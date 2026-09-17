@@ -271,6 +271,40 @@ applications:
       - { cluster: server3, stage: production }
       - { stage: local }
 
+  - name: headlamp
+    title: Headlamp
+    # headlamp.<cluster>.homelab.irha.cz -- the Kubernetes UI, one per cluster.
+    hostPrefix: headlamp
+    # Headlamp's callback is fixed at /oidc-callback (upstream docs,
+    # installation/in-cluster/oidc.md). logoutPath stays the default (/).
+    redirectPath: /oidc-callback
+    # PUBLIC + PKCE, not `confidential: true`. Verified against chart 0.45.0 on
+    # 2026-09-17: leaving config.oidc.clientSecret empty omits -oidc-client-secret
+    # from the args entirely and the generated Secret carries no clientSecret key, so
+    # -oidc-use-pkce is the whole credential. That keeps server1 and server2 free of
+    # any ESO wiring back to server3's OpenBao for this app.
+    #
+    # UNLIKE every other entry here, Headlamp's token is not verified by an app of
+    # ours -- it is forwarded to kube-apiserver, which accepts or rejects it. So each
+    # cluster's apiServer must trust ITS OWN provider: see `apiserver_oidc` in
+    # iac/modules/bootstrap, set per cluster. issuer_mode is per_provider, so a token
+    # minted for one cluster fails on `iss` at another.
+    #
+    # The `roles` claim (headlamp.admin / .editor / .reader) is what Kubernetes reads
+    # as the user's GROUPS, bound to cluster-admin / edit / view by
+    # gitops/k8s-manifests/<cluster>/headlamp/ClusterRoleBinding.headlamp-oidc.yaml.
+    # Renaming a rung here changes a Kubernetes group name -- update both together.
+    roles:
+      - name: admin
+        inherits: editor
+      - name: editor
+        inherits: reader
+      - name: reader
+    environments:
+      - { cluster: server1, stage: production }
+      - { cluster: server2, stage: production }
+      - { cluster: server3, stage: production }
+
   # ---------------------------------------------------------------------------------
   # Proxies. A UI with no login of its own, so anyone who resolves its hostname has full
   # control of it. `kind: proxy` puts Authentik in front: a proxy provider in

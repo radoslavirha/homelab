@@ -122,6 +122,57 @@ variable "longhorn_disks" {
   # }
 }
 
+# ── kube-apiserver OIDC ──────────────────────────────────────────────────────
+# Makes THIS cluster's kube-apiserver trust an Authentik provider, so a human's
+# id_token is a Kubernetes identity and RBAC applies to it. Headlamp does not
+# authorize anything itself: it forwards the token and the API SERVER accepts or
+# rejects it, which is why this is machine config rather than a Helm value.
+#
+# Typed rather than a free-form patch list, deliberately. A generic
+# `extra_config_patches` would let anything into the machine config, and it would
+# make "this cluster's config is unchanged" unprovable. Left null the module
+# renders exactly what it rendered before.
+#
+# extraArgs, NOT a structured AuthenticationConfiguration. Verified against the
+# v1.13.10 schema on 2026-09-17: `cluster.apiServer.extraArgs` with these keys is
+# "valid for metal mode", while `cluster.apiServer.authenticationConfig` is
+# rejected as an unknown key. Structured authentication — which supports several
+# issuers and CEL claim mappings — needs Talos 1.14, so revisit this when that
+# upgrade lands.
+#
+# ONE issuer per cluster is all extraArgs can express, which suits the topology:
+# each cluster trusts its own `headlamp-<cluster>-production` provider and no
+# other. issuer_mode is per_provider in Authentik, so the URL carries the
+# client_id and a token minted for another cluster fails on `iss`.
+variable "apiserver_oidc" {
+  type = object({
+    issuer_url      = string
+    client_id       = string
+    username_claim  = optional(string, "sub")
+    username_prefix = optional(string, "oidc:")
+    groups_claim    = optional(string, "roles")
+  })
+  description = "Make kube-apiserver trust an OIDC issuer for user authentication. Null (the default) renders no apiServer authentication config at all."
+  default     = null
+
+  # A prefix is not cosmetic: without one, an OIDC username could collide with a
+  # real ServiceAccount or certificate subject, and a token would inherit RBAC it
+  # was never granted. Kubernetes requires the claim too, so both are enforced.
+  validation {
+    condition     = var.apiserver_oidc == null ? true : (trimspace(var.apiserver_oidc.username_claim) != "" && trimspace(var.apiserver_oidc.username_prefix) != "")
+    error_message = "apiserver_oidc.username_claim and username_prefix must both be non-empty: an unprefixed OIDC username can collide with a ServiceAccount or certificate subject and inherit its RBAC."
+  }
+
+  # `roles` is this estate's claim (RFC 9068's spelling), emitted by the shared
+  # `homelab roles` scope mapping as <app>.<role>. The ClusterRoleBindings in
+  # gitops/k8s-manifests/<cluster>/headlamp/ bind those exact strings, so an empty
+  # groups claim would authenticate everyone into no groups at all.
+  validation {
+    condition     = var.apiserver_oidc == null ? true : trimspace(var.apiserver_oidc.groups_claim) != ""
+    error_message = "apiserver_oidc.groups_claim must be non-empty: with no groups claim every login authenticates successfully and lands in no group, so no RoleBinding matches."
+  }
+}
+
 # ── Credentials output directory ─────────────────────────────────────────────
 variable "credentials_dir" {
   type        = string

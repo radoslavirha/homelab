@@ -30,6 +30,17 @@ spec:
         - repoURL: https://github.com/radoslavirha/homelab
           targetRevision: HEAD
           ref: values
+        # Cluster-scoped RBAC for OIDC logins: the ClusterRoleBindings that map the
+        # `roles` claim (headlamp.admin / .editor / .reader) onto cluster-admin / edit
+        # / view. They belong to Headlamp rather than to a shared RBAC app because
+        # they are meaningless without this release and its apiserver_oidc.
+        #
+        # The directory must exist for EVERY cluster in the generator, even one whose
+        # apiserver does not trust the issuer yet -- a source path that does not exist
+        # makes the Application error. Bindings for groups nobody holds are inert.
+        - repoURL: https://github.com/radoslavirha/homelab
+          targetRevision: HEAD
+          path: gitops/k8s-manifests/{{cluster}}/headlamp
       destination:
         server: '{{clusterServer}}'
         namespace: headlamp

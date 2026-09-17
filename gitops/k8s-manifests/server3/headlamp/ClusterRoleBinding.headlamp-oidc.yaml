@@ -1,0 +1,80 @@
+---
+# Kubernetes RBAC for a Headlamp login on server3.
+#
+# Headlamp authorizes nothing itself: it forwards the id_token to kube-apiserver, and
+# the API SERVER decides. So these bindings are the whole of what an OIDC user can do
+# here, and they are the other half of `apiserver_oidc` in iac/clusters/server3/bootstrap
+# -- without that, no token authenticates and these bind groups nobody is ever in.
+#
+# server3 LAST for this change, not first: it is the ArgoCD hub and ESO's path to
+# OpenBao, and its kube-apiserver restarting takes the thing that reconciles the other
+# two clusters with it.
+#
+# The group strings are the `roles` claim emitted by the shared `homelab roles` scope
+# mapping as <app>.<role>, read by kube-apiserver through --oidc-groups-claim=roles.
+# They carry NO cluster or stage, by design: a token minted for another cluster is
+# rejected on `iss` long before a group is looked at (issuer_mode is per_provider).
+#
+# There is no groups prefix, so these are the literal claim values. The USERNAME is
+# prefixed (`oidc:`), which is what keeps an OIDC identity from colliding with a
+# ServiceAccount or certificate subject and inheriting its RBAC.
+#
+# Membership of headlamp-server3-production-admin in Authentik is what puts someone in
+# `headlamp.admin` here. Memberships are UI work, deliberately not in git.
+#
+# Upstream ClusterRoles, not hand-written ones: cluster-admin, edit and view are
+# Kubernetes' own aggregated defaults, so they track API additions without edits here.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: headlamp-oidc-admin
+  labels:
+    app.kubernetes.io/name: headlamp
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/part-of: authentik
+subjects:
+  - kind: Group
+    name: headlamp.admin
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: ClusterRole
+  name: cluster-admin
+  apiGroup: rbac.authorization.k8s.io
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: headlamp-oidc-editor
+  labels:
+    app.kubernetes.io/name: headlamp
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/part-of: authentik
+subjects:
+  - kind: Group
+    name: headlamp.editor
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  # `edit` can write workloads but cannot touch RBAC or most cluster-scoped objects.
+  kind: ClusterRole
+  name: edit
+  apiGroup: rbac.authorization.k8s.io
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: headlamp-oidc-reader
+  labels:
+    app.kubernetes.io/name: headlamp
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/part-of: authentik
+subjects:
+  - kind: Group
+    name: headlamp.reader
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  # `view` is read-only and, unlike `edit`, excludes Secrets.
+  kind: ClusterRole
+  name: view
+  apiGroup: rbac.authorization.k8s.io
