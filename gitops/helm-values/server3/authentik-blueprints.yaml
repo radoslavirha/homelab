@@ -310,7 +310,9 @@ applications:
     roles:
       - admin
     environments:
+      - { cluster: server1, stage: production }
       - { cluster: server2, stage: production }
+      - { cluster: server3, stage: production }
 
   - name: traefik
     title: Traefik Dashboard
@@ -326,7 +328,9 @@ applications:
     roles:
       - admin
     environments:
+      - { cluster: server1, stage: production }
       - { cluster: server2, stage: production }
+      - { cluster: server3, stage: production }
 
   # ---------------------------------------------------------------------------------
   # Devices. A machine identity, not a person -- no browser, no redirect, no password
