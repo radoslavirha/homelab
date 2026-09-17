@@ -149,6 +149,7 @@ grant. "Remove their access" means removing the *lowest* membership they hold, n
 | `homelab-dashboard` | `dashboard.server3.homelab.irha.cz` | admin → editor → reader | server3 production, + local |
 | `argocd` | `argocd.server3.homelab.irha.cz` | admin → editor → reader | server3 production |
 | `grafana` | `grafana.irha.cz` | admin → editor → reader | server3 production |
+| `headlamp` | `headlamp.<cluster>.homelab.irha.cz` — the token goes to **kube-apiserver**, see [Headlamp](#headlamp) | admin → editor → reader, bound to `cluster-admin` / `edit` / `view` | server1 · server2 · server3, production |
 | `openbao` | `vault.server3.homelab.irha.cz` — **confidential**, see [OpenBao](#openbao) | admin → editor → reader | server3 production |
 | `postman` | none — a client, not an API | `user` (the access gate only) | one client, every environment |
 | `interactive-map` | none — an ESP32, `kind: device` | none of its own; holds `interactive-map-feeder.reader` | one client: server1 production + local |
@@ -577,6 +578,67 @@ OpenBao keeps the old secret. Between *Regenerate* and the apply, every OIDC log
 use". Import it (`terraform import module.vault_config.vault_jwt_auth_backend.oidc oidc`, and likewise the
 role, policies, groups and aliases) or disable it first. Never disable ESO's `kubernetes-*` mounts that
 way: that breaks every ExternalSecret.
+
+## Headlamp
+
+Headlamp authorizes **nothing** itself. It forwards the id_token to kube-apiserver, and the API server
+accepts or rejects it. So "Headlamp OIDC" is three pieces, one per layer, and all three must agree:
+
+| Layer | Where | What |
+|-------|-------|------|
+| Authentik | `headlamp` entry in the matrix | one **public** client per cluster, callback `/oidc-callback` |
+| kube-apiserver | `apiserver_oidc` in `iac/clusters/<cluster>/bootstrap/main.tf` | trusts **that cluster's** issuer only |
+| Kubernetes RBAC | `gitops/k8s-manifests/<cluster>/headlamp/ClusterRoleBinding.headlamp-oidc.yaml` | `headlamp.admin/editor/reader` → `cluster-admin` / `edit` / `view` |
+
+plus `config.oidc` in `gitops/helm-values/<cluster>/headlamp.yaml` for Headlamp itself.
+
+The identity kube-apiserver builds: username `oidc:<authentik username>` (claim `sub`, prefixed so it can
+never collide with a ServiceAccount), groups from the `roles` claim with **no** prefix. The bindings name
+those claim values literally, so renaming a rung in the matrix renames a Kubernetes group.
+
+**Public + PKCE, not confidential.** Chart 0.45.0 omits `-oidc-client-secret` entirely when
+`clientSecret` is empty, so there is no secret to wire from OpenBao to server1 or server2.
+
+**extraArgs, not structured authentication.** Talos 1.13's schema rejects
+`cluster.apiServer.authenticationConfig` as an unknown key (checked with a pinned v1.13.10 `talosctl`,
+not the local 1.14 client). `--oidc-*` flags allow one issuer per apiserver, which is exactly the
+topology. Revisit after the Talos 1.14 upgrade.
+
+**Order matters, per cluster:** blueprint → apiserver → Headlamp values. Headlamp values landing before
+the apiserver trusts the issuer means a 401 on every login.
+
+Rolled out 2026-09-17, server2 → server1 → server3.
+
+### Traps
+
+- **The issuer's trailing slash is load-bearing.** kube-apiserver compares `--oidc-issuer-url` to `iss`
+  exactly. Check against the live document:
+  `curl -s https://auth.irha.cz/application/o/headlamp-<cluster>-production/.well-known/openid-configuration`.
+- **Set `callbackURL` explicitly.** Behind a proxy Headlamp derives it from `X-Forwarded-Proto`, and a
+  derived `http://` fails Authentik's strict match.
+- **Ask for `roles`.** It is not implied by `profile`; without it every login lands in no group and RBAC
+  grants nothing.
+- **"Modifications complete after 0s" does not mean staged.** The apply is async; kube-apiserver restarts
+  after Terraform returns. And a genuinely staged change would also return instantly. Check the node.
+- **The kube-apiserver mirror pod lies.** On Talos, `kubectl get pod kube-apiserver-… -o yaml` kept its
+  old UID, a start time days old and no `--oidc` flags long after the restart. It cannot verify flags.
+
+### Verifying
+
+```bash
+TC=iac/clusters/<cluster>/credentials/talosconfig; IP=<node ip>
+# the flags the running apiserver was started with -- NOT the mirror pod
+talosctl --talosconfig $TC -n $IP -e $IP get staticpods kube-apiserver -o yaml | grep -- --oidc
+# the authenticator initialising
+talosctl --talosconfig $TC -n $IP -e $IP logs -k kube-system/<apiserver pod>:kube-apiserver | grep 'OIDC:'
+# RBAC, without any token
+kubectl auth can-i delete pods -A --as=oidc:probe --as-group=headlamp.reader   # no
+# after a real login: the API server's own record of who it was
+talosctl --talosconfig $TC -n $IP -e $IP read /var/log/audit/kube/kube-apiserver.log | grep '"username":"oidc:'
+```
+
+In zsh, spell the `talosctl` flags out. Packing them into one variable (`T="--talosconfig … -n …"`)
+passes a single argument, and every call fails silently with empty output.
 
 ## Adding an application
 

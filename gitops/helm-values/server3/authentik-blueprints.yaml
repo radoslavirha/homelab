@@ -205,7 +205,7 @@ applications:
     # Public + PKCE, same as every other api-kind entry: Grafana's own backend does the
     # code exchange, but its own shipped defaults.ini ships client_secret empty and its
     # bundled devenv docs run this exact shape against Authentik -- no `confidential`
-    # needed here, unlike Headlamp.
+    # needed here. OpenBao is the only confidential api entry (see its own reasoning).
     roles:
       - name: admin
         inherits: editor

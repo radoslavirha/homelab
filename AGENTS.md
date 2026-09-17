@@ -108,7 +108,7 @@ gitops/
       emqx.yaml             server1 EMQX overrides
       external-dns.yaml     domainFilters, txtOwnerId
       external-secrets.yaml cluster-specific overrides
-      headlamp.yaml         hostname: headlamp.server1.homelab.irha.cz
+      headlamp.yaml         hostname + config.oidc (public client, PKCE) for headlamp.server1.homelab.irha.cz
       influxdb2.yaml        server1 Longhorn storageClass overrides
       mongodb.yaml          server1 overrides
       k8s-monitoring.yaml   server1 cluster name + OTLP destination to server3
@@ -120,7 +120,7 @@ gitops/
       cert-manager.yaml     cluster-specific overrides
       external-dns.yaml     domainFilters, txtOwnerId
       external-secrets.yaml cluster-specific overrides
-      headlamp.yaml         hostname: headlamp.server2.homelab.irha.cz
+      headlamp.yaml         hostname + config.oidc (public client, PKCE) for headlamp.server2.homelab.irha.cz
       k8s-monitoring.yaml   server2 cluster name + OTLP destination to server3
       reloader.yaml         cluster-specific overrides
       traefik.yaml          dashboard hostname/IP, externalIPs, statusAddress.ip.
@@ -129,7 +129,7 @@ gitops/
       argocd.yaml           ArgoCD helm overrides
       external-dns.yaml     domainFilters, txtOwnerId
       external-secrets.yaml cluster-specific overrides (currently empty)
-      headlamp.yaml         hostname: headlamp.server3.homelab.irha.cz
+      headlamp.yaml         hostname + config.oidc (public client, PKCE) for headlamp.server3.homelab.irha.cz
       traefik.yaml          dashboard hostname/IP, externalIPs, statusAddress.ip, OTLP tracing endpoint
       prometheus.yaml       server3 overrides (currently empty)
       grafana.yaml          server3 overrides: extraSecretMounts for influxdb2-grafana secret
@@ -187,6 +187,7 @@ gitops/
       network-policies/ production/ and sandbox/ — default-deny + the egress allow-list (manual-sync)
       k8s-monitoring/ ExternalSecret.otel-auth-token.yaml (shared OTLP bearer token pulled from secret/otel-gateway/auth-token)
       traefik/     Certificate.server1-tls.yaml → Secret server1-tls for the websecure listener; the Authentik proxy outpost (Deployment/Service/ExternalSecret/ReferenceGrant) + Middleware.authentik.yaml and HTTPRoute.authentik-outpost.yaml guarding the dashboard
+      headlamp/    ClusterRoleBinding.headlamp-oidc.yaml — headlamp.admin/editor/reader → cluster-admin/edit/view (delivered by the Headlamp AppSet)
     server2/              platform only since 2026-09-13
       cilium/              HTTPRoute: hubble.server2.homelab.irha.cz → hubble-dashboard:80 (forward-auth), Middleware.authentik.yaml
       cert-manager/        ExternalSecret (cloudflare-api-token), ClusterIssuer letsencrypt-staging + letsencrypt-prod (ACME DNS-01 via Cloudflare)
@@ -195,6 +196,7 @@ gitops/
       longhorn/    HTTPRoute: longhorn.server2.homelab.irha.cz → longhorn-frontend:80 (forward-auth), Middleware.authentik.yaml
       k8s-monitoring/ ExternalSecret.otel-auth-token.yaml (shared OTLP bearer token pulled from secret/otel-gateway/auth-token)
       traefik/     Certificate.server2-tls.yaml → Secret server2-tls for the websecure listener; the Authentik proxy outpost (Deployment/Service/ExternalSecret/ReferenceGrant) + Middleware.authentik.yaml and HTTPRoute.authentik-outpost.yaml guarding the dashboard
+      headlamp/    ClusterRoleBinding.headlamp-oidc.yaml — headlamp.admin/editor/reader → cluster-admin/edit/view (delivered by the Headlamp AppSet)
     server3/
       cilium/              HTTPRoute: hubble.server3.homelab.irha.cz → hubble-dashboard:80 (forward-auth), Middleware.authentik.yaml
       cert-manager/        ExternalSecret (cloudflare-api-token), ClusterIssuer letsencrypt-staging + letsencrypt-prod (ACME DNS-01 via Cloudflare)
@@ -205,6 +207,7 @@ gitops/
       grafana/             ExternalSecret (grafana-admin), ExternalSecret (influxdb2-grafana), datasource ConfigMaps (prometheus/loki/tempo/influxdb2), dashboard ConfigMaps (traefik-opentelemetry, platform, loxone), HTTPRoute: grafana.irha.cz
       k8s-monitoring/      HTTPRoute: otel.server3.homelab.irha.cz → alloy-receiver:4318, IngressRouteTCP (otel gRPC :4317, plaintext)
       traefik/             Certificate.server3-tls.yaml → Secret server3-tls for the websecure listener; the Authentik proxy outpost (Deployment/Service/ExternalSecret/ReferenceGrant) + Middleware.authentik.yaml and HTTPRoute.authentik-outpost.yaml guarding the dashboard
+      headlamp/            ClusterRoleBinding.headlamp-oidc.yaml — headlamp.admin/editor/reader → cluster-admin/edit/view (delivered by the Headlamp AppSet)
 docs/             Architecture decisions, IaC guide, secrets guide, observability guide
 ```
 
@@ -347,6 +350,16 @@ talosctl upgrade --preserve --nodes <ip> \
 Do **not** bump `talos_secrets_contract` to do it. That variable exists precisely so the OS version
 and the PKI generation contract can no longer move together; it is additionally protected by
 `ignore_changes`.
+
+**Machine-config applies never reboot a node.** Both `talos_machine_configuration_apply` resources set
+`apply_mode = "staged_if_needing_reboot"` (it was unset, i.e. `auto`, before 2026-09-17). A change that
+needs a reboot is staged for the next one instead — so after an apply, check the node before believing
+the change is live. On server3 an unplanned reboot reseals OpenBao.
+
+**`apiserver_oidc`** (typed, optional, null by default) makes a cluster's kube-apiserver trust an
+Authentik issuer — Headlamp's. It restarts kube-apiserver (about a minute of refused connections), not
+the node. Runbook and traps: [`docs/identity.md`](docs/identity.md) § Headlamp. Do not verify apiserver
+flags from the mirror pod object; it stays stale on Talos.
 
 Terraform version variables are matched by a custom manager via `# renovate:` comment annotations
 directly above each variable — see [`iac/clusters/server1/platform/main.tf`](iac/clusters/server1/platform/main.tf).

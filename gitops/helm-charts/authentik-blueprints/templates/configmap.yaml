@@ -141,9 +141,12 @@ data:
 
     `confidential: true` on a kind: api entry -- a human still logs in via redirect, but
     the app's OWN backend does the code exchange and can hold a secret server-side, unlike
-    a browser SPA, which cannot keep one at all (Grafana's `auth.generic_oauth`, Headlamp's
-    `config.oidc` -- both run the exchange in their own backend and both ship examples that
-    set a secret). `client_type` becomes confidential and grant stays authorization_code --
+    a browser SPA, which cannot keep one at all. Use it only when the app REFUSES to run
+    without a secret: OpenBao's jwt/oidc method rejects an oidc_client_id with no
+    oidc_client_secret and has no PKCE-only mode. A backend that does the exchange is not
+    reason enough on its own -- Grafana and Headlamp both do, and both run public + PKCE
+    (Headlamp verified 2026-09-17: chart 0.45.0 omits -oidc-client-secret entirely when it
+    is empty). `client_type` becomes confidential and grant stays authorization_code --
     everything else about an api-kind entry (one Application per environment, host
     derivation, roles, redirect_uris) is unchanged.
 

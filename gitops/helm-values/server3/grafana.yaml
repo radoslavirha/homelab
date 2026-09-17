@@ -5,7 +5,8 @@
 # oidc.config in server3/argocd.yaml. Grafana's own backend does the code exchange, but
 # its shipped defaults.ini ships client_secret empty and grafana/grafana's own bundled
 # devenv docs run this exact shape against Authentik, so no confidential client is
-# needed here (unlike Headlamp — see docs/identity.md).
+# needed here. Headlamp turned out to be the same shape (public + PKCE, verified
+# 2026-09-17 — see docs/identity.md); OpenBao is the only confidential api client.
 #
 # client_id is the rendered slug: <app>-<cluster>-<stage>, no `local` environment
 # exists for this application (see gitops/helm-values/server3/authentik-blueprints.yaml).
