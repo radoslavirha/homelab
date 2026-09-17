@@ -630,12 +630,25 @@ and its binding. Delete the old group in the UI and re-add its members.
   even though the content is fine — observed repeatedly on 2026-09-09, recovering to `successful` on
   the next uncontended scheduled run. Reach for a manual apply only to read an error message, and
   expect the status to flap while you do.
-- **A blueprint takes ~15 minutes to land, not seconds** (measured 2026-09-08). ConfigMap propagation
-  into the worker's volume is ~1 min, Authentik's discovery timer is the long pole at ~10 min, and the
-  import itself ran ~5 min for this matrix. The import is **one transaction**, so the objects appear
-  all at once at the end — an empty query midway means "still running", not "failed". `ak
-  apply_blueprint <path>` forces a run but is no faster, and it contends on row locks with the
-  scheduled apply if both are in flight.
+- **Discovery is a cron, not a timer, and it applies only on a changed hash.**
+  `blueprints_discovery` runs at `57 * * * *` (read from `Schedule.objects` on 2026-09-17), computes
+  the mounted file's hash, and applies only if it moved. So a push can wait up to an hour, and
+  `BlueprintInstance.last_applied` reading ten hours old is **correct**, not stuck. An earlier version
+  of this line said "~15 minutes, the discovery timer being ~10 min of it" — there is no such timer.
+- **The discovery run that fires right after ArgoCD writes the ConfigMap can read the OLD file.** The
+  kubelet takes up to a minute to propagate a ConfigMap into a mounted volume. Measured 2026-09-17:
+  ArgoCD wrote it at 05:32:2x, discovery ran at 05:32:31 and left `last_applied` on the previous day,
+  and the change did not land until the following run. **A discovery that completes is not proof your
+  change applied** — compare `last_applied`, or query the objects.
+- **To force one, enqueue discovery rather than importing by hand:**
+  `ak shell -c "from authentik.blueprints.v1.tasks import blueprints_discovery; blueprints_discovery.send()"`.
+  That goes through the worker's queue, so it cannot contend with the scheduled apply the way a
+  second importer inside `ak apply_blueprint` does (see above). `.send()` only enqueues: the row sits
+  at `queued` in `authentik.tasks.models.Task` until the worker picks it up, which took ~10 minutes
+  once — `queued` is not a failure.
+- The import is **one transaction**, so the objects appear all at once at the end — an empty query
+  midway means "still running", not "failed". Once it does run, the import itself took ~5 min for
+  this matrix.
 - **Group parentage is a materialized view** (`authentik_core_groupancestry`), refreshed by a Postgres
   trigger on every parentage change. Nothing to configure, but if a claim looks stale after a
   parentage change, suspect that view rather than the mapping.

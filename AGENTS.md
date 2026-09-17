@@ -554,13 +554,17 @@ the UI. Edit the matrix only:
    self-inheriting role, a duplicate name, or an application with no roles at all.
 3. `helm template gitops/helm-charts/authentik-blueprints -f gitops/helm-values/server3/authentik-blueprints.yaml`
    to check it renders before pushing.
-4. Hard Refresh + Sync `authentik-server3` in ArgoCD, then wait — **~15 minutes**, measured
-   2026-09-08, not the ~45s this used to claim. Three delays stack: kubelet propagating the ConfigMap
-   into the worker's volume (~1 min), Authentik's blueprint discovery timer noticing the changed file
-   (~10 min), and the import itself (~4-6 min for this matrix — one transaction, so nothing appears
-   until it commits). `kubectl exec deploy/authentik-worker -- ak apply_blueprint
-   /blueprints/mounted/cm-authentik-blueprints/homelab-applications.yaml` forces it, but it does not
-   finish faster and it will queue behind (or ahead of) the scheduled apply on row locks.
+4. Hard Refresh + Sync `authentik-server3` in ArgoCD, then wait. **Authentik applies blueprints on a
+   cron — `blueprints_discovery` at `57 * * * *` — and only when the file hash changes**, so the wait
+   is up to an hour, not the "~15 minutes" this used to claim (there is no discovery *timer*; that was
+   wrong). Two further traps: the kubelet takes up to a minute to propagate the ConfigMap into the
+   worker's volume, so a discovery firing immediately after the sync can hash the OLD file and do
+   nothing (seen 2026-09-17); and the import is one transaction, so nothing appears until it commits
+   (~4-6 min for this matrix). Force a run with
+   `kubectl -n authentik exec deploy/authentik-worker -- ak shell -c "from authentik.blueprints.v1.tasks import blueprints_discovery; blueprints_discovery.send()"`
+   — prefer that over `ak apply_blueprint`, which runs a second importer in-process and contends with
+   the scheduled apply on row locks. Confirm with `BlueprintInstance.last_applied` or by querying the
+   objects; the task log claims success either way.
 5. Add users to the new groups in the Authentik UI — memberships are deliberately not in git.
 
 A **client** entry (`kind: client` — something a human drives that calls other applications' APIs)
