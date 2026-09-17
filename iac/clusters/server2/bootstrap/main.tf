@@ -64,6 +64,23 @@ module "bootstrap" {
     "192.168.1.201" = { device = "/dev/disk/by-id/wwn-0x50026b725b05e218" }
   }
 
+  # ── kube-apiserver OIDC ────────────────────────────────────────────────────
+  # Trust THIS cluster's Headlamp provider in Authentik, so a Headlamp login is a
+  # Kubernetes identity and RBAC applies to it. server2 is the canary for this:
+  # platform-only and the least used, so its kube-apiserver restarting costs least.
+  #
+  # The issuer's TRAILING SLASH is load-bearing. kube-apiserver compares
+  # --oidc-issuer-url to the token's `iss` exactly, and Authentik's per_provider
+  # issuer ends in `/`.
+  #
+  # Claims take the module defaults: username from `sub` (the Authentik username,
+  # sub_mode user_username) prefixed `oidc:`, groups from `roles`. RBAC for those
+  # groups: gitops/k8s-manifests/server2/headlamp/ClusterRoleBinding.headlamp-oidc.yaml.
+  apiserver_oidc = {
+    issuer_url = "https://auth.irha.cz/application/o/headlamp-server2-production/"
+    client_id  = "headlamp-server2-production"
+  }
+
   # ── Credentials output ─────────────────────────────────────────────────────
   credentials_dir = "${path.root}/../credentials"
 }

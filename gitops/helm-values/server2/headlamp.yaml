@@ -4,3 +4,25 @@
 httpRoute:
   hostnames:
     - headlamp.server2.homelab.irha.cz
+
+# OIDC login through Authentik. Headlamp authorizes nothing itself: it forwards the
+# id_token to kube-apiserver, which must trust this issuer -- `apiserver_oidc` in
+# iac/clusters/server2/bootstrap. Land this only together with that change, or every
+# login gets a 401 from the API server.
+config:
+  oidc:
+    clientID: headlamp-server2-production
+    # NO clientSecret, deliberately. The Authentik client is public, and chart 0.45.0
+    # omits -oidc-client-secret entirely when this is empty (verified by render,
+    # 2026-09-17), so PKCE below is the whole credential. That is what keeps this
+    # cluster free of any ESO wiring back to server3's OpenBao.
+    issuerURL: https://auth.irha.cz/application/o/headlamp-server2-production/
+    # `roles` is NOT implied by `profile` and must be asked for: it is the claim
+    # kube-apiserver reads as the user's groups (--oidc-groups-claim=roles).
+    # Comma-separated, which is Headlamp's format, not the space-separated OAuth one.
+    scopes: "openid,profile,email,roles"
+    # Explicit, not derived. Behind a proxy Headlamp builds the callback from
+    # X-Forwarded-Proto, and without it emits http:// -- which then mismatches the
+    # https redirect URI registered in Authentik and fails the login.
+    callbackURL: https://headlamp.server2.homelab.irha.cz/oidc-callback
+    usePKCE: true
