@@ -172,7 +172,7 @@ gitops/
         observability/ Prometheus.yaml, Grafana.yaml, Loki.yaml, Tempo.yaml
   k8s-manifests/
     server1/
-      cilium/              HTTPRoute: hubble.server1.homelab.irha.cz → hubble-dashboard:80
+      cilium/              HTTPRoute: hubble.server1.homelab.irha.cz → hubble-dashboard:80 (forward-auth), Middleware.authentik.yaml
       cert-manager/        ExternalSecret (cloudflare-api-token), ClusterIssuer letsencrypt-staging + letsencrypt-prod (ACME DNS-01 via Cloudflare)
       external-secrets/    ClusterSecretStore → remote server3 OpenBao at vault.server3.homelab.irha.cz
       iot/         ExternalSecret.provisioner-token.yaml (openbao-provision-token; sync-wave -1 via IotInfra)
@@ -180,31 +180,31 @@ gitops/
       emqx/        ExternalSecret.yaml, HTTPRoute.yaml, IngressRouteTCP.yaml (1883 plaintext + 8883 TLS)
       telegraf/    ExternalSecret.telegraf.influxdb2.yaml, ExternalSecret.telegraf.mqtt.yaml
       external-dns/ ExternalSecret (unifi-credentials), DNSEndpoint server1-anchor (server1.homelab.irha.cz A record)
-      longhorn/    HTTPRoute: longhorn.server1.homelab.irha.cz → longhorn-frontend:80
+      longhorn/    HTTPRoute: longhorn.server1.homelab.irha.cz → longhorn-frontend:80 (forward-auth), Middleware.authentik.yaml
       mongodb/     ExternalSecret, IngressRouteTCP (27017, TLS-only), ExternalSecret.provisioner-token.yaml
       miot-bridge-api/ production/ and sandbox/ — ExternalSecret.mqtt.yaml, ExternalSecret.mongodb.yaml
       qr-manager-api/ production/ and sandbox/ — ExternalSecret.mongodb.yaml, HTTPRoute.qr.yaml, Middleware.addprefix-qr.yaml
       network-policies/ production/ and sandbox/ — default-deny + the egress allow-list (manual-sync)
       k8s-monitoring/ ExternalSecret.otel-auth-token.yaml (shared OTLP bearer token pulled from secret/otel-gateway/auth-token)
-      traefik/     Certificate.server1-tls.yaml → Secret server1-tls for the websecure listener
+      traefik/     Certificate.server1-tls.yaml → Secret server1-tls for the websecure listener; the Authentik proxy outpost (Deployment/Service/ExternalSecret/ReferenceGrant) + Middleware.authentik.yaml and HTTPRoute.authentik-outpost.yaml guarding the dashboard
     server2/              platform only since 2026-09-13
-      cilium/              HTTPRoute: hubble.server2.homelab.irha.cz → hubble-dashboard:80
+      cilium/              HTTPRoute: hubble.server2.homelab.irha.cz → hubble-dashboard:80 (forward-auth), Middleware.authentik.yaml
       cert-manager/        ExternalSecret (cloudflare-api-token), ClusterIssuer letsencrypt-staging + letsencrypt-prod (ACME DNS-01 via Cloudflare)
       external-secrets/    ClusterSecretStore → remote server3 OpenBao at vault.server3.homelab.irha.cz
       external-dns/ ExternalSecret (unifi-credentials), DNSEndpoint server2-anchor (server2.homelab.irha.cz A record)
-      longhorn/    HTTPRoute: longhorn.server2.homelab.irha.cz → longhorn-frontend:80
+      longhorn/    HTTPRoute: longhorn.server2.homelab.irha.cz → longhorn-frontend:80 (forward-auth), Middleware.authentik.yaml
       k8s-monitoring/ ExternalSecret.otel-auth-token.yaml (shared OTLP bearer token pulled from secret/otel-gateway/auth-token)
-      traefik/     Certificate.server2-tls.yaml → Secret server2-tls for the websecure listener
+      traefik/     Certificate.server2-tls.yaml → Secret server2-tls for the websecure listener; the Authentik proxy outpost (Deployment/Service/ExternalSecret/ReferenceGrant) + Middleware.authentik.yaml and HTTPRoute.authentik-outpost.yaml guarding the dashboard
     server3/
-      cilium/              HTTPRoute: hubble.server3.homelab.irha.cz → hubble-dashboard:80
+      cilium/              HTTPRoute: hubble.server3.homelab.irha.cz → hubble-dashboard:80 (forward-auth), Middleware.authentik.yaml
       cert-manager/        ExternalSecret (cloudflare-api-token), ClusterIssuer letsencrypt-staging + letsencrypt-prod (ACME DNS-01 via Cloudflare)
       external-dns/        ExternalSecret (unifi-credentials), DNSEndpoint server3-anchor (server3.homelab.irha.cz A record)
       external-secrets/    ClusterSecretStore → local OpenBao
-      longhorn/            HTTPRoute: longhorn.server3.homelab.irha.cz → longhorn-frontend:80
+      longhorn/            HTTPRoute: longhorn.server3.homelab.irha.cz → longhorn-frontend:80 (forward-auth), Middleware.authentik.yaml
       openbao/             HTTPRoute: vault.server3.homelab.irha.cz → openbao:8200
       grafana/             ExternalSecret (grafana-admin), ExternalSecret (influxdb2-grafana), datasource ConfigMaps (prometheus/loki/tempo/influxdb2), dashboard ConfigMaps (traefik-opentelemetry, platform, loxone), HTTPRoute: grafana.irha.cz
       k8s-monitoring/      HTTPRoute: otel.server3.homelab.irha.cz → alloy-receiver:4318, IngressRouteTCP (otel gRPC :4317, plaintext)
-      traefik/             Certificate.server3-tls.yaml → Secret server3-tls for the websecure listener
+      traefik/             Certificate.server3-tls.yaml → Secret server3-tls for the websecure listener; the Authentik proxy outpost (Deployment/Service/ExternalSecret/ReferenceGrant) + Middleware.authentik.yaml and HTTPRoute.authentik-outpost.yaml guarding the dashboard
 docs/             Architecture decisions, IaC guide, secrets guide, observability guide
 ```
 

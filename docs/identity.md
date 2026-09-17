@@ -153,8 +153,8 @@ grant. "Remove their access" means removing the *lowest* membership they hold, n
 | `postman` | none — a client, not an API | `user` (the access gate only) | one client, every environment |
 | `interactive-map` | none — an ESP32, `kind: device` | none of its own; holds `interactive-map-feeder.reader` | one client: server1 production + local |
 | `longhorn` | `longhorn.<cluster>.homelab.irha.cz` — **`kind: proxy`**, see [Proxies](#proxies--uis-with-no-login-of-their-own) | `admin` (the access gate only) | server1 · server2 · server3, production |
-| `hubble` | `hubble.<cluster>.homelab.irha.cz` — **`kind: proxy`**, the Cilium flow UI in `kube-system` | `admin` (the access gate only) | server2 production |
-| `traefik` | `traefik.<cluster>.homelab.irha.cz` — **`kind: proxy`**, and the one guarded by an **IngressRoute** rather than an HTTPRoute | `admin` (the access gate only) | server2 production |
+| `hubble` | `hubble.<cluster>.homelab.irha.cz` — **`kind: proxy`**, the Cilium flow UI in `kube-system` | `admin` (the access gate only) | server1 · server2 · server3, production |
+| `traefik` | `traefik.<cluster>.homelab.irha.cz` — **`kind: proxy`**, and the one guarded by an **IngressRoute** rather than an HTTPRoute | `admin` (the access gate only) | server1 · server2 · server3, production |
 
 ## `kind` — what sort of client an entry is
 
@@ -314,26 +314,38 @@ in `gitops/helm-values/<cluster>/traefik.yaml`, and the callback needs a whole H
 covers only `/dashboard` and `/api`. Both objects sit in the `traefik` namespace beside the outpost,
 so no ReferenceGrant is involved. Guarding it matters for the same reason `api.insecure` is false:
 `/api/http/routers` returns every router, service and middleware in the cluster — verified
-unauthenticated on 2026-09-16, before the change.
+unauthenticated on every cluster before the change: 200 with 20 KB of routing table on server1,
+12 KB on server3, and server3's routers are Authentik's and OpenBao's own.
 
-Guarded today: Longhorn on all three clusters, Hubble and the Traefik dashboard on server2.
+Guarded today: Longhorn, Hubble and the Traefik dashboard, all three on all three clusters.
 
 **A tab that was open before the guard — or when the session expired — cannot log itself in.** A
 single-page UI retries in the background with `fetch`, and a `fetch` cannot follow the cross-origin
 redirect to `auth.irha.cz`: the browser shows a network error ("Failed to fetch", "data streams are
 reconnecting") and **no login prompt ever appears**, because the page never navigates. Measured on
 hubble.server2, 2026-09-16: the outpost logged a stream of `/auth/traefik` 302s from the browser and
-not one callback attempt. Reload the tab — a top-level navigation is what starts the login, and with
-an Authentik session already open it bounces straight through.
+not one callback attempt. A top-level navigation is what starts the login, so a reload is the first
+thing to try.
 
-It follows that a **session expiring under an open tab looks like an outage** rather than a logout,
-and the fix is always a reload. That is the real cost of the eight-hour session below, and the reason
-it is not shorter.
+**A reload is often not enough, and that is worth knowing before an hour goes into debugging the
+server.** The retry loop does not stop while the tab is open, and each background `fetch` starts its
+own auth flow at Authentik — so a login that *does* succeed has its session cookie overwritten by the
+next racing flow seconds later. Measured on hubble.server2: a real password login at 19:50:38, one
+`POST /api/service-map-stream -> 200` at 19:50:45, then 302s again, with `authorize_application`
+events for the same user every ~8s. The provider, application, binding and group all matched
+Longhorn's working configuration exactly; a private window logged in first try.
 
-Related: several auth flows racing each other (parallel tabs, a retry loop, an impatient reload) can
-overwrite one another's state cookie, and the callback then fails with `oauth state does not match
-the session` — seen three times on longhorn.server2 before a clean login succeeded. Reload once and
-let it finish.
+So when a guarded UI will not log in: **close every tab for that host** — the loop has to stop before
+anything else helps — then clear the site's cookies, or use a private window. Only after that is it
+worth suspecting the server.
+
+It follows that a **session expiring under an open tab looks like an outage** rather than a logout.
+That is the real cost of the eight-hour session below, and the reason it is not shorter.
+
+The same cookie race shows up in a gentler form on ordinary logins: parallel tabs or an impatient
+reload can overwrite one another's state cookie, and the callback then fails with `oauth state does
+not match the session` — seen three times on longhorn.server2 before a clean login succeeded. Reload
+once and let it finish.
 
 **Sessions last `proxyAccessTokenValidity` — eight hours.** Verified 2026-09-16 on longhorn.server2:
 the outpost's cookie came back `Max-Age=28801`. Long on purpose, because the UIs behind a proxy are XHR-
