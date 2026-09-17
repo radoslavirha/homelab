@@ -5,6 +5,14 @@ ingressRoute:
   dashboard:
     enabled: true
     matchRule: "Host(`traefik.server1.homelab.irha.cz`) && (PathPrefix(`/dashboard`) || PathPrefix(`/api`))"
+    # Forward-auth. Everything this route serves — the dashboard AND /api, which lists every
+    # router, service and middleware in the cluster — now goes past Authentik first. The
+    # Middleware is k8s-manifests/server1/traefik/Middleware.authentik.yaml, in this same
+    # namespace; the login callback for this host is its own HTTPRoute next to it, because
+    # matchRule above covers only /dashboard and /api.
+    middlewares:
+      - name: authentik
+        namespace: traefik
     # websecure only. The one hostname this route answers to is covered by the cluster
     # certificate, so there is nothing left for `web` to serve — the .home name it existed
     # for was retired at stage 7.

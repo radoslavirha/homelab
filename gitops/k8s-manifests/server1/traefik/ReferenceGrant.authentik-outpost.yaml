@@ -3,8 +3,8 @@
 # the outpost Service in this namespace. Gateway API refuses a cross-namespace backendRef without a
 # grant — the route then reports ResolvedRefs=False, RefNotPermitted, and the login cannot complete.
 #
-# One `from` entry per guarded namespace: add kube-system when Hubble is guarded here. The Traefik
-# dashboard's IngressRoute already lives in `traefik` and needs none.
+# One `from` entry per guarded namespace: longhorn-system for Longhorn, kube-system for Hubble. The
+# Traefik dashboard's callback route already lives in `traefik` and needs none.
 #
 # v1beta1: the storage version of this CRD on these clusters. v1 is served too.
 apiVersion: gateway.networking.k8s.io/v1beta1
@@ -17,6 +17,9 @@ spec:
     - group: gateway.networking.k8s.io
       kind: HTTPRoute
       namespace: longhorn-system
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      namespace: kube-system
   to:
     - group: ""
       kind: Service

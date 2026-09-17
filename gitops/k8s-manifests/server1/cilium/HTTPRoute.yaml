@@ -17,7 +17,28 @@ spec:
   hostnames:
     - hubble.server1.homelab.irha.cz
   rules:
-    - backendRefs:
+    # Everything: Authentik first (Middleware.authentik.yaml), then the Hubble UI.
+    - filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: traefik.io
+            kind: Middleware
+            name: authentik
+      backendRefs:
         - name: hubble-ui
           namespace: kube-system
           port: 80
+    # The outpost's own endpoints on this host, the login callback above all. Without this
+    # rule the callback is itself forward-authed and handed to Hubble instead of the outpost,
+    # so the login never completes. The longer prefix wins over the rule above, and it carries
+    # no filter. Crossing into `traefik` is permitted by
+    # gitops/k8s-manifests/server1/traefik/ReferenceGrant.authentik-outpost.yaml, which lists
+    # this namespace.
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /outpost.goauthentik.io/
+      backendRefs:
+        - name: authentik-outpost
+          namespace: traefik
+          port: 9000

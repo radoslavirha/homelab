@@ -1,0 +1,28 @@
+---
+# Forward-auth for hubble.server1.homelab.irha.cz. Before a request reaches the Hubble UI,
+# Traefik asks this cluster's Authentik proxy outpost about it: a 2xx lets it through,
+# anything else (the 302 to the login, a 403 for a non-member) goes back to the browser.
+#
+# Hubble is read-only, but it maps every flow between every pod in the cluster — who talks
+# to whom, on what port, and what was dropped. On server1 that is the whole IoT estate:
+# every MQTT, MongoDB and miot-bridge conversation shows up here. That is worth a login.
+#
+# Access is membership of `hubble-server1-production-admin` in Authentik, rendered from the
+# `hubble` entry in gitops/helm-values/server3/authentik-blueprints.yaml. Memberships are UI
+# work, deliberately not in git.
+#
+# HERE in kube-system, not next to the outpost in `traefik`: an HTTPRoute ExtensionRef is a
+# LOCAL reference, so the Middleware has to live in the route's own namespace.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: authentik
+  namespace: kube-system
+  annotations:
+    # One wave ahead of HTTPRoute.yaml: Traefik rejects a route whose ExtensionRef points at
+    # a Middleware that does not exist yet.
+    argocd.argoproj.io/sync-wave: "99"
+spec:
+  forwardAuth:
+    address: http://authentik-outpost.traefik.svc.cluster.local:9000/outpost.goauthentik.io/auth/traefik
+    trustForwardHeader: true

@@ -1,0 +1,26 @@
+---
+# Forward-auth for the Traefik dashboard itself, traefik.server1.homelab.irha.cz.
+#
+# The dashboard is the one guarded UI that is NOT a hand-written HTTPRoute: the chart renders
+# an IngressRoute (ingressRoute.dashboard in gitops/helm-values/server1/traefik.yaml), and an
+# IngressRoute takes `middlewares` directly, by name and namespace. This object is what that
+# reference points at, and it lives in the same namespace, so no cross-namespace switch is
+# involved.
+#
+# Worth gating even though `api.insecure: false` keeps the API off :8080 — on THIS host,
+# /api/http/routers hands out every router, service and middleware in the cluster to anyone
+# on the LAN who can resolve the name. Measured on server1 before this landed: 200, 20 KB.
+#
+# Access is membership of `traefik-server1-production-admin` in Authentik.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: authentik
+  namespace: traefik
+  annotations:
+    # Ahead of the chart's IngressRoute, which references it.
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  forwardAuth:
+    address: http://authentik-outpost.traefik.svc.cluster.local:9000/outpost.goauthentik.io/auth/traefik
+    trustForwardHeader: true
