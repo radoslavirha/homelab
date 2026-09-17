@@ -76,6 +76,29 @@ module "bootstrap" {
     }
   }
 
+  # ── kube-apiserver OIDC ────────────────────────────────────────────────────
+  # Trust THIS cluster's Headlamp provider in Authentik, so a Headlamp login is a
+  # Kubernetes identity and RBAC applies to it. server3 LAST, after server2 (canary,
+  # verified end to end in the audit log) and server1: this is the ArgoCD hub and
+  # ESO's path to OpenBao, so its kube-apiserver restarting briefly takes the
+  # reconciler of the other two clusters with it.
+  #
+  # A restart only -- not a reboot, so OpenBao does NOT reseal. apply_mode is
+  # staged_if_needing_reboot in the module, so a change that would need a reboot is
+  # staged instead of rebooting this node.
+  #
+  # The issuer's TRAILING SLASH is load-bearing. kube-apiserver compares
+  # --oidc-issuer-url to the token's `iss` exactly, and Authentik's per_provider
+  # issuer ends in `/`.
+  #
+  # Authentik itself runs on THIS cluster, so this apiserver trusts an issuer it also
+  # hosts. That is safe: kube-apiserver fetches discovery asynchronously and starts
+  # without it, and admin kubeconfig access does not depend on OIDC at all.
+  apiserver_oidc = {
+    issuer_url = "https://auth.irha.cz/application/o/headlamp-server3-production/"
+    client_id  = "headlamp-server3-production"
+  }
+
   # ── Credentials output ─────────────────────────────────────────────────────
   credentials_dir = "${path.root}/../credentials"
 }
