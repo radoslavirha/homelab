@@ -8,7 +8,7 @@ they rule Option B out for now.
 tokens. See [Publishing a frontend publishes its API](#publishing-a-frontend-publishes-its-api)
 for why that is a hard gate and not a preference.
 
-**Sibling:** [`../plans/2026-09-03-tls-remaining-work.md`](../plans/2026-09-03-tls-remaining-work.md), and the completed migration it replaced — HTTPS on
+**Sibling:** the TLS migration (recorded in `docs/architecture.md` § "Hostnames and TLS") — HTTPS on
 every internal service. That work is independent, unblocked, and comes first. **It also decides
 the hostnames, permanently.** This document exists so that decision is made with the endgame in
 view, not so any of it gets built now.

@@ -95,7 +95,6 @@ Telegraf's `--watch-config` re-reads the config file, but `$INFLUXDB2_TOKEN` is 
 - [ ] `helm template` of the pinned chart version shows the annotation on `Deployment.metadata.annotations`
 - [ ] Rotating `secret/server2/telegraf-influxdb2` in OpenBao and force-syncing the ExternalSecret produces a new Telegraf pod without manual intervention
 - [ ] `docs/secrets.md` drops the Telegraf manual-restart paragraph
-- [ ] `docs/superpowers/plans/2026-08-05-stakater-reloader.md` "Known gap — telegraf" section marked resolved
 
 ## References
 
