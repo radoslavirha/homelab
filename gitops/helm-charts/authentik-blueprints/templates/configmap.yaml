@@ -183,7 +183,7 @@ data:
     that group. Hence `accesses: [qr-manager]` for a client and
     `accesses: [{ app: qr-manager, role: reader }]` for a device.
 
-    Design: docs/superpowers/specs/2026-09-08-device-identity-esp32.md and
+    Design: docs/superpowers/specs/archive/2026-09-08-device-identity-esp32.md and
     docs/superpowers/specs/archive/2026-09-08-multi-audience-tokens.md.
     */ -}}
     {{- $appNames := list }}

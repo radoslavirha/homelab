@@ -67,7 +67,7 @@
 # are clients and APIs are APIs, and the chart fails on the overlap.
 #
 # Design: docs/superpowers/specs/archive/2026-09-08-multi-audience-tokens.md and
-#         docs/superpowers/specs/2026-09-08-device-identity-esp32.md
+#         docs/superpowers/specs/archive/2026-09-08-device-identity-esp32.md
 
 applications:
   - name: qr-manager
