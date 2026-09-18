@@ -80,3 +80,22 @@ authentikHost: https://auth.irha.cz
 # group names and slugs to delete. An absent entry whose objects are already gone is a
 # no-op, so step 2 is safe to delay.
 applications: []
+
+# Onboarding — invitation-gated enrollment and admin-minted recovery.
+#
+# OFF by default so the chart stays inert; gitops/helm-values/server3/ opts in.
+# Rendered into its own ConfigMap key, separate from the applications blueprint.
+#
+# Onboarding is NOT per-application, which is why it is not part of the matrix
+# above: one enrollment flow and one recovery flow serve the whole instance.
+#
+# Design: docs/superpowers/specs/2026-09-18-authentik-identity-hardening.md
+onboarding:
+  enabled: false
+  # The group every invited member lands in. Grants NOTHING on its own: no
+  # application binding, no ladder parentage. Role memberships stay UI work, like
+  # every other membership here.
+  group: household
+  userPath: users/household
+  enrollmentTitle: Welcome — finish setting up your account
+  recoveryTitle: Choose a new password

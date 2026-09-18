@@ -1,0 +1,79 @@
+suite: onboarding
+templates:
+  - templates/configmap.yaml
+tests:
+  - it: renders no onboarding key when disabled, so the chart stays inert by default
+    asserts:
+      - notExists:
+          path: data["homelab-onboarding.yaml"]
+
+  - it: gates enrollment on an invitation, as the FIRST stage
+    set:
+      onboarding:
+        enabled: true
+    asserts:
+      # continue_flow_without_invitation: false is what makes the flow URL safe to
+      # be internet-reachable. Without it, anyone reaching the URL enrolls.
+      - matchRegex:
+          path: data["homelab-onboarding.yaml"]
+          pattern: "model: authentik_stages_invitation.invitationstage\\n\\s+id: stage-enrollment-invitation\\n\\s+identifiers:\\n\\s+name: homelab-enrollment-invitation\\n\\s+attrs:\\n\\s+continue_flow_without_invitation: false"
+      # lowest order in the flow, and re-evaluated so the gate cannot be planned away
+      - matchRegex:
+          path: data["homelab-onboarding.yaml"]
+          pattern: "stage: !KeyOf stage-enrollment-invitation\\n\\s+order: 10\\n\\s+attrs:\\n\\s+evaluate_on_plan: true\\n\\s+re_evaluate_policies: true"
+
+  - it: never offers a username field, which the invitation supplies
+    set:
+      onboarding:
+        enabled: true
+    asserts:
+      # A rendered username field would overwrite the invitation's fixed_data with
+      # whatever the invitee typed — always_merger.merge puts fixed_data into
+      # prompt_data, and the prompt stage writes over it.
+      - notMatchRegex:
+          path: data["homelab-onboarding.yaml"]
+          pattern: "field_key: username"
+
+  - it: renders exactly the two password fields the match check needs
+    set:
+      onboarding:
+        enabled: true
+    asserts:
+      # PromptChallengeResponse.validate compares password fields only when the
+      # stage holds exactly two of them. A third would silently disable it.
+      - matchRegex:
+          path: data["homelab-onboarding.yaml"]
+          pattern: "field_key: password\\n"
+      - matchRegex:
+          path: data["homelab-onboarding.yaml"]
+          pattern: "field_key: password_repeat\\n"
+
+  - it: writes new users into the household group and path
+    set:
+      onboarding:
+        enabled: true
+        group: household
+        userPath: users/household
+    asserts:
+      - matchRegex:
+          path: data["homelab-onboarding.yaml"]
+          pattern: "user_creation_mode: always_create"
+      - matchRegex:
+          path: data["homelab-onboarding.yaml"]
+          pattern: "create_users_group: !KeyOf grp-household"
+      - matchRegex:
+          path: data["homelab-onboarding.yaml"]
+          pattern: "user_path_template: users/household"
+
+  - it: leaves the applications blueprint and the login page alone
+    set:
+      onboarding:
+        enabled: true
+    asserts:
+      - exists:
+          path: data["homelab-applications.yaml"]
+      # Onboarding must not touch the login page or the shipped user-settings
+      # stage: authentik's own blueprint manages that stage's field list.
+      - notMatchRegex:
+          path: data["homelab-onboarding.yaml"]
+          pattern: "identificationstage|default-user-settings"

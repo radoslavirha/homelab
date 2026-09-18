@@ -1225,3 +1225,11 @@ data:
           name: homelab-proxy-{{ $cluster }}
       {{- end }}
     {{- end }}
+{{- if .Values.onboarding.enabled }}
+
+  # Onboarding — its OWN blueprint file, so a malformed entry here cannot take the
+  # applications graph down with it: Authentik gives every .yaml key its own
+  # BlueprintInstance. Body: templates/_onboarding.tpl
+  homelab-onboarding.yaml: |
+{{ include "authentik-blueprints.onboarding" . | indent 4 }}
+{{- end }}
