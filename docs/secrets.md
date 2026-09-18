@@ -20,7 +20,7 @@ Every stage in `docs/iac.md` and `gitops/README.md` that requires secrets links 
 | `secret/<cluster>/influxdb2` | `admin-password`, `admin-token` | iot stage | server1 |
 | `secret/<cluster>/emqx` | `dashboard-username`, `dashboard-password` | iot stage | server1 |
 | `secret/<cluster>/mongodb` | `root-password` | databases stage | server1 |
-| `secret/<cluster>/mealie` | `postgres-password` | household stage | server1 |
+| `secret/<cluster>/mealie` | `postgres-password`, `oidc-client-secret` | household stage | server1 |
 | `secret/otel-gateway/auth-token` | `token` | observability stage | server1, server2 |
 | `secret/<cluster>/influxdb2-grafana` | `token` | *provisioned at runtime* | server1 |
 
@@ -284,6 +284,21 @@ bao kv put secret/<cluster>/mealie \
 # Verify
 bao kv get secret/<cluster>/mealie
 ```
+
+**`oidc-client-secret` is copied by hand, once.** Mealie logs in through Authentik, whose blueprint
+deliberately does not set `client_secret`: Authentik generates one when it creates the provider, and a
+blueprint leaves a field it does not mention untouched, so the value survives every re-apply. Read it
+from the Authentik UI (Applications → Providers → `mealie-server1-production`) and **patch** it in:
+
+```bash
+read -rs S && bao kv patch secret/server1/mealie oidc-client-secret="$S"; unset S
+```
+
+`patch`, **not** `put` — `put` replaces the whole path and would drop `postgres-password`, which is a
+running database's password. Full runbook: [identity.md](identity.md#mealie). It is consumed by its own
+ExternalSecret (`mealie-oidc`), separate from the PostgreSQL one so that a missing OIDC secret cannot
+take `postgres-password` down with it: ESO has no per-key optional, and one failed entry stops the
+whole ExternalSecret.
 
 **Rotation is two steps, not one.** PostgreSQL reads `POSTGRES_PASSWORD` only when it initialises
 an empty data directory, so re-seeding this path moves Mealie onto a password the server does not

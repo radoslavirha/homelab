@@ -151,6 +151,7 @@ grant. "Remove their access" means removing the *lowest* membership they hold, n
 | `grafana` | `grafana.irha.cz` | admin → editor → reader | server3 production |
 | `headlamp` | `headlamp.<cluster>.homelab.irha.cz` — the token goes to **kube-apiserver**, see [Headlamp](#headlamp) | admin → editor → reader, bound to `cluster-admin` / `edit` / `view` | server1 · server2 · server3, production |
 | `openbao` | `vault.server3.homelab.irha.cz` — **confidential**, see [OpenBao](#openbao) | admin → editor → reader | server3 production |
+| `mealie` | `mealie.irha.cz` — **confidential**, see [Mealie](#mealie) | `admin` → `user` — **two rungs**, because Mealie has only `OIDC_ADMIN_GROUP` and `OIDC_USER_GROUP` | server1 production |
 | `postman` | none — a client, not an API | `user` (the access gate only) | one client, every environment |
 | `interactive-map` | none — an ESP32, `kind: device` | none of its own; holds `interactive-map-feeder.reader` | one client: server1 production + local |
 | `longhorn` | `longhorn.<cluster>.homelab.irha.cz` — **`kind: proxy`**, see [Proxies](#proxies--uis-with-no-login-of-their-own) | `admin` (the access gate only) | server1 · server2 · server3, production |
@@ -578,6 +579,64 @@ OpenBao keeps the old secret. Between *Regenerate* and the apply, every OIDC log
 use". Import it (`terraform import module.vault_config.vault_jwt_auth_backend.oidc oidc`, and likewise the
 role, policies, groups and aliases) or disable it first. Never disable ESO's `kubernetes-*` mounts that
 way: that breaks every ExternalSecret.
+
+## Mealie
+
+The recipe manager on server1 logs in through Authentik with its own built-in OIDC support. The
+Authentik side is the `mealie` entry in the matrix; the Mealie side is env on its Deployment
+([`gitops/k8s-manifests/server1/mealie/Deployment.yaml`](../gitops/k8s-manifests/server1/mealie/Deployment.yaml)).
+
+**Why confidential.** Mealie's `OIDC_FEATURE` property (`mealie/core/settings/settings.py`, read at the
+`v3.27.0` tag) requires `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, `OIDC_CONFIGURATION_URL` and
+`OIDC_USER_CLAIM` to all be non-`None`, and otherwise disables OIDC with "Missing required values for
+[…]". There is no PKCE-only mode, so this is the second `api` entry with `confidential: true`. Unlike
+OpenBao, the secret has a Kubernetes consumer, so it goes KV → ExternalSecret → env.
+
+**Two rungs, not three.** Mealie has exactly two levels: `OIDC_USER_GROUP` gates who may log in and
+`OIDC_ADMIN_GROUP` grants admin. A middle rung would be a claim nothing reads. `admin` inherits `user`,
+so an admin's token carries both and passes the gate.
+
+| Claim           | Mealie reads it as  | Effect                  |
+|-----------------|---------------------|-------------------------|
+| `mealie.user`   | `OIDC_USER_GROUP`   | may log in at all       |
+| `mealie.admin`  | `OIDC_ADMIN_GROUP`  | becomes a Mealie admin  |
+
+**`OIDC_SCOPES_OVERRIDE` is required, not optional.** Mealie asks for `openid profile email` by default,
+which does **not** include this chart's `roles` scope — and without that scope the claim never arrives,
+so `OIDC_USER_GROUP` refuses every login. The Deployment requests `openid profile email roles`.
+
+**`email_verified` is required** since Mealie v3.21.0: it matches an OIDC login to an account by the
+`email` claim, so it refuses an IdP that lets a user self-assert an address. Authentik emits the claim
+with the `email` scope, so nothing extra is needed — but if logins fail with
+`[OIDC] email_verified claim is missing or false`, that is why.
+
+**Local logins stay enabled** (`ALLOW_PASSWORD_LOGIN=true`) while this is a trial: the first admin is a
+local account, and closing that door behind an untested integration leaves no way in. Flip it once an
+Authentik login has worked.
+
+### Setting up the client secret
+
+Once, after the blueprint has landed. The secret is the only manual step — the blueprint deliberately
+does not set `client_secret`, so Authentik generates one and a re-apply never disturbs it.
+
+```bash
+# Provider exists? 404 until the blueprint has landed:
+curl -s -o /dev/null -w '%{http_code}\n' \
+  https://auth.irha.cz/application/o/mealie-server1-production/.well-known/openid-configuration
+
+# Client secret: Authentik UI → Applications → Providers → mealie-server1-production → Edit
+export BAO_ADDR=https://vault.server3.homelab.irha.cz
+read -rs S && bao kv patch secret/server1/mealie oidc-client-secret="$S"; unset S
+```
+
+`patch`, **not** `put`: `put` replaces the whole path and would drop `postgres-password`, which is the
+password of a running database.
+
+ESO picks it up within its refresh interval (or force it:
+`kubectl --context admin@server1 -n mealie annotate externalsecret mealie-oidc force-sync=$(date +%s) --overwrite`),
+Reloader restarts the pod, and the login button appears. Until then the `mealie-oidc` ExternalSecret
+reports `SecretSyncedError` and Mealie runs on local accounts — the Deployment's `envFrom` is
+`optional: true` precisely so this ordering is safe.
 
 ## Headlamp
 

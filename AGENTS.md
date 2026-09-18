@@ -189,7 +189,8 @@ gitops/
       external-dns/ ExternalSecret (unifi-credentials), DNSEndpoint server1-anchor (server1.homelab.irha.cz A record)
       longhorn/    HTTPRoute: longhorn.server1.homelab.irha.cz → longhorn-frontend:80 (forward-auth), Middleware.authentik.yaml
       mongodb/     ExternalSecret, IngressRouteTCP (27017, TLS-only), ExternalSecret.provisioner-token.yaml
-      mealie/      ExternalSecret (postgres-password), StatefulSet+Service for its own PostgreSQL 17,
+      mealie/      ExternalSecret (postgres-password), ExternalSecret.oidc.yaml (Authentik client
+                   secret, copied by hand once), StatefulSet+Service for its own PostgreSQL 17,
                    PVC (10Gi /app/data), Deployment (image tag = the pinned version), Service,
                    HTTPRoute mealie.irha.cz (apex tier). Namespace `mealie`, outside the
                    production/sandbox default-deny set, so no NetworkPolicy work

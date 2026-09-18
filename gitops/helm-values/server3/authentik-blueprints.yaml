@@ -252,6 +252,43 @@ applications:
     environments:
       - { cluster: server3, stage: production }
 
+  - name: mealie
+    title: Mealie
+    # Explicit host: apex tier, same reasoning as grafana -- mealie.irha.cz, matching
+    # the HTTPRoute and the server1-tls SAN. LAN-only today, public once the
+    # exposure spec's gate opens, which is why it was named for the apex up front:
+    # an OIDC redirect URI is one of the things a rename breaks.
+    # No `local` environment -- nobody runs a local Mealie against this IdP.
+    host: mealie.irha.cz
+    # Mealie's callback is /login (its docs, authentication/oidc-v2.md). logoutPath is
+    # /login?direct=1 rather than the default /: that is Mealie's documented
+    # "show me the login form, do not bounce me back to the IdP" URL, and the one it
+    # wants registered for RP-initiated logout. Both are matching_mode: strict, so the
+    # query string has to be part of the registered URL.
+    redirectPath: /login
+    logoutPath: /login?direct=1
+    # Confidential, like openbao and unlike grafana/headlamp. Not a preference:
+    # Mealie's OIDC_FEATURE property (mealie/core/settings/settings.py, read at the
+    # v3.27.0 tag) requires OIDC_CLIENT_ID, OIDC_CLIENT_SECRET, OIDC_CONFIGURATION_URL
+    # and OIDC_USER_CLAIM to all be non-None, and disables OIDC with "Missing required
+    # values for [...]" otherwise. There is no PKCE-only mode.
+    #
+    # The generated secret is copied ONCE from the provider page in the Authentik UI
+    # into KV (secret/server1/mealie, key oidc-client-secret) and reaches the pod via
+    # gitops/k8s-manifests/server1/mealie/ExternalSecret.oidc.yaml. Until it is there
+    # Mealie runs with local logins only -- the env block is optional on purpose.
+    confidential: true
+    # TWO rungs, not the usual three: Mealie has exactly two levels to map onto.
+    # OIDC_USER_GROUP gates who may log in at all and OIDC_ADMIN_GROUP grants admin,
+    # so a middle rung would be a claim nothing reads. `admin` inherits `user`, so an
+    # admin's token carries both mealie.admin and mealie.user and passes the gate.
+    roles:
+      - name: admin
+        inherits: user
+      - name: user
+    environments:
+      - { cluster: server1, stage: production }
+
   - name: homelab-dashboard
     title: Homelab Dashboard
     # Explicit host: server3 is the control cluster and does not follow the
