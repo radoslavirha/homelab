@@ -1,0 +1,56 @@
+# mealie — ApplicationSet (server1 only)
+# Raw manifests: gitops/k8s-manifests/server1/mealie/
+#
+# ── Raw manifests, not a chart, on purpose ──────────────────────────────────
+# Mealie publishes no official Helm chart. The community charts on Artifact Hub
+# trail the release (the best of them was on app v3.25.1 when this landed), and
+# Mealie is a single container — a chart would buy indirection and nothing else.
+# So this ApplicationSet has ONE source, the manifests directory, and the image
+# tag lives in Deployment.yaml rather than in `targetRevision`.
+#
+# Renovate therefore watches the Deployment's image reference, not this file.
+#
+# ── server1 only ────────────────────────────────────────────────────────────
+# server1 is the cluster with the datastores and the Longhorn capacity; server2
+# is platform-only since 2026-09-13 and server3 runs identity + observability.
+# Adding a cluster would mean a second PostgreSQL and a second recipe database,
+# which is not a thing anyone wants — this stays a singleton.
+#
+# ── Status: trial ───────────────────────────────────────────────────────────
+# Spec: docs/superpowers/specs/2026-09-17-mealie-trial-install.md. It exists to
+# answer six questions (Czech UI, Czech seed vocabulary, URL import quality,
+# food aliases, the API write path, and an iOS client) before the personal-
+# agents platform commits to Mealie as its cookbook. Rollback is deleting this
+# file and the manifests directory and letting prune do the rest.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: mealie
+  namespace: argocd
+spec:
+  generators:
+    - list:
+        elements:
+          - cluster: server1
+            clusterServer: https://192.168.1.200:6443
+  template:
+    metadata:
+      name: mealie-{{cluster}}
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/radoslavirha/homelab
+        targetRevision: HEAD
+        path: gitops/k8s-manifests/{{cluster}}/mealie
+      destination:
+        server: '{{clusterServer}}'
+        namespace: mealie
+      syncPolicy:
+        syncOptions:
+          # Nothing else creates the `mealie` namespace — it is this app's own,
+          # like headlamp's and mongodb's, and not the shared `production`
+          # namespace the iot-applications chart deploys into.
+          - CreateNamespace=true
+        automated:
+          selfHeal: true
+          prune: true

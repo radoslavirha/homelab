@@ -150,6 +150,10 @@ gitops/
       RootDatabases.yaml      sync-wave: "3" — App-of-Apps → apps/databases/
       RootDashboards.yaml     sync-wave: "3" — App-of-Apps → apps/dashboards/
       RootApps.yaml           sync-wave: "4" — App-of-Apps → apps/apps/ (custom apps)
+      RootHousehold.yaml      sync-wave: "4" — App-of-Apps → apps/household/ (third-party
+                              household apps: Mealie today; Open WebUI, Ollama and the agent
+                              tool servers next. Separate from apps/apps/ because that stage
+                              is only for OUR apps rendered by the iot-applications chart)
       RootNetworkPolicies.yaml sync-wave: "5" — App-of-Apps → apps/network-policies/
       server3/
         RootDashboards.yaml    sync-wave: "2" — App-of-Apps → server3/apps/dashboards/ (OpenBao HTTPRoute, homelab-dashboard-ui)
@@ -163,6 +167,9 @@ gitops/
       databases/   MongoDB (AppSet)
       dashboards/  Headlamp (AppSet), Hubble (AppSet), Longhorn (AppSet)
       apps/        MiotBridgeApi (AppSet), InteractiveMapFeederApi (AppSet), QrManagerApi (AppSet), QrManagerUi (AppSet)
+      household/   Mealie (AppSet, server1 only) — third-party household apps. Raw manifests,
+                   no chart and no targetRevision: the version is the image tag in the
+                   Deployment, which Renovate does not currently watch
       network-policies/ NetworkPolicies (AppSet, cluster × env) — MANUAL sync, deliberately
     server3/
       apps/
@@ -182,6 +189,10 @@ gitops/
       external-dns/ ExternalSecret (unifi-credentials), DNSEndpoint server1-anchor (server1.homelab.irha.cz A record)
       longhorn/    HTTPRoute: longhorn.server1.homelab.irha.cz → longhorn-frontend:80 (forward-auth), Middleware.authentik.yaml
       mongodb/     ExternalSecret, IngressRouteTCP (27017, TLS-only), ExternalSecret.provisioner-token.yaml
+      mealie/      ExternalSecret (postgres-password), StatefulSet+Service for its own PostgreSQL 17,
+                   PVC (10Gi /app/data), Deployment (image tag = the pinned version), Service,
+                   HTTPRoute mealie.irha.cz (apex tier). Namespace `mealie`, outside the
+                   production/sandbox default-deny set, so no NetworkPolicy work
       miot-bridge-api/ production/ and sandbox/ — ExternalSecret.mqtt.yaml, ExternalSecret.mongodb.yaml
       qr-manager-api/ production/ and sandbox/ — ExternalSecret.mongodb.yaml, HTTPRoute.qr.yaml, Middleware.addprefix-qr.yaml
       network-policies/ production/ and sandbox/ — default-deny + the egress allow-list (manual-sync)
@@ -242,7 +253,7 @@ To apply a version change: `cd iac/clusters/<cluster>/<stage> && terraform apply
 
 ### 2. ArgoCD-managed (GitOps)
 
-All other apps use the **app-of-apps + ApplicationSet** pattern: **eight stages under `apps/`**, plus three server3-only stages under `server3/apps/`.
+All other apps use the **app-of-apps + ApplicationSet** pattern: **nine stages under `apps/`**, plus three server3-only stages under `server3/apps/`.
 - **infra** stage: ESO + supporting K8s resources (ClusterSecretStore)
 - **gateway** stage: Traefik + ExternalDNS + ExternalSecret for Unifi credentials
 - **observability** stage: k8s-monitoring / Grafana Alloy (all clusters); server3-only LGTM stack (Prometheus, Grafana, Loki, Tempo) under `server3/apps/observability/`
@@ -252,6 +263,7 @@ All other apps use the **app-of-apps + ApplicationSet** pattern: **eight stages 
 - **dashboards** stage: Headlamp, Hubble UI, Longhorn UI (all clusters); `server3/apps/dashboards/` adds the OpenBao HTTPRoute and homelab-dashboard-ui
 - **identity** stage: Authentik + the authentik-blueprints chart — `server3/apps/identity/`, **server3 only**
 - **apps** stage: custom apps — miot-bridge-api, interactive-map-feeder-api, qr-manager-api, qr-manager-ui, per-namespace OTel collectors — **server1 only**
+- **household** stage: third-party household apps — Mealie today, Open WebUI / Ollama / agent tool servers next — **server1 only**. Kept out of the `apps` stage because that one is exclusively our own apps rendered by the in-repo `iot-applications` chart across production + sandbox; these are singletons with raw manifests
 
 Bootstrap is **two manual kubectl applies** on server3:
 
@@ -265,7 +277,7 @@ kubectl apply -f gitops/argocd-manifests/Bootstrap.yaml   # meta App-of-Apps
 - **wave 1** — `RootInfra` (ESO + CRDs; must precede any other app's ExternalSecret)
 - **wave 2** — `RootGateway` (Traefik + ExternalDNS) · `server3/RootDashboards` (OpenBao HTTPRoute — unblocks server2 ESO reaching `vault.server3.homelab.irha.cz`)
 - **wave 3** — `RootObservability` · `server3/RootObservability` · `server3/RootIdentity` · `RootIoT` · `RootDatabases` · `RootDashboards`
-- **wave 4** — `RootApps` (custom apps depending on MongoDB + EMQX)
+- **wave 4** — `RootApps` (custom apps depending on MongoDB + EMQX) · `RootHousehold` (Mealie; needs ESO and Traefik, brings its own database)
 - **wave 5** — `RootNetworkPolicies` (must come after the namespaces its Applications target exist; `CreateNamespace=false`)
 
 For sync waves to wait on child-Application Health (not just creation), ArgoCD's Application CRD health check is restored via a Lua `resource.customizations` entry in `gitops/helm-values/server3/argocd.yaml`. Source: [ArgoCD 1.7→1.8 upgrade notes](https://argo-cd.readthedocs.io/en/stable/operator-manual/upgrading/1.7-1.8).

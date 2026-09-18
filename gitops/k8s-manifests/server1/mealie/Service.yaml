@@ -1,0 +1,27 @@
+---
+# What HTTPRoute.yaml sends mealie.irha.cz to.
+#
+# Port 9000 on both sides rather than the more usual 80 -> 9000: Mealie builds
+# some of its own URLs from the request it sees, and keeping one number end to
+# end removes a place for that to go wrong during a trial. There is nothing else
+# in this namespace competing for the name.
+apiVersion: v1
+kind: Service
+metadata:
+  name: mealie
+  namespace: mealie
+  labels:
+    app.kubernetes.io/name: mealie
+    app.kubernetes.io/component: app
+    app.kubernetes.io/part-of: mealie
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: mealie
+  ports:
+    - name: http
+      port: 9000
+      targetPort: http
+      protocol: TCP

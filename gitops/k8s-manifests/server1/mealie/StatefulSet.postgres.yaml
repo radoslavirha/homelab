@@ -1,0 +1,142 @@
+---
+# PostgreSQL 17 for Mealie — one replica, in Mealie's own namespace.
+#
+# ── Why PostgreSQL at all, when Mealie defaults to SQLite ───────────────────
+# Mealie has no supported SQLite -> PostgreSQL migration; PostgreSQL ->
+# PostgreSQL is a pg_dump and a restore. Starting on SQLite would mean either
+# living with it forever or hand-writing a migration later. It also fits the
+# backup path that already exists: ~/homelab-backups/dump-all.sh (outside this
+# repo) already runs pg_dump for Authentik, so this database joins a road that
+# is built, where a SQLite file would need a new one.
+#
+# ── Why it is HERE and not a fleet-wide PostgreSQL ──────────────────────────
+# A shared PostgreSQL with per-app credential provisioning — the shape the
+# MongoDB provisioner Job gives us — is a real decision, and it should not be
+# taken by a trial that might be rolled back next week. So this instance is
+# namespaced to Mealie and goes away with it. Moving to a fleet-wide instance
+# later is a dump and a restore; nothing here forecloses it. The placement is
+# provisional ON PURPOSE.
+#
+# ── StatefulSet, not Deployment ─────────────────────────────────────────────
+# volumeClaimTemplates is the point: the PVC is bound to the pod's identity, so
+# a rescheduled pod reattaches to its own data rather than racing for a shared
+# claim. It also means `kubectl delete sts` does NOT delete the volume — which
+# is the desired asymmetry for the one resource here holding data.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mealie-postgres
+  namespace: mealie
+  labels:
+    app.kubernetes.io/name: mealie-postgres
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: mealie
+  annotations:
+    # Wave 1: after the ExternalSecret (wave 0) that carries POSTGRES_PASSWORD,
+    # before Mealie (wave 2). Mealie runs Alembic migrations on boot and exits
+    # if it cannot reach the database, so the ordering is load-bearing on a
+    # first sync, not cosmetic.
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  serviceName: mealie-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mealie-postgres
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: mealie-postgres
+        app.kubernetes.io/component: database
+        app.kubernetes.io/part-of: mealie
+    spec:
+      securityContext:
+        # The upstream image starts as root and `gosu postgres`es down in its own
+        # entrypoint, so runAsNonRoot is deliberately not set. fsGroup makes the
+        # freshly provisioned Longhorn volume group-writable by that user.
+        #
+        # 70, NOT 999. The ALPINE variant uses Alpine's standard postgres
+        # uid/gid of 70 (docker-library/postgres, 17/alpine*/Dockerfile); 999 is
+        # the Debian-based `postgres:17` image. Copying 999 from a Debian example
+        # is a silent mismatch — root still chowns PGDATA below, so the pod comes
+        # up fine and the group ownership is simply wrong.
+        fsGroup: 70
+      containers:
+        - name: postgres
+          # 17-alpine, pinned. Never `:latest` — postgres upgrades its on-disk
+          # format across MAJOR versions irreversibly, and a tag that drifts is
+          # a pod restart away from an unopenable data directory. A major bump
+          # is a pg_dump / pg_restore, never an image edit.
+          image: postgres:17-alpine
+          ports:
+            - name: postgres
+              containerPort: 5432
+              protocol: TCP
+          env:
+            # POSTGRES_DB / POSTGRES_USER are read ONLY when the data directory
+            # is empty. Editing them later renames nothing; it just makes Mealie
+            # connect to a database that does not exist.
+            - name: POSTGRES_DB
+              value: mealie
+            - name: POSTGRES_USER
+              value: mealie
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mealie
+                  key: postgres-password
+            # pg_isready below runs with no -U, so it uses the OS user (root at
+            # exec time). PGUSER points it at the role that actually exists;
+            # without it the probe reports "role root does not exist" and the
+            # pod never goes Ready. Upstream's own compose example sets it for
+            # exactly this reason.
+            - name: PGUSER
+              value: mealie
+            # The volume is mounted at /var/lib/postgresql/data, which on this
+            # image is the default PGDATA — and initdb refuses a non-empty
+            # directory. A subdirectory keeps it clear of anything the volume
+            # driver leaves at the mount root (lost+found on a formatted PVC).
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+          # Readiness only, and deliberately no liveness probe: a database that
+          # is slow to answer is recovering, and restarting it mid-recovery is
+          # how a slow start becomes a crashloop. Dropping out of the Service is
+          # enough — Mealie retries its connection.
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-d", "mealie"]
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              # No CPU limit: throttling a database under load turns a slow
+              # query into a timeout cascade. Memory is capped because a leak
+              # here should kill this pod and not the node.
+              memory: 512Mi
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          app.kubernetes.io/name: mealie-postgres
+          app.kubernetes.io/part-of: mealie
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: longhorn
+        resources:
+          requests:
+            # 5Gi. Recipes are text; the images live on Mealie's own PVC, not
+            # in here. Longhorn volumes expand online, so this errs small.
+            #
+            # NOTE: this volume is NOT covered by any Longhorn backup —
+            # backupTarget is "" fleet-wide and there are no RecurringJobs. Its
+            # only offsite copy is a logical pg_dump, which is a FOLLOW-UP: this
+            # database is not in ~/homelab-backups/dump-all.sh yet.
+            storage: 5Gi

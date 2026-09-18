@@ -1,0 +1,38 @@
+---
+# Mealie's /app/data — recipe images, user uploads, and the two secret files the
+# app generates for itself on first boot (.secret and .session_secret, which
+# sign login tokens). Losing this volume does not lose the recipes, which are in
+# PostgreSQL, but it does lose every image and log every user out.
+#
+# ── Why a standalone PVC and not a volumeClaimTemplate ──────────────────────
+# Mealie is a Deployment, not a StatefulSet — it has no ordinal identity worth
+# keeping and no clustering. That makes a plain PVC the honest shape, and it is
+# what pins Deployment.yaml to `strategy: Recreate`: ReadWriteOnce means the
+# replacement pod cannot attach while the old one still holds the volume, so a
+# RollingUpdate would deadlock on every image bump.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mealie-data
+  namespace: mealie
+  labels:
+    app.kubernetes.io/name: mealie
+    app.kubernetes.io/component: storage
+    app.kubernetes.io/part-of: mealie
+  annotations:
+    # Wave 1, with PostgreSQL: bound before the Deployment in wave 2 asks for
+    # it. Longhorn provisions on first consumer, so this is about ordering the
+    # ArgoCD sync, not about when the volume actually appears.
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: longhorn
+  resources:
+    requests:
+      # 10Gi — sized for recipe images at a few hundred KB each. Longhorn
+      # expands online if it turns out to be low.
+      #
+      # NOT backed up by anything today: there is no Longhorn backupTarget in
+      # this fleet, and ~/homelab-backups/dump-all.sh takes logical dumps only.
+      # Adding /app/data to that script is a known follow-up.
+      storage: 10Gi

@@ -1,0 +1,44 @@
+# RootHousehold — App-of-Apps for household-facing, third-party applications.
+# Discovers ApplicationSets in gitops/argocd-manifests/apps/household/.
+#
+# ── Why a new stage rather than apps/apps/ ──────────────────────────────────
+# `apps/apps/` is reserved for OUR apps, every one of them rendered by the
+# in-repo `iot-applications` chart across production + sandbox. Mealie is
+# third-party, a singleton, and carries raw manifests instead of that chart —
+# dropping it into `apps/apps/` would make the one thing that stage guarantees
+# (same chart, two environments) no longer true.
+#
+# The stage is named for what is coming, not for its first tenant: Open WebUI,
+# Ollama and the agent tool servers land here too. See
+# docs/superpowers/specs/2026-09-13-personal-agents-platform.md.
+#
+# ── Sync wave 4 ─────────────────────────────────────────────────────────────
+# Alongside RootApps. Needs ESO (wave 1) for the OpenBao-backed Secret and
+# Traefik (wave 2) for the HTTPRoute. It does NOT need wave 3's databases:
+# Mealie brings its own PostgreSQL inside its namespace, deliberately — see the
+# comment in gitops/k8s-manifests/server1/mealie/StatefulSet.postgres.yaml.
+#
+# Bootstrap.yaml discovers roots/ with directory.recurse, so this file needs no
+# manual `kubectl apply`; committing it is the whole install step.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root-household
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/radoslavirha/homelab
+    targetRevision: HEAD
+    path: gitops/argocd-manifests/apps/household
+    directory:
+      recurse: true
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

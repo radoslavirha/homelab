@@ -291,9 +291,9 @@ bao kv put secret/<cluster>/provisioner-token token="$PROVISIONER_TOKEN"
 #    See docs/secrets.md for full details and verification commands.
 #    These secrets must exist before ESO syncs for the first time (steps 5 onwards).
 #    Add all secrets for every app you plan to deploy on this cluster — and ONLY those.
-#    external-dns and cert-manager are needed by every cluster. influxdb2, emqx, mongodb
-#    and the provisioner token are needed only where those datastores actually run, which
-#    since 2026-09-13 is server1 alone; server2 runs platform components only.
+#    external-dns and cert-manager are needed by every cluster. influxdb2, emqx, mongodb,
+#    mealie and the provisioner token are needed only where those workloads actually run,
+#    which since 2026-09-13 is server1 alone; server2 runs platform components only.
 
 #    ExternalDNS — UniFi API key (gateway stage):
 bao kv put secret/<cluster>/external-dns api-key=<unifi-api-key>
@@ -325,6 +325,14 @@ bao kv put secret/<cluster>/emqx \
 #      See docs/provisioning.md for per-app user provisioning after first start.
 bao kv put secret/<cluster>/mongodb \
   root-password=<password>
+
+#    Mealie's PostgreSQL password (household stage; ESO syncs before both pods start):
+#      Read by BOTH the postgres StatefulSet (which sets it) and Mealie (which presents
+#      it). There is deliberately no default-password key here: Mealie's first-admin
+#      password is not settable by environment any more — see docs/secrets.md.
+#      server1 only today.
+bao kv put secret/<cluster>/mealie \
+  postgres-password=$(openssl rand -base64 24)
 
 #    Verify all secrets are present before continuing:
 bao kv list secret/<cluster>

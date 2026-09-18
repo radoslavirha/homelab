@@ -1,0 +1,55 @@
+---
+# mealie.irha.cz -> mealie:9000, LAN only for now.
+#
+# APEX TIER, not the homelab subtree. Per docs/architecture.md the apex is kept
+# for names that are, or may become, publicly reachable — and Mealie is going
+# public once the public-exposure spec's gate opens, so it is named for its
+# destination and never renamed. Same tier as qr.irha.cz.
+#
+# Two things an apex name does NOT get for free, and both are changed alongside
+# this file — a hostname here with either one missing fails silently:
+#   * TLS — apex names are individual SANs; `*.server1.homelab.irha.cz` does
+#     not cover them (a certificate wildcard matches exactly one label,
+#     RFC 6125). `mealie.irha.cz` is added to the server1-tls Certificate
+#     (k8s-manifests/server1/traefik/Certificate.server1-tls.yaml), which
+#     reissues the whole certificate.
+#   * DNS — ExternalDNS ignores any name outside its domainFilters with no
+#     error and no event, so `mealie.irha.cz` is listed individually in
+#     helm-values/server1/external-dns.yaml. A bare `irha.cz` filter is
+#     deliberately NOT used: all three clusters would then claim the zone.
+#
+# No forward-auth Middleware here, unlike longhorn/ and cilium/. Mealie has its
+# own accounts and its own API tokens, and the agent layer will authenticate to
+# it directly — an Authentik proxy in front would break that. Authentik OIDC
+# *inside* Mealie is the follow-up, and it needs a confidential client.
+#
+# Public exposure is out of scope: this answers on the LAN only, per the
+# public-exposure spec.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: mealie
+  namespace: mealie
+  labels:
+    app.kubernetes.io/name: mealie
+    app.kubernetes.io/component: ui
+    app.kubernetes.io/part-of: mealie
+  annotations:
+    # Wave 100: routes go last, everywhere in this repo. A route that resolves
+    # before its backend is Ready serves 503s to anything already watching the
+    # name — including ExternalDNS consumers that cache the negative answer.
+    argocd.argoproj.io/sync-wave: "100"
+spec:
+  parentRefs:
+    # The shared Traefik Gateway. Its websecure listener is `namespacePolicy:
+    # from: All`, so a route in this namespace attaches with no ReferenceGrant.
+    - name: traefik-gateway
+      namespace: traefik
+  hostnames:
+    - mealie.irha.cz
+  rules:
+    - backendRefs:
+        # Same namespace as this route, so again no ReferenceGrant is needed.
+        - name: mealie
+          namespace: mealie
+          port: 9000

@@ -32,4 +32,8 @@ spec:
     - "*.sandbox.server1.homelab.irha.cz"
     # Apex tier: the URL shortener. Deliberately short — printed QR codes point at it.
     - qr.irha.cz
+    # Apex tier: the recipe manager. Named for where it is going — it is LAN-only today
+    # and public once the public-exposure spec's gate opens, and a rename would break
+    # every phone client and OIDC redirect URI pointed at it.
+    - mealie.irha.cz
 

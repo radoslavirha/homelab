@@ -1,0 +1,29 @@
+---
+# The name Mealie dials: POSTGRES_SERVER=mealie-postgres in Deployment.yaml
+# resolves here. ClusterIP only — this database is reachable from inside the
+# namespace and nowhere else. There is deliberately no IngressRouteTCP beside
+# it, unlike mongodb/ and emqx/: nothing outside the cluster has any business
+# talking to a trial's database, and the backup path is a pg_dump taken through
+# `kubectl exec`, not a TCP connection from a laptop.
+apiVersion: v1
+kind: Service
+metadata:
+  name: mealie-postgres
+  namespace: mealie
+  labels:
+    app.kubernetes.io/name: mealie-postgres
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: mealie
+  annotations:
+    # Same wave as the StatefulSet — a Service with no endpoints is harmless,
+    # so there is nothing to order between the two.
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: mealie-postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+      protocol: TCP

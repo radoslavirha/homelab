@@ -1,0 +1,164 @@
+---
+# Mealie — the household cookbook. One container: FastAPI backend serving its
+# own pre-built frontend, so there is no nginx sidecar and no second image.
+#
+# ── The image tag is the version, and Renovate cannot see it ────────────────
+# There is no chart and no `targetRevision` to bump, so v3.27.0 below IS the
+# pinned version of this app. renovate.json5 gives file patterns to the argocd
+# and helm-values managers only; Renovate's `kubernetes` manager ships no
+# default patterns either, so this line is currently invisible to it — which
+# looks exactly like being up to date. Bump it by hand, or add a `kubernetes`
+# manager pattern for gitops/k8s-manifests/ to renovate.json5.
+#
+# ── Trial status ────────────────────────────────────────────────────────────
+# docs/superpowers/specs/2026-09-17-mealie-trial-install.md. LAN only, local
+# accounts; Authentik OIDC needs a confidential client and the blueprints matrix
+# renders public+PKCE `api` clients, so it is deliberately a follow-up.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mealie
+  namespace: mealie
+  labels:
+    app.kubernetes.io/name: mealie
+    app.kubernetes.io/component: app
+    app.kubernetes.io/part-of: mealie
+  annotations:
+    # Wave 2: after PostgreSQL (wave 1). Mealie runs its Alembic migrations
+    # during startup and gives up if the database is not there, so on a first
+    # sync this ordering is what stops it crashlooping into a backoff.
+    argocd.argoproj.io/sync-wave: "2"
+    # Restart when the mealie Secret changes — POSTGRES_PASSWORD reaches the pod
+    # as an env var, and env vars are read once at process start. Without this
+    # a rotated password leaves a Running pod holding the old one, ArgoCD green
+    # the whole time. Reloader runs in opt-in mode; this annotation is the opt.
+    reloader.stakater.com/auto: "true"
+spec:
+  replicas: 1
+  strategy:
+    # Recreate, not RollingUpdate: /app/data is a ReadWriteOnce Longhorn volume
+    # and Mealie is a single writer. A rolling update would start the new pod
+    # before the old one released the volume, and it would sit Pending on
+    # "Multi-Attach error" until the rollout timed out. The cost is a few
+    # seconds of downtime per deploy, which for a cookbook is not a cost.
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mealie
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: mealie
+        app.kubernetes.io/component: app
+        app.kubernetes.io/part-of: mealie
+    spec:
+      # No securityContext.runAsNonRoot here, and that is not an oversight. The
+      # upstream image has no USER directive: docker/entry.sh starts as root,
+      # remaps the `abc` user to PUID/PGID, chowns /app so the mounted volume is
+      # writable, and only then `exec gosu`s down to that uid. Forcing non-root
+      # skips the chown and Mealie cannot write /app/data.
+      containers:
+        - name: mealie
+          image: ghcr.io/mealie-recipes/mealie:v3.27.0
+          ports:
+            - name: http
+              # 9000 is Mealie's API_PORT default and upstream says not to change
+              # it inside a container. The Service does the remapping if ever
+              # needed; this stays 9000.
+              containerPort: 9000
+              protocol: TCP
+          env:
+            # Absolute, external, and https — Mealie builds notification links
+            # and the OIDC callback URL from it, so a wrong value produces links
+            # that work from nowhere. Trailing slashes are stripped by Mealie.
+            - name: BASE_URL
+              value: https://mealie.irha.cz
+            # Meal plans and the daily task schedule are local-time concepts; the
+            # container defaults to UTC, which puts "today" an hour off.
+            - name: TZ
+              value: Europe/Prague
+            # Already the upstream default since v1.4.0, but stated explicitly:
+            # this host answers to the whole LAN and self-registration is not
+            # wanted. Users are invited by the admin.
+            - name: ALLOW_SIGNUP
+              value: "false"
+            #
+            # ── There is deliberately no DEFAULT_EMAIL / DEFAULT_PASSWORD ────
+            # They are not settable any more. In v3.x `_DEFAULT_EMAIL` and
+            # `_DEFAULT_PASSWORD` are pydantic PRIVATE attributes of AppSettings
+            # (mealie/core/settings/settings.py at the v3.27.0 tag) and
+            # pydantic-settings never fills a leading-underscore attribute from
+            # the environment. Because AppSettings sets `extra="allow"`, adding
+            # them back is WORSE than useless: they are accepted, ignored, and
+            # leave you believing the admin password is something it is not.
+            #
+            # The first admin is therefore upstream's built-in
+            # `changeme@example.com` / `MyPassword` (mealie/repos/seed/init_users.py).
+            # CHANGE IT AT FIRST LOGIN — the route is live the moment DNS
+            # resolves. /api/app/about reports `isFirstLogin: true` until you do.
+            #
+            # ── Database ────────────────────────────────────────────────────
+            # Names verified against Mealie's own PostgresProvider
+            # (mealie/core/settings/db_providers.py, v3.27.0), not guessed.
+            # DB_ENGINE anything but "postgres" silently falls back to SQLite in
+            # db_provider_factory — there is no error to notice, so confirm the
+            # tables really landed in PostgreSQL before trusting a green pod.
+            - name: DB_ENGINE
+              value: postgres
+            - name: POSTGRES_SERVER
+              value: mealie-postgres
+            - name: POSTGRES_PORT
+              value: "5432"
+            - name: POSTGRES_USER
+              value: mealie
+            - name: POSTGRES_DB
+              value: mealie
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mealie
+                  key: postgres-password
+          volumeMounts:
+            # Recipe images, uploads, and the .secret / .session_secret files
+            # Mealie generates for itself. Wiping this logs every user out.
+            - name: data
+              mountPath: /app/data
+          # /api/app/about is the endpoint the image's own Docker HEALTHCHECK
+          # curls (docker/healthcheck.sh), and it needs no authentication.
+          startupProbe:
+            # Alembic migrations run before the server listens, and the first
+            # boot also seeds foods, units and labels. 5s x 60 = 5 minutes of
+            # patience before anything is called failed.
+            httpGet:
+              path: /api/app/about
+              port: http
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /api/app/about
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /api/app/about
+              port: http
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              # Mealie's ingredient parser loads NLTK data at import time, so
+              # idle usage is well above what the process size suggests.
+              memory: 512Mi
+            limits:
+              # No CPU limit — a URL import is a short burst of parsing and
+              # throttling it only makes the request slower. Memory is capped at
+              # upstream's own suggested ceiling for the compose example.
+              memory: 1Gi
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: mealie-data

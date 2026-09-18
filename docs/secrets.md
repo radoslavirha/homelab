@@ -20,6 +20,7 @@ Every stage in `docs/iac.md` and `gitops/README.md` that requires secrets links 
 | `secret/<cluster>/influxdb2` | `admin-password`, `admin-token` | iot stage | server1 |
 | `secret/<cluster>/emqx` | `dashboard-username`, `dashboard-password` | iot stage | server1 |
 | `secret/<cluster>/mongodb` | `root-password` | databases stage | server1 |
+| `secret/<cluster>/mealie` | `postgres-password` | household stage | server1 |
 | `secret/otel-gateway/auth-token` | `token` | observability stage | server1, server2 |
 | `secret/<cluster>/influxdb2-grafana` | `token` | *provisioned at runtime* | server1 |
 
@@ -263,6 +264,42 @@ bao kv get secret/<cluster>/mongodb
 ```
 
 See [provisioning.md](provisioning.md) for per-app scoped user provisioning via the MongoDB management API.
+
+---
+
+## \<cluster\>/mealie
+
+**Required before:** household stage (`RootHousehold.yaml` applied / first sync of the Mealie ApplicationSet)
+
+One key, read by two workloads: the PostgreSQL StatefulSet sets `POSTGRES_PASSWORD` from it on
+first init, and Mealie presents the same value. ESO syncs it at sync-wave 0, before either pod
+starts; an empty path fails the ExternalSecret and the sync stops there rather than crashlooping.
+
+```bash
+# postgres-password: strong password (20+ chars), no shell-special characters needed —
+# Mealie URL-encodes it into the DSN.
+bao kv put secret/<cluster>/mealie \
+  postgres-password=$(openssl rand -base64 24)
+
+# Verify
+bao kv get secret/<cluster>/mealie
+```
+
+**Rotation is two steps, not one.** PostgreSQL reads `POSTGRES_PASSWORD` only when it initialises
+an empty data directory, so re-seeding this path moves Mealie onto a password the server does not
+have. Change it in the running database as well:
+
+```bash
+kubectl --context admin@<cluster> -n mealie exec sts/mealie-postgres -- \
+  psql -U mealie -d mealie -c "ALTER ROLE mealie PASSWORD '<new>'"
+```
+
+**There is no `default-password` key, deliberately.** Mealie's first-admin credentials are not
+settable by environment: since v3.x `_DEFAULT_EMAIL` and `_DEFAULT_PASSWORD` are pydantic *private*
+attributes (`mealie/core/settings/settings.py`), and `AppSettings` sets `extra="allow"`, so a
+`DEFAULT_PASSWORD` env var is accepted and silently ignored. The first login is upstream's built-in
+`changeme@example.com` / `MyPassword` — **change it immediately after the first sync**, because the
+route answers to the whole LAN as soon as DNS resolves.
 
 ---
 

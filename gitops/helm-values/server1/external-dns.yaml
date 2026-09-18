@@ -13,6 +13,8 @@ domainFilters:
   - server1.homelab.irha.cz
   # Apex tier: the URL shortener, and a SAN on server1-tls.
   - qr.irha.cz
+  # Apex tier: Mealie, and a SAN on server1-tls.
+  - mealie.irha.cz
 
 # TXT registry owner ID — must be unique per cluster to avoid record conflicts
 txtOwnerId: homelab-server1
