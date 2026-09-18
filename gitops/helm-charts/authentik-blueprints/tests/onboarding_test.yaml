@@ -77,3 +77,30 @@ tests:
       - notMatchRegex:
           path: data["homelab-onboarding.yaml"]
           pattern: "identificationstage|default-user-settings"
+
+  - it: wires recovery to the brand but not to the login page
+    set:
+      onboarding:
+        enabled: true
+    asserts:
+      # brand.flow_recovery is what makes "Create recovery link" work on the admin
+      # user page. It is an UPDATE: a blueprint leaves unmentioned fields alone.
+      - matchRegex:
+          path: data["homelab-onboarding.yaml"]
+          pattern: "model: authentik_brands.brand\\n\\s+identifiers:\\n\\s+domain: authentik-default\\n\\s+attrs:\\n\\s+flow_recovery: !KeyOf flow-recovery"
+      # The identification stage is NOT touched, so the public login page shows no
+      # "Forgot password?" — no reset form to enumerate usernames with. The field
+      # that would do it is `recovery_flow:`; note this must not match the phrase
+      # in the template's own comment, hence the colon.
+      - notMatchRegex:
+          path: data["homelab-onboarding.yaml"]
+          pattern: "recovery_flow:"
+
+  - it: never creates a user from the recovery flow
+    set:
+      onboarding:
+        enabled: true
+    asserts:
+      - matchRegex:
+          path: data["homelab-onboarding.yaml"]
+          pattern: "name: homelab-recovery-write\\n\\s+attrs:\\n\\s+user_creation_mode: never_create"

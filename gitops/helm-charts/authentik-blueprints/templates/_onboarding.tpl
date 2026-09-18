@@ -172,4 +172,88 @@ entries:
       target: !KeyOf flow-enrollment
       stage: !KeyOf stage-enrollment-login
       order: 100
+
+  # ---------- recovery ----------
+  # Reached ONLY from an admin-minted link (Directory -> Users -> Create recovery
+  # link), which is why brand.flow_recovery is set below while the identification
+  # stage's own recovery_flow is deliberately left alone: the public login page
+  # shows no "Forgot password?", so there is no reset form to enumerate usernames
+  # with, and no SMTP is needed to run it.
+  #
+  # The cost is that the operator IS the recovery path. SMTP is the documented
+  # upgrade, not a redesign -- see the spec's "SMTP: deferred, not rejected".
+  - model: authentik_flows.flow
+    id: flow-recovery
+    identifiers:
+      slug: homelab-recovery
+    attrs:
+      name: homelab-recovery
+      title: {{ .Values.onboarding.recoveryTitle | quote }}
+      designation: recovery
+      authentication: require_unauthenticated
+
+  - model: authentik_stages_prompt.prompt
+    id: prompt-recovery-password
+    identifiers:
+      name: homelab-recovery-field-password
+    attrs:
+      field_key: password
+      label: Password
+      type: password
+      required: true
+      placeholder: Password
+      placeholder_expression: false
+      order: 0
+
+  - model: authentik_stages_prompt.prompt
+    id: prompt-recovery-password-repeat
+    identifiers:
+      name: homelab-recovery-field-password-repeat
+    attrs:
+      field_key: password_repeat
+      label: Password (repeat)
+      type: password
+      required: true
+      placeholder: Password (repeat)
+      placeholder_expression: false
+      order: 1
+
+  - model: authentik_stages_prompt.promptstage
+    id: stage-recovery-prompt
+    identifiers:
+      name: homelab-recovery-prompt
+    attrs:
+      fields:
+        - !KeyOf prompt-recovery-password
+        - !KeyOf prompt-recovery-password-repeat
+      validation_policies:
+        - !Find [authentik_policies_password.passwordpolicy, [name, default-password-change-password-policy]]
+
+  # never_create: a recovery link names its user. This stage must never mint one.
+  - model: authentik_stages_user_write.userwritestage
+    id: stage-recovery-write
+    identifiers:
+      name: homelab-recovery-write
+    attrs:
+      user_creation_mode: never_create
+
+  - model: authentik_flows.flowstagebinding
+    identifiers:
+      target: !KeyOf flow-recovery
+      stage: !KeyOf stage-recovery-prompt
+      order: 10
+
+  - model: authentik_flows.flowstagebinding
+    identifiers:
+      target: !KeyOf flow-recovery
+      stage: !KeyOf stage-recovery-write
+      order: 20
+
+  # UPDATED, not created: a blueprint leaves unmentioned fields exactly as it
+  # found them, so only flow_recovery changes on the default brand.
+  - model: authentik_brands.brand
+    identifiers:
+      domain: authentik-default
+    attrs:
+      flow_recovery: !KeyOf flow-recovery
 {{- end -}}
