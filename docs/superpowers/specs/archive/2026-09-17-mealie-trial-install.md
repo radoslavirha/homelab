@@ -233,8 +233,9 @@ Nothing else in the fleet depends on this.
 
 ## Known follow-ups (explicitly not now)
 
-- **Flip `ALLOW_PASSWORD_LOGIN` to `false`** once an Authentik login has
-  worked, and consider `OIDC_AUTO_REDIRECT`.
+- ~~Flip `ALLOW_PASSWORD_LOGIN` to `false`~~ — **done 2026-09-18**, after an
+  Authentik login was verified and the default admin was deleted.
+  `OIDC_AUTO_REDIRECT` is still at its default.
 - Behind a TLS-terminating proxy, gunicorn may need its forwarded-IP handling
   set, or a generated redirect URI comes back as `http://`. Not yet observed
   here — watch for it on the first login.

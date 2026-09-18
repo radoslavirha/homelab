@@ -189,12 +189,20 @@ spec:
             # invite-by-hand step in Mealie buys nothing.
             - name: OIDC_SIGNUP_ENABLED
               value: "true"
-            # Local logins stay ENABLED for now: this is a trial, the first
-            # admin is a local account, and locking the door behind an untested
-            # IdP integration is how you end up with no way in. Flip to "false"
-            # once an Authentik login has actually worked.
+            # Local logins OFF (2026-09-18). Authentik login was verified working
+            # first, and the seeded `changeme@example.com` admin has been deleted,
+            # so there is no local account left for this form to serve — leaving it
+            # on would only render a username/password box nothing can satisfy.
+            #
+            # There is therefore NO local break-glass: if Authentik is unreachable
+            # — the realistic case being OpenBao sealed after a reboot, which takes
+            # Authentik's secrets with it — nobody can reach this UI. Recovery is
+            # to fix Authentik, or to set this back to "true" and create a local
+            # user. What still works meanwhile is an **API token** (Settings → API
+            # tokens): tokens authenticate directly against Mealie and are
+            # unaffected by OIDC, which is also how the agent layer will connect.
             - name: ALLOW_PASSWORD_LOGIN
-              value: "true"
+              value: "false"
           envFrom:
             # OIDC_CLIENT_SECRET, and only that. `optional: true` is what makes
             # the ordering work: the blueprint creates the provider, Authentik

@@ -621,9 +621,13 @@ The alternative — a local `email` scope mapping emitting `email_verified: true
 `profile` mapping — was rejected: it asserts a verification that never happened, and it would do so for
 every provider bound to it rather than for the one application whose trade-off this is.
 
-**Local logins stay enabled** (`ALLOW_PASSWORD_LOGIN=true`) while this is a trial: the first admin is a
-local account, and closing that door behind an untested integration leaves no way in. Flip it once an
-Authentik login has worked.
+**Local logins are off** (`ALLOW_PASSWORD_LOGIN=false`, 2026-09-18) and the seeded
+`changeme@example.com` admin is deleted, so Authentik is the only way into the UI. **There is no local
+break-glass**: if Authentik is unreachable — realistically OpenBao sealed after a reboot, which takes
+Authentik's secrets with it — nobody reaches Mealie's UI until it is back, or until the flag is set to
+`true` and a local user is created. An **API token** (Settings → API tokens) still authenticates
+directly against Mealie, unaffected by OIDC; that is both the agent layer's connection and the way to
+drive the instance while the IdP is down.
 
 ### Setting up the client secret
 
