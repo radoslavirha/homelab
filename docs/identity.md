@@ -605,10 +605,21 @@ so an admin's token carries both and passes the gate.
 which does **not** include this chart's `roles` scope — and without that scope the claim never arrives,
 so `OIDC_USER_GROUP` refuses every login. The Deployment requests `openid profile email roles`.
 
-**`email_verified` is required** since Mealie v3.21.0: it matches an OIDC login to an account by the
-`email` claim, so it refuses an IdP that lets a user self-assert an address. Authentik emits the claim
-with the `email` scope, so nothing extra is needed — but if logins fail with
-`[OIDC] email_verified claim is missing or false`, that is why.
+**`email_verified` is turned OFF, and that is a decision.** Mealie v3.21.0+ refuses a login unless the
+claim is true, because it matches an OIDC login to an account by the `email` claim. **Authentik does not
+verify emails**: its shipped `email` scope mapping returns a hardcoded `"email_verified": False` (read
+from the running 2026.8.1 instance, 2026-09-18). Every login failed with
+`[OIDC] email_verified claim is missing or false` — which the UI shows as **"Invalid Credentials"**, a
+message that sends you hunting for a wrong client secret. So `OIDC_REQUIRES_EMAIL_VERIFICATION=false`.
+
+The risk that check guards is real here: the `default-user-settings` prompt stage has an **editable
+`email` field**, so any user can change their own address and, with the check off, land in another
+member's Mealie account on the next login. **Mitigation, and it is UI work:** remove the `email` field
+from that prompt stage so addresses are admin-assigned only.
+
+The alternative — a local `email` scope mapping emitting `email_verified: true`, mirroring the local
+`profile` mapping — was rejected: it asserts a verification that never happened, and it would do so for
+every provider bound to it rather than for the one application whose trade-off this is.
 
 **Local logins stay enabled** (`ALLOW_PASSWORD_LOGIN=true`) while this is a trial: the first admin is a
 local account, and closing that door behind an untested integration leaves no way in. Flip it once an

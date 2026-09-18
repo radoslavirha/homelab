@@ -155,6 +155,34 @@ spec:
             # mappings (`homelab roles`, `homelab profile`).
             - name: OIDC_SCOPES_OVERRIDE
               value: openid profile email roles
+            # Authentik does not verify email addresses, and says so: its shipped
+            # `email` scope mapping (managed goauthentik.io/providers/oauth2/
+            # scope-email, read from the running 2026.8.1 instance on 2026-09-18)
+            # returns a hardcoded `"email_verified": False`. Mealie refuses every
+            # login while that claim is false — "[OIDC] email_verified claim is
+            # missing or false; refusing to authenticate", surfacing in the UI as
+            # the unhelpful "Invalid Credentials".
+            #
+            # What the check is FOR (mealie/core/security/providers/
+            # openid_provider.py): Mealie matches an OIDC login to an existing
+            # account by the email claim, so an IdP where a user can set their own
+            # address would let one member log into another member's account.
+            #
+            # That risk is REAL here, not theoretical: Authentik's
+            # `default-user-settings` prompt stage carries an editable `email`
+            # field, so any user can change their own address. The mitigation is
+            # in Authentik, not here — remove that field from the flow, leaving
+            # email admin-assigned — and it is UI work, like every other
+            # membership decision in this homelab.
+            #
+            # Turning the check off is therefore a statement about THIS
+            # deployment: a household of accounts created by hand, where the
+            # worst case is one member reaching another's cookbook. The
+            # alternative — emitting `email_verified: true` from a local scope
+            # mapping — would assert a verification that never happened, for
+            # every application bound to that mapping rather than just this one.
+            - name: OIDC_REQUIRES_EMAIL_VERIFICATION
+              value: "false"
             # Mealie creates a local account on first OIDC login. Left at its
             # default (true) deliberately: household members are granted access
             # in Authentik, and OIDC_USER_GROUP is the gate, so a second
