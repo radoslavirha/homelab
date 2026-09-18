@@ -155,6 +155,24 @@ spec:
             # mappings (`homelab roles`, `homelab profile`).
             - name: OIDC_SCOPES_OVERRIDE
               value: openid profile email roles
+            # Which claim identifies the account. Mealie's default is `email`, and
+            # its own docs say why that is risky: an IdP that lets a user
+            # self-assert an address would let them log into someone else's
+            # account by claiming it.
+            #
+            # `preferred_username` is the better key here on two counts measured
+            # on the running Authentik 2026.8.1 (2026-09-18): User.username is
+            # unique=True while User.email is unique=False, and the username is
+            # what `sub` already carries fleet-wide (sub_mode: user_username).
+            #
+            # Safe to switch on a live deployment: auth_provider.try_get_user
+            # tries username FIRST and email second, and Mealie created these
+            # accounts with username = the preferred_username claim, so an
+            # existing row is matched rather than a duplicate created. The claim
+            # itself comes from the blueprint chart's `homelab profile` mapping,
+            # which emits request.user.username.
+            - name: OIDC_USER_CLAIM
+              value: preferred_username
             # Authentik does not verify email addresses, and says so: its shipped
             # `email` scope mapping (managed goauthentik.io/providers/oauth2/
             # scope-email, read from the running 2026.8.1 instance on 2026-09-18)
@@ -165,22 +183,30 @@ spec:
             #
             # What the check is FOR (mealie/core/security/providers/
             # openid_provider.py): Mealie matches an OIDC login to an existing
-            # account by the email claim, so an IdP where a user can set their own
-            # address would let one member log into another member's account.
+            # account by OIDC_USER_CLAIM, so an IdP where a user can set their own
+            # value for that claim would let one member log into another's account.
             #
-            # That risk is REAL here, not theoretical: Authentik's
-            # `default-user-settings` prompt stage carries an editable `email`
-            # field, so any user can change their own address. The mitigation is
-            # in Authentik, not here — remove that field from the flow, leaving
-            # email admin-assigned — and it is UI work, like every other
-            # membership decision in this homelab.
+            # With OIDC_USER_CLAIM set to preferred_username above, that claim is
+            # no longer the email — and the username cannot be self-changed.
+            # Measured 2026-09-18 by simulating authentik's own shipped
+            # default-user-settings-authorization policy: a username change comes
+            # back "Not allowed to change username.", an email change "Not allowed
+            # to change email address." Tenant defaults are
+            # default_user_change_username = False and default_user_change_email =
+            # False, which are authentik's shipped values, and no group carries a
+            # goauthentik.io/user/can-change-* attribute overriding them.
             #
-            # Turning the check off is therefore a statement about THIS
-            # deployment: a household of accounts created by hand, where the
-            # worst case is one member reaching another's cookbook. The
-            # alternative — emitting `email_verified: true` from a local scope
-            # mapping — would assert a verification that never happened, for
-            # every application bound to that mapping rather than just this one.
+            # (An earlier version of this comment asserted the opposite — that the
+            # editable-looking email field in `default-user-settings` meant any
+            # user could change their address. Presence of a field in the form is
+            # not editability; the stage's validation policy is the gate.)
+            #
+            # So the check stays off because it guards a matching mode this
+            # deployment no longer uses, not because the risk was accepted. The
+            # rejected alternative is unchanged: emitting `email_verified: true`
+            # from a local scope mapping would assert a verification that never
+            # happened, for every application bound to that mapping rather than
+            # just this one.
             - name: OIDC_REQUIRES_EMAIL_VERIFICATION
               value: "false"
             # Mealie creates a local account on first OIDC login. Left at its
