@@ -69,6 +69,26 @@
 # Design: docs/superpowers/specs/archive/2026-09-08-multi-audience-tokens.md and
 #         docs/superpowers/specs/archive/2026-09-08-device-identity-esp32.md
 
+# Onboarding — invitation-gated enrollment and admin-minted recovery.
+#
+# The chart default is OFF; this is the file that turns it on. It renders a
+# SECOND blueprint key (homelab-onboarding.yaml) beside the applications one, so
+# Authentik gives it its own BlueprintInstance and a failure in one cannot take
+# the other down.
+#
+# What it creates: an enrollment flow gated on an invitation token, a recovery
+# flow reachable only from an admin-minted link, and the `household` group every
+# invited member lands in (which grants nothing on its own).
+#
+# Runbook: docs/identity.md § Onboarding a household member
+# Design:  docs/superpowers/specs/2026-09-18-authentik-identity-hardening.md
+onboarding:
+  enabled: true
+  group: household
+  userPath: users/household
+  enrollmentTitle: Welcome — finish setting up your account
+  recoveryTitle: Choose a new password
+
 applications:
   - name: qr-manager
     title: QR Manager
