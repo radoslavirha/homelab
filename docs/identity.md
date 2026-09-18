@@ -742,6 +742,35 @@ groups in the UI.
 The chart refuses to render an application with no roles: an Application with no policy binding is
 readable by **every** user, because Authentik fails open there.
 
+**Rule: no application may match accounts by email.** Many apps default to it — Mealie's
+`OIDC_USER_CLAIM` did until 2026-09-18. Two measured reasons it is the wrong key here:
+`User.email` is `unique=False` in Authentik's schema, so two accounts may hold one address; and
+the ban on users editing their own email is an authentik *tenant default*, not something this
+repo pins (`authentik_tenants.tenant` is absent from the blueprint schema — only
+`authentik_tenants.domain` is there). Match on `preferred_username`, which is unique and is
+already what `sub` carries.
+
+The defaults that back this up are worth re-checking after any Authentik upgrade:
+
+```bash
+kubectl --context admin@server3 -n authentik exec deploy/authentik-worker -- ak shell -c "
+from authentik.tenants.models import Tenant
+from authentik.core.models import Group
+t = Tenant.objects.first()
+print('username', t.default_user_change_username, '| email', t.default_user_change_email)
+print('group overrides:', [g.name for g in Group.objects.exclude(attributes={})
+                           if any('can-change' in str(k) for k in g.attributes)])"
+```
+
+Expected: `username False | email False` and an empty override list. A group carrying
+`goauthentik.io/user/can-change-username` or `…/can-change-email` set true re-opens self-service
+editing for its members, which is what makes an identifier stop being one.
+
+Note that the fields still *render* on the account page. Presence is not editability: the
+`default-user-settings` prompt stage carries a `validation_policies` entry that refuses the change
+("Not allowed to change username."). Do not try to remove those fields — authentik's own blueprint
+manages that stage's field list and will restore them.
+
 ## Adding or changing a role
 
 Add a rung to that application's `roles` list and point the rung above it at the new one. The chart:
@@ -756,6 +785,92 @@ Add a rung to that application's `roles` list and point the rung above it at the
 
 Renaming a role is a **create plus an orphan**: the new group appears, the old one keeps its members
 and its binding. Delete the old group in the UI and re-add its members.
+
+## Onboarding a household member
+
+Invitation only. There is no registration link anywhere, and the operator never creates or sees
+anyone's password.
+
+1. **Create the invitation.** Authentik UI → Directory → Invitations → Create:
+
+   | Field | Value |
+   |---|---|
+   | Flow | `homelab-enrollment` |
+   | Single use | on |
+   | Expires | ~7 days |
+   | Custom attributes | `{"username": "jana"}` |
+
+   The username is the one thing the invitation must carry: it becomes `sub` in every token, it is
+   the key Mealie and anything future match on, and the enrollment form deliberately does not offer
+   it. `fixed_data` is merged into the flow's `prompt_data`, so a field rendered by the form would
+   overwrite it.
+
+2. **Send them the link**, over whatever chat you already use:
+
+   ```
+   https://auth.irha.cz/if/flow/homelab-enrollment/?itoken=<uuid>
+   ```
+
+   They fill in their name, their own email, and a password of their choosing, and land signed in.
+
+3. **Grant access.** Add them to the application role groups they need — the same UI work every
+   membership is. Landing in `household` grants nothing on its own: no application is bound to it.
+
+**The invitation burns at the gate, not at the finish.** A single-use invitation is deleted the
+moment the flow reaches its invitation stage, before the password prompt. If they abandon the form
+halfway, the token is gone — issue another.
+
+**The flow's URL is safe to be reachable.** Its first stage is the invitation stage with
+`continue_flow_without_invitation: false`, so without a valid token it dead-ends: no account, no
+disclosure. That is what makes this publishable along with the rest of `auth.irha.cz`.
+
+### Recovery, when someone is locked out
+
+There is deliberately **no "Forgot password?"** on the login page: the identification stage carries
+no `recovery_flow`, so there is no public reset form to enumerate usernames with, and no SMTP to
+run. The operator mints the link instead.
+
+1. Authentik UI → Directory → Users → the user → **Create recovery link**.
+2. Send it over the same channel as the invitation. It drops them straight into
+   `homelab-recovery`, which asks for a new password twice and writes it.
+
+Break-glass, when nobody can mint a link — an admin locked out of Authentik itself:
+
+```bash
+kubectl --context admin@server3 -n authentik exec -it deploy/authentik-worker -- ak changepassword <username>
+```
+
+**SMTP would replace step 1 with self-service** and is the documented upgrade, not a redesign. See
+`docs/superpowers/specs/2026-09-18-authentik-identity-hardening.md` § "SMTP: deferred, not rejected".
+
+Both flows are rendered by the blueprint chart from the `onboarding` block in
+[`gitops/helm-values/server3/authentik-blueprints.yaml`](../gitops/helm-values/server3/authentik-blueprints.yaml),
+into their own ConfigMap key — a separate `BlueprintInstance` from the applications graph, so a
+failure in one cannot take the other down.
+
+## Adding a social source
+
+None is configured today (`Source.objects.all()` returns only `authentik-built-in`). When one is
+added — Google, GitHub, anything — three settings decide whether it stays safe, and **the
+new-source form defaults the other way on the first two**:
+
+| Setting | Required value | Why |
+|---|---|---|
+| `enrollment_flow` | **unset** | With one set, anybody holding an account at that provider creates an account here. The role groups still gate every application, but an unbounded account directory is not worth having |
+| `user_matching_mode` | **`identifier`** | `email_link` and `username_link` link a social identity to an existing user by an asserted attribute — the back door around every rule above |
+| Linking | only from a signed-in user's settings page | A deliberate act by the account's owner, not a side effect of a login attempt |
+
+Authentik ships `default-source-enrollment` and `default-source-authentication` wired to nothing,
+and they are exactly what the form offers by default. Leaving enrollment blank is the whole point.
+
+**What this buys:** password, Google, GitHub and anything later all resolve to **one** Authentik
+user — one `User` row with N `UserSourceConnection` rows. Applications never learn which provider
+was used; they see the same `sub`, the same `roles`, the same account.
+
+**Social cannot be the first credential.** Gating social *enrollment* on an invitation would need
+the flow's context to survive the OAuth round-trip, and the only thing that carries it is the
+enterprise Source Stage (`/authentik/enterprise/stages/source/stage.py`); this instance is
+unlicensed. So people enroll with a password and link social accounts afterwards.
 
 ## Operational notes
 

@@ -55,6 +55,15 @@ gitops/
                             Both non-api kinds carry `accesses` -- the APIs their token's aud names,
                             resolved within ONE environment. A client's roles come from the human's
                             groups; a device's access must name the role. See docs/identity.md.
+                            A SECOND values key, `onboarding`, renders a SECOND ConfigMap key
+                            (homelab-onboarding.yaml, body in templates/_onboarding.tpl): an
+                            invitation-gated enrollment flow, a recovery flow reachable only from an
+                            admin-minted link, and the `household` group. Separate key because
+                            Authentik gives every .yaml key its own BlueprintInstance, so a failure
+                            in one cannot take the other down -- at the cost that !KeyOf does not
+                            cross the two. Off by default; server3 opts in. Adding a person is an
+                            invitation in the UI, never a hand-made password -- docs/identity.md
+                            § Onboarding a household member.
     provisioner/            reusable PostSync provisioner Jobs chart (InfluxDB2, EMQX, MongoDB)
     iot-applications/       reusable chart for custom apps (Deployment/Rollout, Services, HTTPRoute,
                             Jinja2 config ConfigMap). Per-app `annotations` land on the WORKLOAD
