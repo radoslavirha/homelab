@@ -1,0 +1,193 @@
+---
+# Ollama — the LLM inference engine for the personal-agents platform. CPU only:
+# server2 has no GPU and is not getting one (parent spec decision 1).
+#
+# ── This is an experiment, not a dependency ────────────────────────────────
+# docs/superpowers/specs/2026-09-19-ollama-server2.md. Nothing in this repo
+# breaks if this is slow, wrong, or deleted — Mealie's AI provider runs on
+# Claude and works. That framing is why there is no credential system here, no
+# PostSync pull Job, and one replica.
+#
+# ── The image tag is the version ───────────────────────────────────────────
+# No chart and no `targetRevision`, so 0.34.2 below IS the pinned version.
+# Unlike Mealie's Deployment, this one IS visible to Renovate: this spec added
+# a `kubernetes` manager pattern for gitops/k8s-manifests/ to renovate.json5,
+# which the argocd and helm-values patterns did not cover and the manager ships
+# no defaults for. Bumps still wait for a tick on the Dependency Dashboard.
+#
+# Note the tag has no `v`: the GitHub release is v0.34.2, the Docker Hub tag is
+# 0.34.2. `ollama/ollama:v0.34.2` does not exist.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ollama
+  namespace: ollama
+  labels:
+    app.kubernetes.io/name: ollama
+    app.kubernetes.io/component: app
+    app.kubernetes.io/part-of: ollama
+  annotations:
+    # Wave 2: after the PVC in wave 1.
+    argocd.argoproj.io/sync-wave: "2"
+    #
+    # No reloader.stakater.com/auto here, and that is not an oversight: this
+    # workload consumes no Secret and no ConfigMap. There is nothing secret
+    # about Ollama — see Middleware.ipallowlist.yaml for what stands in for
+    # authentication, and why.
+spec:
+  replicas: 1
+  strategy:
+    # Recreate, not RollingUpdate: /models is a ReadWriteOnce Longhorn volume
+    # with a single writer. A rolling update would start the new pod before the
+    # old one released the volume and it would sit Pending on "Multi-Attach
+    # error" until the rollout timed out. Same reasoning as Mealie's Deployment.
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ollama
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ollama
+        app.kubernetes.io/component: app
+        app.kubernetes.io/part-of: ollama
+    spec:
+      containers:
+        - name: ollama
+          image: ollama/ollama:0.34.2
+          # ── Security context: read from the image, not copied from a sibling
+          # The ollama/ollama image at this tag declares NO `USER` (verified by
+          # reading the amd64 config blob, sha256:c715bebf7699…, on 2026-09-19),
+          # so the entrypoint `/bin/ollama serve` runs as uid 0. Mealie's
+          # fsGroup: 70 and the usual Debian 999 would both be guesses here, and
+          # the failure mode they produce is a pod that starts fine and cannot
+          # write /models — surfacing as a model pull failing, not as a
+          # permissions error.
+          #
+          # So: root, matching the image, plus the hardening that costs nothing.
+          # Ollama binds 11434 (unprivileged) and writes only to its own volume,
+          # so it needs no capability at all. Talos enforces the `baseline` Pod
+          # Security Standard by default, which permits a root uid; nothing here
+          # needs the `privileged` label that traefik and longhorn-system carry.
+          #
+          # Upgrade path if this is ever worth tightening: runAsNonRoot needs a
+          # writable HOME (see below) and an fsGroup matching the PVC, and it
+          # must be verified by pulling a model, not by the pod going Ready.
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            seccompProfile:
+              type: RuntimeDefault
+          ports:
+            - name: http
+              # Ollama's own default and the image's EXPOSE.
+              containerPort: 11434
+              protocol: TCP
+          env:
+            # ── HOME is load-bearing, not cosmetic ──────────────────────────
+            # `ollama serve` calls initializeKeypair() BEFORE it listens
+            # (cmd/cmd.go at the v0.34.2 tag), which calls os.UserHomeDir() and
+            # writes $HOME/.ollama/id_ed25519. On Linux os.UserHomeDir() reads
+            # $HOME and ERRORS if it is unset — and the image config declares no
+            # HOME, so the server would exit before binding rather than start
+            # without a key.
+            #
+            # Pointing it at the PVC kills two birds: the variable is defined
+            # regardless of what containerd does or does not default, and the
+            # key persists across pod restarts instead of being regenerated.
+            # The key lands in /models/.ollama/, which does not collide with the
+            # blobs/ and manifests/ trees OLLAMA_MODELS puts beside it.
+            - name: HOME
+              value: /models
+            - name: OLLAMA_MODELS
+              value: /models
+            # Already the image's default, stated explicitly so a future base
+            # image change cannot quietly make this listen on loopback only.
+            - name: OLLAMA_HOST
+              value: 0.0.0.0:11434
+            # 8 CPU cores. A second resident model does not add throughput, it
+            # adds swapping and memory pressure. Ollama's own default for
+            # MAX_LOADED_MODELS is 0 (auto), so this is a real narrowing;
+            # NUM_PARALLEL already defaults to 1 and is stated for symmetry.
+            - name: OLLAMA_MAX_LOADED_MODELS
+              value: "1"
+            - name: OLLAMA_NUM_PARALLEL
+              value: "1"
+            # Ollama's default context window is 4096. Tool schemas and RAG
+            # chunks both eat context, so start at 8192. Tunable — larger costs
+            # RAM and CPU per token, and on this box that is the whole budget.
+            - name: OLLAMA_CONTEXT_LENGTH
+              value: "8192"
+            #
+            # ── OLLAMA_KEEP_ALIVE is deliberately NOT set ───────────────────
+            # Its default is 5m: the model unloads after five idle minutes, so
+            # an idle Ollama costs ~0 RAM and ~0 CPU. That is the entire answer
+            # to "I don't want a server dedicated to parsing recipes a few times
+            # a month" — this is a mostly-idle process, not a reserved machine.
+            # Setting it here would only invite someone to raise it.
+            #
+            # ── OLLAMA_LOAD_TIMEOUT is also left at its default 5m ──────────
+            # It bounds how long a model load may STALL, not how long it may
+            # take. Loading ~18 GB of MoE weights off a SATA SSD is slow but it
+            # is not stalled. If an MoE ever fails to load with a timeout in the
+            # logs rather than an OOM kill, this is the knob.
+          volumeMounts:
+            # Model blobs and manifests, plus the id_ed25519 keypair (HOME).
+            - name: models
+              mountPath: /models
+          # ── Probes: /api/tags, and nothing else ─────────────────────────────
+          # /api/tags lists installed models. It is cheap, needs no auth, and
+          # touches no model weights, so it cannot be made slow by inference.
+          # Do NOT probe `/` — it returns a fixed "Ollama is running" string and
+          # would stay green through a model store that had gone missing.
+          startupProbe:
+            httpGet:
+              path: /api/tags
+              port: http
+            # The server itself starts in seconds. The patience is for the
+            # Longhorn volume attach on a node that has never attached one.
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /api/tags
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /api/tags
+              port: http
+            # Deliberately slack: 30s x 6 failures x 10s timeout is ~3 minutes
+            # before a restart. Saturating all 8 cores with inference is this
+            # workload's NORMAL state, and a liveness kill in the middle of a
+            # long generation would look like a crash loop caused by the very
+            # thing the box exists to do. /api/tags is cheap enough that three
+            # minutes of consecutive failures means genuinely wedged.
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 6
+          resources:
+            requests:
+              # What an idle server with no model loaded actually needs. The
+              # scheduler reserves this; inference bursts well past it.
+              cpu: 500m
+              memory: 2Gi
+            limits:
+              # No CPU limit. Inference is a burst that should use the cores it
+              # has — throttling only makes the same work take longer. Same
+              # argument as Mealie's manifest.
+              #
+              # Memory IS capped, at 24Gi of the node's ~29.7 GiB allocatable.
+              # High enough for an MoE plus context, low enough that an
+              # oversized model pull is OOM-killed instead of taking the
+              # kubelet down with it. Everything else on this node requests
+              # ~1.4 GiB today, so a pod actually AT this limit leaves the
+              # system ~4 GiB — which is the point at which you have chosen too
+              # large a model, and want to find that out as a pod restart.
+              memory: 24Gi
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: ollama-models

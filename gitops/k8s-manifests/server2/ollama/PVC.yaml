@@ -1,0 +1,55 @@
+---
+# Ollama's model store — /models, bound to OLLAMA_MODELS in Deployment.yaml.
+#
+# Everything on this volume is re-downloadable: blobs and manifests pulled from
+# ollama.com. Losing it costs bandwidth and a wait, not data. It is NOT backed
+# up, deliberately — ~/homelab-backups/dump-all.sh takes logical dumps of
+# datastores and there is nothing logical here.
+#
+# ── Why a standalone PVC and not a volumeClaimTemplate ──────────────────────
+# Ollama is a Deployment, not a StatefulSet: no ordinal identity, no clustering,
+# one replica. That makes a plain PVC the honest shape, and it is what pins
+# Deployment.yaml to `strategy: Recreate` — ReadWriteOnce means the replacement
+# pod cannot attach while the old one still holds the volume, so a RollingUpdate
+# would deadlock on `Multi-Attach error` on every image bump.
+#
+# ── 100Gi, and what that actually costs on this node (measured 2026-09-19) ──
+# server2's Longhorn disk is /var/lib/longhorn on a single KINGSTON SHFS37A240G
+# — a 240 GB SATA SSD, NOT the 500 GB the spec assumed. Longhorn reports
+# storageMaximum 223 GiB with 67 GiB reserved (its default 30%), so ~156 GiB is
+# schedulable, and this claim takes 64% of it. There are no other PVCs and no
+# orphaned volumes on this cluster (checked: zero PVs, storageScheduled 0), so
+# nothing is displaced — but the next PVC on server2 has ~56 GiB to work with.
+#
+# The volume is thin-provisioned: 100Gi is what Longhorn RESERVES against the
+# disk, not what it writes. A dense 8B q4 is ~5 GB and an MoE ~18 GB, so the
+# working set is ~25 GB. Longhorn expands online (allowVolumeExpansion: true on
+# the `longhorn` class) if that ever changes, and shrinks never — sizing down
+# later means a new claim.
+#
+# The same partition holds containerd's image store. That is what Longhorn's
+# 67 GiB reservation is guarding, and it is why this number is not larger.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ollama-models
+  namespace: ollama
+  labels:
+    app.kubernetes.io/name: ollama
+    app.kubernetes.io/component: storage
+    app.kubernetes.io/part-of: ollama
+  annotations:
+    # Wave 1: bound before the Deployment in wave 2 asks for it. Longhorn
+    # provisions on first consumer, so this orders the ArgoCD sync, not the
+    # moment the volume actually appears.
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  accessModes: [ReadWriteOnce]
+  # The `longhorn` class is the cluster default and provisions numberOfReplicas:
+  # 1 — server2 is a single node, so there is nowhere for a second replica to
+  # live. One node failure loses the volume, which for re-downloadable model
+  # weights is the right trade.
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 100Gi

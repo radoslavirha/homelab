@@ -60,6 +60,23 @@
     managerFilePatterns: ["/gitops/helm-values/.+\\.ya?ml$/"],
   },
 
+  // Raw manifests carry image tags that are NOT a chart targetRevision, so
+  // nothing else in this file sees them. Like the argocd manager above, the
+  // `kubernetes` manager ships NO default file patterns -- without this it
+  // silently finds nothing, which looks identical to "everything is up to date".
+  //
+  // Three images become visible at once: mealie (whose Deployment.yaml carries
+  // this exact complaint in a comment), ollama, and the hand-written Authentik
+  // proxy outposts in k8s-manifests/<cluster>/traefik/. Everything else under
+  // that tree is a Certificate, an ExternalSecret or a route with no image in
+  // it -- the manager skips those rather than erroring.
+  //
+  // Nothing auto-merges: dependencyDashboardApproval is repo-wide, so this adds
+  // dashboard rows, not PRs.
+  kubernetes: {
+    managerFilePatterns: ["/gitops/k8s-manifests/.+\\.ya?ml$/"],
+  },
+
   customManagers: [
     {
       customType: "regex",

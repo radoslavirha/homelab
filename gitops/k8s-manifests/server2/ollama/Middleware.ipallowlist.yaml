@@ -1,0 +1,66 @@
+---
+# The only thing standing between the LAN and this engine.
+#
+# ── Ollama has no authentication. None. ────────────────────────────────────
+# No token, no user, no auth mechanism of any kind (verified against Ollama's
+# own documentation, 2026-09-19). Any client that can reach the port can run
+# inference, PULL MODELS, and DELETE MODELS. The "API key" that Open WebUI and
+# Mealie insist on supplying is a placeholder their SDKs require — Ollama
+# ignores it, and it is deliberately not in OpenBao, because storing it there
+# would imply it protects something.
+#
+# So the allowlist IS the access control, and it is pinned to a single address:
+# 192.168.1.200, the server1 node, where both callers live.
+#
+# ── Why not something stronger ─────────────────────────────────────────────
+#   * basicAuth does not fit. Both callers send `Authorization: Bearer <key>`
+#     through an OpenAI SDK; a Basic challenge collides with that header rather
+#     than composing with it.
+#   * forwardAuth to Authentik does not fit. The outpost issues a browser
+#     redirect, and these are machine callers with no browser and no session —
+#     which is why longhorn/ and cilium/ can use it here and this cannot.
+#   * A bearer-token-checking service WOULD fit, and is the documented upgrade
+#     path. It is a new component to operate, guarding an engine that holds no
+#     data and whose worst case is "a LAN device used the CPU". Revisit if
+#     Ollama is ever reachable from outside the LAN — which the public-exposure
+#     spec has to gate anyway.
+#
+# ── Consequence: your laptop is blocked too, and that is the point ─────────
+# Model pulls happen through `kubectl exec`, never `curl` (see the runbook in
+# the spec). Widening this to a roaming DHCP address is how an allowlist quietly
+# stops being one.
+#
+# ── ipStrategy is deliberately absent ──────────────────────────────────────
+# With no ipStrategy, Traefik matches the connection's RemoteAddr. Adding
+# `ipStrategy.depth` would switch it to reading X-Forwarded-For — a header the
+# client controls — and this entrypoint sets no forwardedHeaders.trustedIPs, so
+# that would turn the allowlist into a request for the client's honesty.
+# server2's Traefik runs hostNetwork with externalIPs 192.168.1.201, so it sees
+# real client addresses; pod traffic leaving server1 is SNAT'd by Cilium to that
+# node's 192.168.1.200. Both halves of that are VERIFIED by the spec's
+# verification section, not assumed — an allowlist that silently matches
+# everything looks identical to one that works.
+#
+# ── HERE, not in the traefik namespace ─────────────────────────────────────
+# An HTTPRoute ExtensionRef is a LOCAL reference, so the Middleware must live in
+# the route's own namespace. Same constraint as
+# gitops/k8s-manifests/server1/longhorn/Middleware.authentik.yaml.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: ipallowlist
+  namespace: ollama
+  labels:
+    app.kubernetes.io/name: ollama
+    app.kubernetes.io/component: auth
+    app.kubernetes.io/part-of: ollama
+  annotations:
+    # One wave ahead of HTTPRoute.yaml: Traefik rejects a route whose
+    # ExtensionRef points at a Middleware that does not exist yet.
+    argocd.argoproj.io/sync-wave: "99"
+spec:
+  ipAllowList:
+    sourceRange:
+      # server1's node address. Open WebUI and Mealie both run there, and pod
+      # egress to another node is SNAT'd to this address.
+      - 192.168.1.200/32

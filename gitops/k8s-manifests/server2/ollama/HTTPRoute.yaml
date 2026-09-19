@@ -1,0 +1,74 @@
+---
+# ollama.server2.homelab.irha.cz -> ollama:11434, allowlisted to server1.
+#
+# HOMELAB SUBTREE, not the apex tier — and that choice is what makes this spec
+# parallel-safe with the Open WebUI one. Per docs/architecture.md the apex is
+# for names that are, or may become, publicly reachable; this is an internal
+# engine no human visits. The subtree costs nothing and touches no shared file:
+#   * TLS — already covered by the `*.server2.homelab.irha.cz` SAN on the
+#     server2-tls Certificate (k8s-manifests/server2/traefik/
+#     Certificate.server2-tls.yaml). An apex name would need its own SAN and
+#     would reissue the whole certificate.
+#   * DNS — `server2.homelab.irha.cz` is already in this cluster's ExternalDNS
+#     domainFilters (helm-values/server2/external-dns.yaml). A name outside the
+#     filters is ignored SILENTLY: no error, no event, just a record that never
+#     appears.
+#
+# Paths the callers use, for reference — nothing here rewrites or splits them:
+#   /v1   OpenAI-compatible  (…/v1/chat/completions, …/v1/embeddings)
+#   /api  native Ollama      (/api/tags, /api/chat, /api/pull)
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: ollama
+  namespace: ollama
+  labels:
+    app.kubernetes.io/name: ollama
+    app.kubernetes.io/component: api
+    app.kubernetes.io/part-of: ollama
+  annotations:
+    # Wave 100: routes go last, everywhere in this repo. A route that resolves
+    # before its backend is Ready serves 503s to anything already watching the
+    # name — including ExternalDNS consumers that cache the negative answer.
+    argocd.argoproj.io/sync-wave: "100"
+spec:
+  parentRefs:
+    # The shared Traefik Gateway. Its websecure listener is `namespacePolicy:
+    # from: All`, so a route in this namespace attaches with no ReferenceGrant.
+    #
+    # `sectionName` is a DIVERGENCE from every other HTTPRoute in this repo,
+    # which omit it and therefore attach to BOTH listeners — web:80 as well as
+    # websecure:443. The allowlist filter below applies either way, so this is
+    # not about access; it is that prompts and completions are the payload here,
+    # and there is no reason to serve them in plaintext on the LAN when nothing
+    # asks for port 80. Certificates come from cert-manager over DNS-01, so no
+    # ACME HTTP-01 challenge needs :80 either.
+    #
+    # The cost: if the listener is ever renamed in
+    # gitops/helm-values/traefik.yaml this route silently detaches instead of
+    # silently downgrading. `kubectl get httproute -n ollama -o wide` shows the
+    # parent, and the route's status carries the reason.
+    - name: traefik-gateway
+      namespace: traefik
+      sectionName: websecure
+  hostnames:
+    - ollama.server2.homelab.irha.cz
+  rules:
+    # ONE rule, no path matches. Every path on this host goes through the
+    # allowlist first — including /api/pull and /api/delete, which are the two
+    # that make an unguarded Ollama interesting to a stranger on the LAN.
+    #
+    # There is deliberately no second rule for an auth callback, unlike
+    # longhorn/: nothing here is browser-facing and there is nothing to log in
+    # to. A path that escaped this filter would be an unauthenticated hole.
+    - filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: traefik.io
+            kind: Middleware
+            name: ipallowlist
+      backendRefs:
+        # Same namespace as this route, so again no ReferenceGrant is needed.
+        - name: ollama
+          namespace: ollama
+          port: 11434

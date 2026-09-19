@@ -1,0 +1,27 @@
+---
+# What HTTPRoute.yaml sends ollama.server2.homelab.irha.cz to.
+#
+# Port 11434 on both sides rather than 80 -> 11434: it is the number every
+# Ollama client, doc and SDK default to, and keeping one number end to end means
+# a `kubectl port-forward svc/ollama 11434` behaves exactly like the route does.
+# Nothing else in this namespace competes for the name.
+apiVersion: v1
+kind: Service
+metadata:
+  name: ollama
+  namespace: ollama
+  labels:
+    app.kubernetes.io/name: ollama
+    app.kubernetes.io/component: app
+    app.kubernetes.io/part-of: ollama
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: ollama
+  ports:
+    - name: http
+      port: 11434
+      targetPort: http
+      protocol: TCP

@@ -1,0 +1,65 @@
+# ollama — ApplicationSet (server2 only)
+# Raw manifests: gitops/k8s-manifests/server2/ollama/
+#
+# ── Raw manifests, not a chart, on purpose ──────────────────────────────────
+# Ollama publishes no official Helm chart, and this is a single container with
+# one volume. A chart would buy indirection and nothing else. Same call as
+# Mealie: ONE source, the manifests directory, and the image tag lives in
+# Deployment.yaml rather than in `targetRevision`.
+#
+# Unlike Mealie, Renovate CAN see that tag: this app's spec added a `kubernetes`
+# manager pattern for gitops/k8s-manifests/ to renovate.json5.
+#
+# ── server2 only ────────────────────────────────────────────────────────────
+# Parent spec decision 3: server2 is the LLM engine and nothing else. Its IoT
+# estate was removed on 2026-09-13 and the box has been empty and earmarked
+# since. server1 has the datastores and the callers; server3 has identity and
+# observability. A second replica anywhere would be a second 100Gi model store
+# and a second cold cache, which is not a thing anyone wants — this is a
+# singleton.
+#
+# ── Status: experiment, not a dependency ────────────────────────────────────
+# Spec: docs/superpowers/specs/2026-09-19-ollama-server2.md. Mealie's AI
+# provider runs on Claude and works, so NO production feature depends on this.
+# It exists to be measured — decision 13 picks a model by measurement, and this
+# is what there is to measure on. Rollback is deleting this file and the
+# manifests directory and letting prune do the rest; the only thing lost is the
+# model store, which is re-downloadable.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: ollama
+  namespace: argocd
+spec:
+  generators:
+    - list:
+        elements:
+          - cluster: server2
+            clusterServer: https://192.168.1.201:6443
+  template:
+    metadata:
+      name: ollama-{{cluster}}
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/radoslavirha/homelab
+        targetRevision: HEAD
+        path: gitops/k8s-manifests/{{cluster}}/ollama
+      destination:
+        server: '{{clusterServer}}'
+        namespace: ollama
+      syncPolicy:
+        syncOptions:
+          # Nothing else creates the `ollama` namespace — it is this app's own,
+          # like mealie's, headlamp's and mongodb's, and not the shared
+          # `production` namespace the iot-applications chart deploys into.
+          - CreateNamespace=true
+        automated:
+          selfHeal: true
+          # prune: true, and the blast radius is worth stating. Deleting the
+          # manifests directory deletes the PVC, and with it every pulled model
+          # — several GB and a long re-download, but no data: weights come back
+          # from ollama.com. The pulls themselves are NOT in git (see the
+          # runbook in the spec), so a rebuilt cluster needs them repeated
+          # either way.
+          prune: true
