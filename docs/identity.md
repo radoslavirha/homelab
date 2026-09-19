@@ -820,6 +820,18 @@ anyone's password.
    `oidc:<name>` string in Kubernetes audit logs. It is unique, and immutable afterwards — the
    tenant defaults refuse self-service changes — so a bad choice is an admin fix, not a user one.
 
+   Two validators sit on that field, and both answer at the prompt rather than after it:
+
+   | Rule | Message | Where it comes from |
+   |---|---|---|
+   | Not already taken | *Username is already taken.* | authentik's own, attached by `type: username` |
+   | `[a-z][a-z0-9._-]{2,31}` — lowercase start, 3–32 chars, no spaces, capitals, `@` or `:` | *Username must be 3-32 characters: start with a lowercase letter…* | `homelab-enrollment-username-format`, an expression policy from the chart |
+   | Not `ak-…` (authentik service accounts) or `system:…` (reserved by Kubernetes) | *…are reserved…* | the same policy |
+
+   The shape rule is deliberately narrow because the string leaves Authentik and lands in systems
+   with their own opinions. Change it in the `onboarding.usernamePattern` / `usernameMessage` values
+   if it ever proves too tight.
+
 3. **Grant access.** Add them to the application role groups they need — the same UI work every
    membership is. Landing in `household` grants nothing on its own: no application is bound to it.
 
