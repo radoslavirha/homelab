@@ -798,12 +798,15 @@ anyone's password.
    | Flow | `homelab-enrollment` |
    | Single use | on |
    | Expires | ~7 days |
-   | Custom attributes | `{"username": "jana"}` |
+   | Custom attributes | *(leave empty)* |
 
-   The username is the one thing the invitation must carry: it becomes `sub` in every token, it is
-   the key Mealie and anything future match on, and the enrollment form deliberately does not offer
-   it. `fixed_data` is merged into the flow's `prompt_data`, so a field rendered by the form would
-   overwrite it.
+   Nothing is required in custom attributes. The invitee chooses their own username at the form,
+   and authentik rejects a taken one on the spot with "Username is already taken." — the field is
+   typed `username`, which is what attaches that validator.
+
+   You *may* prefill it with `{"username": "jana"}`: `fixed_data` is merged into the flow's
+   `prompt_data`, and `Prompt.get_initial_value` prefers a matching key over the field's own
+   initial value. That is a suggestion the invitee can edit, not a constraint.
 
 2. **Send them the link**, over whatever chat you already use:
 
@@ -811,7 +814,11 @@ anyone's password.
    https://auth.irha.cz/if/flow/homelab-enrollment/?itoken=<uuid>
    ```
 
-   They fill in their name, their own email, and a password of their choosing, and land signed in.
+   They choose a username, fill in their name, their own email and a password, and land signed in.
+
+   Their username becomes `sub` in every token, the key Mealie matches accounts on, and the
+   `oidc:<name>` string in Kubernetes audit logs. It is unique, and immutable afterwards — the
+   tenant defaults refuse self-service changes — so a bad choice is an admin fix, not a user one.
 
 3. **Grant access.** Add them to the application role groups they need — the same UI work every
    membership is. Landing in `household` grants nothing on its own: no application is bound to it.
