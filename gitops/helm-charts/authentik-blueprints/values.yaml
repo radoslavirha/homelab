@@ -99,3 +99,13 @@ onboarding:
   userPath: users/household
   enrollmentTitle: Welcome — finish setting up your account
   recoveryTitle: Choose a new password
+  # Shape rule for a username chosen at enrollment, enforced by an expression policy
+  # on the prompt stage. Deliberately narrow, because the string outlives Authentik:
+  # it is `sub` in every token, `oidc:<name>` in Kubernetes audit logs, an OpenBao
+  # entity alias, and the claim Mealie matches on -- and it is immutable once set.
+  #
+  # Lowercase start, then lowercase letters, digits, dot, dash or underscore; 3-32
+  # characters. No spaces, no capitals, no @ (which would read as an email), no colon
+  # (which would collide with Kubernetes' system: prefix).
+  usernamePattern: "[a-z][a-z0-9._-]{2,31}"
+  usernameMessage: "Username must be 3-32 characters: start with a lowercase letter, then lowercase letters, digits, dots, dashes or underscores."

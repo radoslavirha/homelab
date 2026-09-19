@@ -109,3 +109,32 @@ tests:
       - matchRegex:
           path: data["homelab-onboarding.yaml"]
           pattern: "name: homelab-recovery-write\\n\\s+attrs:\\n\\s+user_creation_mode: never_create"
+
+  - it: validates the SHAPE of a username, not only its uniqueness
+    set:
+      onboarding:
+        enabled: true
+    asserts:
+      # authentik's own validator only answers "already taken". This one keeps the
+      # string safe for every consumer: it becomes `sub`, the `oidc:<name>` subject
+      # in Kubernetes audit logs, and an OpenBao entity alias.
+      - matchRegex:
+          path: data["homelab-onboarding.yaml"]
+          pattern: "model: authentik_policies_expression.expressionpolicy\\n\\s+id: policy-username-format\\n\\s+identifiers:\\n\\s+name: homelab-enrollment-username-format"
+      # Bound to the prompt stage, so it runs at the prompt where it can be corrected
+      - matchRegex:
+          path: data["homelab-onboarding.yaml"]
+          pattern: "validation_policies:\\n\\s+- !Find \\[authentik_policies_password.passwordpolicy, \\[name, default-password-change-password-policy\\]\\]\\n\\s+- !KeyOf policy-username-format"
+      # Reserved prefix: authentik's own service accounts are ak-outpost-*, ak-*-client_credentials
+      - matchRegex:
+          path: data["homelab-onboarding.yaml"]
+          pattern: "ak-"
+
+  - it: does not apply the username rule to the recovery prompt, which sets no username
+    set:
+      onboarding:
+        enabled: true
+    asserts:
+      - matchRegex:
+          path: data["homelab-onboarding.yaml"]
+          pattern: "name: homelab-recovery-prompt\\n\\s+attrs:\\n\\s+fields:\\n\\s+- !KeyOf prompt-recovery-password\\n\\s+- !KeyOf prompt-recovery-password-repeat\\n\\s+validation_policies:\\n\\s+- !Find \\[authentik_policies_password.passwordpolicy"

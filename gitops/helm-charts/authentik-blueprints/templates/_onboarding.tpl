@@ -137,6 +137,48 @@ entries:
       placeholder_expression: false
       order: 4
 
+  # ---------- username shape ----------
+  # authentik's own username field answers only "already taken". This adds the shape
+  # rule, because the string outlives Authentik: it is `sub` in every token, the
+  # `oidc:<name>` subject in Kubernetes audit logs, an OpenBao entity alias, and the
+  # claim Mealie matches accounts on. It is also immutable once set, so a bad one is
+  # an admin repair rather than a user fix.
+  #
+  # Bound to the PROMPT stage, so it fires where the person can still correct it --
+  # a failing validation policy becomes the field's error message.
+  - model: authentik_policies_expression.expressionpolicy
+    id: policy-username-format
+    identifiers:
+      name: homelab-enrollment-username-format
+    attrs:
+      execution_logging: false
+      expression: |
+        import re
+
+        username = request.context.get("prompt_data", {}).get("username", "")
+        if not username:
+            # The field is required; let its own error speak rather than doubling up.
+            return True
+
+        if not re.fullmatch(r"{{ .Values.onboarding.usernamePattern }}", username):
+            ak_message("{{ .Values.onboarding.usernameMessage }}")
+            return False
+
+        # ak-outpost-<uuid> and ak-<provider>-client_credentials are authentik's own
+        # service accounts. A human taking that shape is confusing at best, and at
+        # worst collides with an account authentik creates itself.
+        if username.startswith("ak-"):
+            ak_message("Usernames starting with 'ak-' are reserved for service accounts.")
+            return False
+
+        # Kubernetes reserves the system: prefix for its own subjects, and this
+        # username reaches kube-apiserver as oidc:<username>.
+        if username.startswith("system:"):
+            ak_message("Usernames starting with 'system:' are reserved.")
+            return False
+
+        return True
+
   - model: authentik_stages_prompt.promptstage
     id: stage-enrollment-prompt
     identifiers:
@@ -153,6 +195,7 @@ entries:
       # `password`, which is what the prompt above calls it.
       validation_policies:
         - !Find [authentik_policies_password.passwordpolicy, [name, default-password-change-password-policy]]
+        - !KeyOf policy-username-format
 
   - model: authentik_stages_user_write.userwritestage
     id: stage-enrollment-write
