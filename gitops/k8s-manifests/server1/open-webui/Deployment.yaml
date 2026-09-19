@@ -1,0 +1,315 @@
+---
+# Open WebUI -- the household's general-purpose LLM front end, and later the host
+# for MCP tool servers and automations. One container: a FastAPI backend serving
+# its own pre-built SvelteKit frontend, so there is no nginx sidecar and no
+# second image.
+#
+# Spec: docs/superpowers/specs/2026-09-19-open-webui-server1.md.
+#
+# ── The image tag is the version ────────────────────────────────────────────
+# There is no chart and no `targetRevision` to bump, so v0.11.3 below IS the
+# pinned version of this app. Renovate's `kubernetes` manager ships no default
+# file patterns, and renovate.json5 gives patterns to the argocd and helm-values
+# managers only -- so this line is invisible to it, which looks exactly like
+# being up to date. The sibling Ollama spec owns the renovate.json5 edit that
+# fixes this for Ollama, Open WebUI and Mealie in one go; do not duplicate it.
+#
+# ── This container runs as ROOT, and that is upstream's doing ───────────────
+# The published image is built with ARG UID=0 / GID=0 and ends in `USER $UID:$GID`
+# (Dockerfile at the v0.11.3 tag), so the default tag runs as root. No fsGroup is
+# needed for the data volume as a result, and runAsNonRoot is deliberately not
+# set -- forcing it would make /app/backend/data unwritable and the pod would
+# fail its first write rather than its first boot. Running an arbitrary-UID build
+# is possible upstream but means building our own image.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: open-webui
+  namespace: open-webui
+  labels:
+    app.kubernetes.io/name: open-webui
+    app.kubernetes.io/component: app
+    app.kubernetes.io/part-of: open-webui
+  annotations:
+    # Wave 2: after PostgreSQL (wave 1). Open WebUI runs Alembic migrations during
+    # startup and will not serve without the database, so on a first sync this
+    # ordering is what stops it crashlooping into a backoff.
+    argocd.argoproj.io/sync-wave: "2"
+    # Restart when either Secret changes. Everything here reaches the pod as an
+    # env var, and env vars are read once at process start -- so without this a
+    # rotated password, or the OIDC secret ARRIVING for the first time, leaves a
+    # Running pod holding the old value with ArgoCD green the whole time.
+    # Reloader runs in opt-in mode; this annotation is the opt.
+    reloader.stakater.com/auto: "true"
+spec:
+  replicas: 1
+  strategy:
+    # Recreate, not RollingUpdate: /app/backend/data is a ReadWriteOnce Longhorn
+    # volume and this is a single writer. A rolling update would start the new pod
+    # before the old one released the volume, and it would sit Pending on
+    # "Multi-Attach error" until the rollout timed out.
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: open-webui
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: open-webui
+        app.kubernetes.io/component: app
+        app.kubernetes.io/part-of: open-webui
+    spec:
+      containers:
+        - name: open-webui
+          image: ghcr.io/open-webui/open-webui:v0.11.3
+          ports:
+            - name: http
+              # 8080 is what the Dockerfile EXPOSEs and what its own HEALTHCHECK
+              # curls (${PORT:-8080}). The Service keeps the same number.
+              containerPort: 8080
+              protocol: TCP
+          env:
+            # Absolute, external, and https. Open WebUI builds its OAuth callback
+            # and its notification links from this, so a wrong value produces URLs
+            # that work from nowhere. Required for OAuth, per upstream.
+            - name: WEBUI_URL
+              value: https://assistant.irha.cz
+            - name: TZ
+              value: Europe/Prague
+            #
+            # ── Database ────────────────────────────────────────────────────
+            # POSTGRES_PASSWORD is NOT read by Open WebUI. It exists only so the
+            # line below can interpolate it: Kubernetes expands $(VAR) in an env
+            # value against env vars defined EARLIER in this same list, which
+            # keeps the password out of this file while still producing the single
+            # DATABASE_URL that Open WebUI actually wants.
+            #
+            # The password must be URL-safe -- see ExternalSecret.yaml. A password
+            # containing @ : / ? # or % is parsed as URL structure and the error
+            # names a host nobody configured.
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: open-webui
+                  key: postgres-password
+            # PLAIN `postgresql://`, NOT `postgresql+asyncpg://`.
+            #
+            # The upstream multi-replica doc shows the asyncpg form and it is
+            # wrong for this release: v0.11.3's backend/requirements.txt pins
+            # psycopg[binary]==3.3.4 and psycopg2-binary and does NOT ship asyncpg
+            # at all. internal/db.py builds a SYNC engine straight from
+            # DATABASE_URL (create_engine) for migrations and config loading, and
+            # derives the async one with _make_async_url(), which rewrites only
+            # `postgresql://` -> `postgresql+psycopg://` and passes anything else
+            # through untouched. So `+asyncpg` fails twice: InvalidRequestError on
+            # the sync engine, ModuleNotFoundError on the async one. Verified
+            # against the v0.11.3 tag on 2026-09-19.
+            - name: DATABASE_URL
+              value: postgresql://openwebui:$(POSTGRES_PASSWORD)@open-webui-postgres:5432/openwebui
+            # Embeddings live in the SAME database: PGVECTOR_DB_URL defaults to
+            # DATABASE_URL, so one PostgreSQL serves app data and vectors and there
+            # is one thing to back up. The default is `chroma`, which would put
+            # vectors in a second on-disk store with its own backup problem.
+            #
+            # PGVECTOR_CREATE_EXTENSION defaults to true and PgvectorClient issues
+            # `CREATE EXTENSION IF NOT EXISTS vector` itself, which works because
+            # the role is this instance's bootstrap superuser. No init step.
+            - name: VECTOR_DB
+              value: pgvector
+            #
+            # ── Sessions ────────────────────────────────────────────────────
+            # A HARD requirement, not a nicety: config.py raises at import time if
+            # auth is enabled and this is empty. It signs session JWTs and is the
+            # default for OAUTH_SESSION_TOKEN_ENCRYPTION_KEY, so rotating it logs
+            # everyone out AND makes stored OAuth session tokens undecryptable.
+            - name: WEBUI_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: open-webui
+                  key: webui-secret-key
+            #
+            # ── Who may create an account ───────────────────────────────────
+            # ENABLE_SIGNUP defaults to TRUE upstream, which on a host answering to
+            # the whole LAN means open self-registration. Off.
+            #
+            # This does NOT block the first admin: routers/auths.py deliberately
+            # does not gate the first user on ENABLE_SIGNUP ("it auto-disables and
+            # can persist stale across a DB reset"), so the initial account is
+            # still created through the login form below. Every account after that
+            # comes from Authentik.
+            - name: ENABLE_SIGNUP
+              value: "false"
+            # Local login form ON, deliberately, for now. Same sequencing Mealie
+            # used: prove an Authentik login works BEFORE removing the fallback.
+            # Turning this off (and setting OAUTH_AUTO_REDIRECT=true) is a
+            # follow-up edit once verification steps 4, 5 and 6 in the spec pass.
+            #
+            # What Mealie learned, recorded here before it is needed: with the form
+            # off and Authentik unreachable -- the realistic case being OpenBao
+            # sealed after a reboot, which takes Authentik's secrets with it --
+            # there is NO break-glass into the UI at all.
+            - name: ENABLE_LOGIN_FORM
+              value: "true"
+            # Explicit, though it is already the default, because it is the net
+            # that catches the trap described under OAUTH_SCOPES below. If the
+            # roles claim never arrives, get_user_role() does not deny the login --
+            # it falls through to THIS value. `pending` means the account exists
+            # and can do nothing until an admin promotes it; `user` would mean
+            # anyone with an Authentik account silently gets in.
+            - name: DEFAULT_USER_ROLE
+              value: pending
+            #
+            # ── Authentik login ─────────────────────────────────────────────
+            # Everything here is non-secret; the client secret arrives through
+            # envFrom below, and OIDC stays off until it does -- config.py only
+            # registers the provider when OAUTH_CLIENT_ID, a secret and
+            # OPENID_PROVIDER_URL are all present, so a missing secret degrades to
+            # local logins rather than breaking the pod.
+            - name: ENABLE_OAUTH_SIGNUP
+              value: "true"
+            - name: OAUTH_PROVIDER_NAME
+              value: Authentik
+            - name: OAUTH_CLIENT_ID
+              value: open-webui-server1-production
+            # issuer_mode is per_provider on this IdP, so the discovery URL carries
+            # the application slug. A token minted by another cluster's provider
+            # fails on `iss` here, by design.
+            - name: OPENID_PROVIDER_URL
+              value: https://auth.irha.cz/application/o/open-webui-server1-production/.well-known/openid-configuration
+            # The NON-LEGACY callback. v0.11.3's main.py routes both
+            # /oauth/{provider}/login/callback and /oauth/{provider}/callback, and
+            # marks the second "# Legacy endpoint". Authentik registers exactly one
+            # URI with matching_mode: strict, and changing it later breaks every
+            # login -- so the one that is not deprecated was chosen while nothing
+            # is deployed and the choice is still free. This string must stay
+            # character-identical to `redirectPath` in the blueprints matrix.
+            - name: OPENID_REDIRECT_URI
+              value: https://assistant.irha.cz/oauth/oidc/login/callback
+            # The default is `openid email profile`, which would NOT include the
+            # roles scope -- and without it the roles claim never arrives. This is
+            # the identical trap Mealie hit with OIDC_SCOPES_OVERRIDE, but it fails
+            # WORSE here: see DEFAULT_USER_ROLE above. Open WebUI denies a login
+            # only when the claim is present and matches nothing; when the claim is
+            # absent entirely the gate does not run.
+            #
+            # The `roles` and `profile` scope names come from the blueprint chart's
+            # own mappings (`homelab roles`, `homelab profile`).
+            - name: OAUTH_SCOPES
+              value: openid email profile roles
+            #
+            # This repo's role ladder, reused rather than a second vocabulary. The
+            # `homelab roles` mapping emits <app>.<role> filtered to THIS
+            # application, so the claim is `roles`, not Authentik's unfiltered
+            # `groups`. Two rungs, because OAUTH_ALLOWED_ROLES gates who may log in
+            # at all and OAUTH_ADMIN_ROLES grants admin -- a middle rung would be a
+            # claim nothing reads.
+            - name: ENABLE_OAUTH_ROLE_MANAGEMENT
+              value: "true"
+            - name: OAUTH_ROLES_CLAIM
+              value: roles
+            - name: OAUTH_ALLOWED_ROLES
+              value: open-webui.user,open-webui.admin
+            - name: OAUTH_ADMIN_ROLES
+              value: open-webui.admin
+            # Left at its default (false) on purpose, and it is a security setting
+            # rather than a preference. Authentik's shipped `email` scope mapping
+            # returns a hardcoded "email_verified": false, and on the running
+            # instance User.email is unique=False while User.username is
+            # unique=True. Merging on email is how one household member ends up
+            # logged into another's account. The same reasoning made Mealie match
+            # on preferred_username.
+            #
+            # (Open WebUI itself never reads `email_verified` -- the string does not
+            # appear anywhere in the v0.11.3 source. The spec flagged a possible
+            # landing blocker here; there is none.)
+            - name: OAUTH_MERGE_ACCOUNTS_BY_EMAIL
+              value: "false"
+            # Upstream's own recommendation: the cookie exists for backward
+            # compatibility with the pre-server-side-session model.
+            - name: ENABLE_OAUTH_ID_TOKEN_COOKIE
+              value: "false"
+            # Default is TRUE. Off, because with it on every viewer's browser
+            # follows a 302 to Authentik to fetch an avatar, handing it that
+            # viewer's IP, User-Agent and Referer on each page load. Read once at
+            # startup; it is not a ConfigVar and cannot be changed from the UI.
+            - name: ENABLE_PROFILE_IMAGE_URL_FORWARDING
+              value: "false"
+            # Default is false; stated explicitly because it is what keeps this
+            # file authoritative. With it true the database outranks git for every
+            # `oauth.*` setting, which is the opposite of how everything else here
+            # works. As a side effect the Admin Panel's OAuth section is read-only,
+            # which is the honest rendering of a GitOps-managed setting.
+            - name: ENABLE_OAUTH_PERSISTENT_CONFIG
+              value: "false"
+            # Not needed today. It is what a future MCP tool server uses to know
+            # who is asking (X-OpenWebUI-User-Id / -Name / -Email / -Role, plus
+            # chat and message ids to tool servers). Turning it on now costs
+            # nothing and means the tool-server spec does not have to restart this
+            # pod to get it.
+            - name: ENABLE_FORWARD_USER_INFO_HEADERS
+              value: "true"
+          envFrom:
+            # OAUTH_CLIENT_SECRET, and only that. `optional: true` is what makes the
+            # ordering work: the blueprint creates the provider, Authentik generates
+            # the secret, a human copies it into OpenBao, and ESO materialises this
+            # Secret -- until then the container starts without it. Reloader (the
+            # annotation above) restarts the pod when the Secret appears or changes,
+            # which is the only reason an envFrom value can be picked up at all:
+            # env is read once at boot.
+            - secretRef:
+                name: open-webui-oidc
+                optional: true
+          volumeMounts:
+            # Uploads, RAG source documents, generated images and the cache --
+            # including the sentence-transformers model downloaded on first boot.
+            - name: data
+              mountPath: /app/backend/data
+          # /ready is purpose-built for this: it returns 503 until startup work is
+          # complete AND a database ping succeeds. /health returns a static
+          # {"status": true} and proves only that the process is listening -- which
+          # is exactly what a liveness probe should test, and exactly what a
+          # readiness probe should not.
+          startupProbe:
+            # Generous, and not arbitrarily. First boot runs Alembic migrations AND
+            # downloads the default local embedding model
+            # (sentence-transformers/all-MiniLM-L6-v2, RAG_EMBEDDING_ENGINE is ""
+            # by default) from HuggingFace before the app reports ready. 5s x 120 =
+            # 10 minutes of patience before anything is called failed.
+            httpGet:
+              path: /ready
+              port: http
+            periodSeconds: 5
+            failureThreshold: 120
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            # /health, not /ready: a database blip should take this pod out of the
+            # Service, not restart it. Restarting on a DB outage is how a recovering
+            # database becomes a crashloop on both sides.
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 200m
+              # The local embedding model is loaded into the process at startup, so
+              # idle usage is well above what a FastAPI app suggests.
+              memory: 1Gi
+            limits:
+              # No CPU limit -- a chat turn is a short burst of proxying and
+              # embedding, and throttling it only makes the response slower.
+              # Memory is capped at 4Gi: enough for torch plus the embedding model
+              # plus a document ingest, low enough that a runaway ingest is killed
+              # here rather than taking the node's kubelet with it.
+              memory: 4Gi
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: open-webui-data

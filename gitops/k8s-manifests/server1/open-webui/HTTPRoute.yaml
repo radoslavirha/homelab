@@ -1,0 +1,65 @@
+---
+# assistant.irha.cz -> open-webui:8080, LAN only for now.
+#
+# APEX TIER, not the homelab subtree. Per docs/architecture.md the apex is kept
+# for names that are, or may become, publicly reachable -- and the parent spec's
+# decision 12 makes this UI the ONE thing that is ever published. Same tier as
+# qr.irha.cz and mealie.irha.cz.
+#
+# ── Why `assistant` and not `open-webui` or `chat` ──────────────────────────
+# Product-neutral on purpose. A rename breaks the registered OIDC redirect URI --
+# the exact argument Mealie's spec used -- and `assistant` survives replacing Open
+# WebUI with something else, which a product name would not. It also reveals less
+# about the inventory than a product name would, which matters because apex SANs
+# are PUBLIC in Certificate Transparency logs (the ClusterIssuer.letsencrypt-prod.yaml
+# comment spells this out).
+#
+# Two things an apex name does NOT get for free, and both are changed alongside
+# this file -- a hostname here with either one missing fails silently:
+#   * TLS -- apex names are individual SANs; `*.server1.homelab.irha.cz` does not
+#     cover them (a certificate wildcard matches exactly one label, RFC 6125).
+#     `assistant.irha.cz` is added to the server1-tls Certificate
+#     (k8s-manifests/server1/traefik/Certificate.server1-tls.yaml), which reissues
+#     the whole certificate.
+#   * DNS -- ExternalDNS ignores any name outside its domainFilters with no error
+#     and no event, so `assistant.irha.cz` is listed individually in
+#     helm-values/server1/external-dns.yaml.
+#
+# No forward-auth Middleware here, unlike longhorn/ and cilium/. Open WebUI does
+# its own Authentik OIDC inside the app, and it exposes an API that the agent
+# layer and MCP tool servers will authenticate to directly with bearer tokens --
+# an Authentik proxy in front would break that.
+#
+# Websockets need no special handling: Open WebUI's socket.io upgrade rides the
+# same HTTP/1.1 connection and Traefik proxies it by default.
+#
+# Public exposure is out of scope here: this answers on the LAN only, per the
+# public-exposure spec, whose gate is what opens this name to the internet.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: open-webui
+  namespace: open-webui
+  labels:
+    app.kubernetes.io/name: open-webui
+    app.kubernetes.io/component: ui
+    app.kubernetes.io/part-of: open-webui
+  annotations:
+    # Wave 100: routes go last, everywhere in this repo. A route that resolves
+    # before its backend is Ready serves 503s to anything already watching the
+    # name -- including ExternalDNS consumers that cache the negative answer.
+    argocd.argoproj.io/sync-wave: "100"
+spec:
+  parentRefs:
+    # The shared Traefik Gateway. Its websecure listener is `namespacePolicy:
+    # from: All`, so a route in this namespace attaches with no ReferenceGrant.
+    - name: traefik-gateway
+      namespace: traefik
+  hostnames:
+    - assistant.irha.cz
+  rules:
+    - backendRefs:
+        # Same namespace as this route, so again no ReferenceGrant is needed.
+        - name: open-webui
+          namespace: open-webui
+          port: 8080

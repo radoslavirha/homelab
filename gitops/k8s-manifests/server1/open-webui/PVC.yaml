@@ -1,0 +1,40 @@
+---
+# Open WebUI's /app/backend/data -- uploaded files, the RAG source documents that
+# produced the embeddings, generated images, and the cache. Losing this volume
+# does not lose chats, accounts or embeddings, which are all in PostgreSQL, but
+# it does lose every uploaded document and break any RAG citation that points at
+# one.
+#
+# ── Why a standalone PVC and not a volumeClaimTemplate ──────────────────────
+# Open WebUI is a Deployment, not a StatefulSet -- it has no ordinal identity
+# worth keeping and no clustering. That makes a plain PVC the honest shape, and
+# it is what pins Deployment.yaml to `strategy: Recreate`: ReadWriteOnce means
+# the replacement pod cannot attach while the old one still holds the volume, so
+# a RollingUpdate would deadlock on every image bump.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: open-webui-data
+  namespace: open-webui
+  labels:
+    app.kubernetes.io/name: open-webui
+    app.kubernetes.io/component: storage
+    app.kubernetes.io/part-of: open-webui
+  annotations:
+    # Wave 1, with PostgreSQL: bound before the Deployment in wave 2 asks for it.
+    # Longhorn provisions on first consumer, so this is about ordering the ArgoCD
+    # sync, not about when the volume actually appears.
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: longhorn
+  resources:
+    requests:
+      # 20Gi -- uploads and RAG source files are the growth here, and a household
+      # that starts feeding it PDFs will find 10Gi small. Longhorn expands online
+      # if it turns out to be low.
+      #
+      # NOT backed up by anything today: there is no Longhorn backupTarget in this
+      # fleet, and ~/homelab-backups/dump-all.sh takes logical dumps only. Adding
+      # this path to that script is a known follow-up, shared with Mealie's PVC.
+      storage: 20Gi
