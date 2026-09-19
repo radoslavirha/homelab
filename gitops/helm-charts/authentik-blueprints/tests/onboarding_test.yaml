@@ -22,17 +22,22 @@ tests:
           path: data["homelab-onboarding.yaml"]
           pattern: "stage: !KeyOf stage-enrollment-invitation\\n\\s+order: 10\\n\\s+attrs:\\n\\s+evaluate_on_plan: true\\n\\s+re_evaluate_policies: true"
 
-  - it: never offers a username field, which the invitation supplies
+  - it: offers a username field the invitee picks, typed so authentik validates it
     set:
       onboarding:
         enabled: true
     asserts:
-      # A rendered username field would overwrite the invitation's fixed_data with
-      # whatever the invitee typed — always_merger.merge puts fixed_data into
-      # prompt_data, and the prompt stage writes over it.
-      - notMatchRegex:
+      # type: username is what attaches username_field_validator, which raises
+      # "Username is already taken." inline at the prompt. Without it a collision
+      # falls through to user_write and surfaces as an unexplained error, after a
+      # single-use invitation has already burned.
+      - matchRegex:
           path: data["homelab-onboarding.yaml"]
-          pattern: "field_key: username"
+          pattern: "name: homelab-enrollment-field-username\\n\\s+attrs:\\n\\s+field_key: username\\n\\s+label: Username\\n\\s+type: username"
+      # First field, and first in the stage's list: it is the identity the rest hangs off.
+      - matchRegex:
+          path: data["homelab-onboarding.yaml"]
+          pattern: "fields:\\n\\s+- !KeyOf prompt-enrollment-username\\n"
 
   - it: renders exactly the two password fields the match check needs
     set:

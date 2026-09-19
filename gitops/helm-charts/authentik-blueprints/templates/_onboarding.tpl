@@ -13,10 +13,17 @@ INVARIANT: the invitation stage is bound FIRST, with
 continue_flow_without_invitation: false. That is what makes this flow's URL safe to
 be internet-reachable: no token, no account, nothing disclosed.
 
-INVARIANT: the prompt stage renders NO username field. The username comes from the
-invitation's fixed_data, which the invitation stage merges into prompt_data
-(always_merger.merge, authentik/stages/invitation/stage.py) — and a rendered field
-would overwrite it with whatever the invitee typed.
+The username is the INVITEE's to choose, and the field is typed `username` so that
+authentik attaches username_field_validator and answers a collision with "Username is
+already taken." at the prompt. Without that field, a taken or missing username fell
+through to user_write and surfaced as an unexplained error — after a single-use
+invitation had already burned. Measured three times on 2026-09-19.
+
+An invitation MAY still carry `fixed_data: {"username": ...}`: the invitation stage
+merges fixed_data into prompt_data, and Prompt.get_initial_value prefers a matching
+prompt_context key over its own initial_value, so the field arrives prefilled. That is
+a suggestion, not a constraint — the invitee can change it, and an invitation with
+`fixed_data: {}` is perfectly valid.
 
 Design: docs/superpowers/specs/2026-09-18-authentik-identity-hardening.md
 */ -}}
@@ -58,6 +65,22 @@ entries:
     attrs:
       continue_flow_without_invitation: false
 
+  # `type: username` is load-bearing: it is what attaches authentik's
+  # username_field_validator ("Username is already taken."). A `text` field would
+  # look identical and validate nothing.
+  - model: authentik_stages_prompt.prompt
+    id: prompt-enrollment-username
+    identifiers:
+      name: homelab-enrollment-field-username
+    attrs:
+      field_key: username
+      label: Username
+      type: username
+      required: true
+      placeholder: Username
+      placeholder_expression: false
+      order: 0
+
   - model: authentik_stages_prompt.prompt
     id: prompt-enrollment-name
     identifiers:
@@ -69,7 +92,7 @@ entries:
       required: true
       placeholder: Name
       placeholder_expression: false
-      order: 0
+      order: 1
 
   # The invitee owns their own email: nothing matches accounts on it (Mealie moved
   # to preferred_username), so a wrong value costs a wrong address on a profile.
@@ -84,7 +107,7 @@ entries:
       required: true
       placeholder: Email
       placeholder_expression: false
-      order: 1
+      order: 2
 
   # EXACTLY TWO password fields. PromptChallengeResponse.validate compares them
   # only when the stage holds two; a third silently disables the match check.
@@ -99,7 +122,7 @@ entries:
       required: true
       placeholder: Password
       placeholder_expression: false
-      order: 2
+      order: 3
 
   - model: authentik_stages_prompt.prompt
     id: prompt-enrollment-password-repeat
@@ -112,7 +135,7 @@ entries:
       required: true
       placeholder: Password (repeat)
       placeholder_expression: false
-      order: 3
+      order: 4
 
   - model: authentik_stages_prompt.promptstage
     id: stage-enrollment-prompt
@@ -120,6 +143,7 @@ entries:
       name: homelab-enrollment-prompt
     attrs:
       fields:
+        - !KeyOf prompt-enrollment-username
         - !KeyOf prompt-enrollment-name
         - !KeyOf prompt-enrollment-email
         - !KeyOf prompt-enrollment-password
