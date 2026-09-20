@@ -1,0 +1,58 @@
+# open-webui — ApplicationSet (server1 only)
+# Raw manifests: gitops/k8s-manifests/server1/open-webui/
+#
+# ── Raw manifests, not a chart, on purpose ──────────────────────────────────
+# Open WebUI publishes a chart, but this deployment is one container plus one
+# PostgreSQL, and the interesting part is a long list of environment variables
+# whose REASONS have to live next to them. A chart would move those values into a
+# values file and the reasons into nowhere. Same call as Mealie.
+#
+# So this ApplicationSet has ONE source, the manifests directory, and the image
+# tag lives in Deployment.yaml rather than in `targetRevision`. Renovate
+# therefore watches the Deployment's image reference, not this file.
+#
+# ── server1 only ────────────────────────────────────────────────────────────
+# Parent decision 3: server2 is the LLM engine and nothing else, server3 runs
+# identity + observability, and server1 holds the datastores and the Longhorn
+# capacity. A second cluster would mean a second database and a second set of
+# chat histories, which is not a thing anyone wants -- this stays a singleton.
+#
+# ── What this app does NOT own ──────────────────────────────────────────────
+# The Ollama connection is a form in Settings, not a manifest: the sibling spec
+# (docs/superpowers/specs/2026-09-19-ollama-server2.md) stands the engine up at
+# https://ollama.server2.homelab.irha.cz and this app reaches it over the LAN.
+# Nothing here blocks on it -- a cloud model connection is enough to use this.
+#
+# Spec: docs/superpowers/specs/2026-09-19-open-webui-server1.md.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: open-webui
+  namespace: argocd
+spec:
+  generators:
+    - list:
+        elements:
+          - cluster: server1
+            clusterServer: https://192.168.1.200:6443
+  template:
+    metadata:
+      name: open-webui-{{cluster}}
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/radoslavirha/homelab
+        targetRevision: HEAD
+        path: gitops/k8s-manifests/{{cluster}}/open-webui
+      destination:
+        server: '{{clusterServer}}'
+        namespace: open-webui
+      syncPolicy:
+        syncOptions:
+          # Nothing else creates the `open-webui` namespace -- it is this app's
+          # own, like mealie's and mongodb's, and not the shared `production`
+          # namespace the iot-applications chart deploys into.
+          - CreateNamespace=true
+        automated:
+          selfHeal: true
+          prune: true

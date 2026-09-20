@@ -1,0 +1,167 @@
+---
+# PostgreSQL 17 + pgvector for Open WebUI -- one replica, in Open WebUI's own
+# namespace. Shaped after gitops/k8s-manifests/server1/mealie/StatefulSet.postgres.yaml;
+# read that file for the StatefulSet-vs-Deployment and pinned-major reasoning,
+# which is identical here. What differs is the IMAGE and what follows from it.
+#
+# ── Why not Mealie's PostgreSQL ─────────────────────────────────────────────
+# Mealie's instance is part of the MEALIE ArgoCD app -- its own manifest says so,
+# and says the placement is provisional. Putting this app's data inside it would
+# mean a Mealie resync or rollback touches the assistant's database. A fleet-wide
+# PostgreSQL with per-app credential provisioning (the shape the MongoDB
+# provisioner Job gives us) is the right end state and the wrong thing to build
+# now: it would mean migrating a live cookbook in order to stand up a playground.
+# When a third consumer appears, both migrate in with pg_dump/restore, and
+# nothing here makes that harder.
+#
+# ── Why pgvector and not plain postgres:17-alpine ───────────────────────────
+# VECTOR_DB=pgvector puts Open WebUI's RAG embeddings in this same database
+# instead of Chroma's separate on-disk store, so there is ONE thing to back up
+# rather than two. That requires the `vector` extension, which only this image
+# ships.
+#
+# The extension is SHIPPED, NOT PRE-ENABLED -- but nothing here has to enable it.
+# Verified against open-webui v0.11.3: PGVECTOR_CREATE_EXTENSION defaults to true
+# and PgvectorClient.__init__ runs `CREATE EXTENSION IF NOT EXISTS vector` on
+# first use (backend/open_webui/retrieval/vector/dbs/pgvector.py). That succeeds
+# because POSTGRES_USER below is the bootstrap superuser of this instance. If
+# this database is ever moved under a shared server where the app connects as a
+# non-superuser, the extension becomes a manual `CREATE EXTENSION` and
+# PGVECTOR_CREATE_EXTENSION should be set to false at that point.
+#
+# ── fsGroup is 999 here, NOT Mealie's 70 ────────────────────────────────────
+# Measured, not inherited: `docker run --rm pgvector/pgvector:pg17 id postgres`
+# on 2026-09-19 reported uid=999(postgres) gid=999(postgres), and the image is
+# PostgreSQL 17.11 (Debian). pgvector builds FROM postgres:$PG_MAJOR-bookworm,
+# and docker-library/postgres's bookworm Dockerfile creates the user with
+# `--gid=999 --uid=999`. Mealie's 70 is Alpine's postgres gid and is correct for
+# postgres:17-alpine and wrong here. Copying it would not break anything
+# visibly -- root still chowns PGDATA in the entrypoint, so the pod would come up
+# fine and the group ownership would simply be wrong.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: open-webui-postgres
+  namespace: open-webui
+  labels:
+    app.kubernetes.io/name: open-webui-postgres
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: open-webui
+  annotations:
+    # Wave 1: after the ExternalSecret (wave 0) that carries POSTGRES_PASSWORD,
+    # before Open WebUI (wave 2). Open WebUI runs Alembic migrations on boot and
+    # will not serve without the database, so on a first sync this ordering is
+    # load-bearing rather than cosmetic.
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  serviceName: open-webui-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: open-webui-postgres
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: open-webui-postgres
+        app.kubernetes.io/component: database
+        app.kubernetes.io/part-of: open-webui
+    spec:
+      securityContext:
+        # The upstream image starts as root and `gosu postgres`es down in its own
+        # entrypoint, so runAsNonRoot is deliberately not set. fsGroup makes the
+        # freshly provisioned Longhorn volume group-writable by that user. See the
+        # header for why this is 999 and not Mealie's 70.
+        fsGroup: 999
+      containers:
+        - name: postgres
+          # pg17, pinned to the major. Never `:latest` -- postgres upgrades its
+          # on-disk format across MAJOR versions irreversibly, and a tag that
+          # drifts is a pod restart away from an unopenable data directory. A
+          # major bump is a pg_dump / pg_restore, never an image edit.
+          #
+          # The `pg17` tag does float across 17.x patch releases, exactly as
+          # Mealie's `17-alpine` does. That is the repo's existing bargain: patch
+          # releases of postgres are on-disk compatible in both directions.
+          image: pgvector/pgvector:pg17
+          ports:
+            - name: postgres
+              containerPort: 5432
+              protocol: TCP
+          env:
+            # POSTGRES_DB / POSTGRES_USER are read ONLY when the data directory is
+            # empty. Editing them later renames nothing; it just makes Open WebUI
+            # connect to a database that does not exist.
+            #
+            # `openwebui`, not `open-webui`: this name is interpolated into a
+            # DATABASE_URL in Deployment.yaml and also typed at psql prompts during
+            # backups. A hyphen is legal in both but has to survive quoting in
+            # both, and there is no upside to finding out where it does not.
+            - name: POSTGRES_DB
+              value: openwebui
+            - name: POSTGRES_USER
+              value: openwebui
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: open-webui
+                  key: postgres-password
+            # pg_isready below runs with no -U, so it uses the OS user (root at
+            # exec time). PGUSER points it at the role that actually exists;
+            # without it the probe reports "role root does not exist" and the pod
+            # never goes Ready. Upstream's own compose example sets it for exactly
+            # this reason.
+            - name: PGUSER
+              value: openwebui
+            # The volume is mounted at /var/lib/postgresql/data, which on this
+            # image is the default PGDATA -- and initdb refuses a non-empty
+            # directory. A subdirectory keeps it clear of anything the volume
+            # driver leaves at the mount root (lost+found on a formatted PVC).
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+          # Readiness only, and deliberately no liveness probe: a database that is
+          # slow to answer is recovering, and restarting it mid-recovery is how a
+          # slow start becomes a crashloop. Dropping out of the Service is enough
+          # -- Open WebUI's own readiness probe fails in sympathy and it retries.
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-d", "openwebui"]
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          resources:
+            requests:
+              cpu: 50m
+              memory: 256Mi
+            limits:
+              # No CPU limit: throttling a database under load turns a slow query
+              # into a timeout cascade. Memory is capped because a leak here should
+              # kill this pod and not the node.
+              #
+              # 1Gi rather than Mealie's 512Mi: this instance also holds the
+              # pgvector index, and building an ivfflat or hnsw index is the one
+              # operation here with a real working set.
+              memory: 1Gi
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          app.kubernetes.io/name: open-webui-postgres
+          app.kubernetes.io/part-of: open-webui
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: longhorn
+        resources:
+          requests:
+            # 10Gi. Chat history is text; uploads and RAG SOURCE files live on Open
+            # WebUI's own PVC, and only their embeddings land in here. Longhorn
+            # volumes expand online, so this errs small.
+            #
+            # NOTE: this volume is NOT covered by any Longhorn backup --
+            # backupTarget is "" fleet-wide and there are no RecurringJobs. Its
+            # only offsite copy is a logical pg_dump, and adding this database to
+            # ~/homelab-backups/dump-all.sh (outside this repo) is a FOLLOW-UP.
+            storage: 10Gi

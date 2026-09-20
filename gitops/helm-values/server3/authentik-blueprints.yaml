@@ -309,6 +309,46 @@ applications:
     environments:
       - { cluster: server1, stage: production }
 
+  - name: open-webui
+    title: Open WebUI
+    # Explicit host: apex tier, same reasoning as mealie -- assistant.irha.cz, matching
+    # the HTTPRoute and the server1-tls SAN. LAN-only today and the ONE thing the
+    # public-exposure spec ever publishes (parent spec decision 12), which is why it
+    # was named for the apex up front: an OIDC redirect URI is one of the things a
+    # rename breaks. The name is product-neutral so it survives replacing Open WebUI.
+    # No `local` environment -- nobody runs a local Open WebUI against this IdP.
+    host: assistant.irha.cz
+    # The NON-LEGACY callback. Open WebUI v0.11.3 routes both
+    # /oauth/{provider}/login/callback and /oauth/{provider}/callback, and its own
+    # main.py marks the second "# Legacy endpoint". Registered strictly, so this
+    # string must stay character-identical to OPENID_REDIRECT_URI in
+    # gitops/k8s-manifests/server1/open-webui/Deployment.yaml.
+    #
+    # logoutPath is deliberately absent: the chart defaults it to "/", and Open WebUI's
+    # RP-initiated logout returns to WEBUI_URL, which is exactly https://assistant.irha.cz/.
+    redirectPath: /oauth/oidc/login/callback
+    # Confidential, like openbao and mealie. Not a preference: Open WebUI registers the
+    # OIDC provider only when OAUTH_CLIENT_ID, a client secret and OPENID_PROVIDER_URL
+    # are all present (config.py at the v0.11.3 tag), and there is no PKCE-only mode.
+    #
+    # The generated secret is copied ONCE from the provider page in the Authentik UI
+    # into KV (secret/server1/open-webui, key oauth-client-secret) and reaches the pod via
+    # gitops/k8s-manifests/server1/open-webui/ExternalSecret.oidc.yaml. Until it is there
+    # Open WebUI runs with its local login form only -- the env block is optional on purpose.
+    confidential: true
+    # TWO rungs, not the usual three. OAUTH_ALLOWED_ROLES gates who may log in at all
+    # and OAUTH_ADMIN_ROLES grants admin, so a middle rung would be a claim nothing
+    # reads. `admin` inherits `user`, so an admin's token carries both
+    # open-webui.admin and open-webui.user and passes the gate either way -- which
+    # matters, because Open WebUI's get_user_role() tests the allowed list first and
+    # the admin list second.
+    roles:
+      - name: admin
+        inherits: user
+      - name: user
+    environments:
+      - { cluster: server1, stage: production }
+
   - name: homelab-dashboard
     title: Homelab Dashboard
     # Explicit host: server3 is the control cluster and does not follow the

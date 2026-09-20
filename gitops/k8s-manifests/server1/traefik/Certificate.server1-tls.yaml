@@ -36,4 +36,11 @@ spec:
     # and public once the public-exposure spec's gate opens, and a rename would break
     # every phone client and OIDC redirect URI pointed at it.
     - mealie.irha.cz
+    # Apex tier: the household assistant (Open WebUI). Named for the ROLE, not the
+    # product -- it survives swapping Open WebUI for something else, and a rename
+    # would break the registered OIDC redirect URI. It is also the one name the
+    # public-exposure spec ever publishes, so it is deliberately vaguer about the
+    # inventory than a product name would be: every SAN in this list is public in
+    # Certificate Transparency logs.
+    - assistant.irha.cz
 
