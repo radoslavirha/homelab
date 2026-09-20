@@ -7,7 +7,7 @@ Personal Kubernetes homelab — three Talos Linux clusters managed as Infrastruc
 | Cluster | Role | Machine |
 |---------|------|----------|
 | `server1` | Production workloads | server1 — 32 GB RAM / 6 cores / 500 GB SSD |
-| `server2` | Platform only — canary for upgrades; being repurposed to host an LLM | server2 — 32 GB RAM / 8 cores / 500 GB SSD |
+| `server2` | LLM engine (Ollama, CPU-only) since 2026-09-20; canary for upgrades | server2 — 32 GB RAM / 8 cores / 500 GB SSD |
 | `server3` | Platform services — OpenBao, ArgoCD, Authentik | server3 — 16 GB RAM / 4 cores / 500 GB SSD |
 
 ## Dependency updates

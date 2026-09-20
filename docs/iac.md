@@ -292,8 +292,10 @@ bao kv put secret/<cluster>/provisioner-token token="$PROVISIONER_TOKEN"
 #    These secrets must exist before ESO syncs for the first time (steps 5 onwards).
 #    Add all secrets for every app you plan to deploy on this cluster — and ONLY those.
 #    external-dns and cert-manager are needed by every cluster. influxdb2, emqx, mongodb,
-#    mealie and the provisioner token are needed only where those workloads actually run,
-#    which since 2026-09-13 is server1 alone; server2 runs platform components only.
+#    mealie, open-webui and the provisioner token are needed only where those workloads
+#    actually run, which is server1 alone. server2 runs platform components plus Ollama,
+#    and Ollama needs NO secret at all — it has no authentication, and the "API key" its
+#    callers send is a placeholder their SDKs demand, not a credential.
 
 #    ExternalDNS — UniFi API key (gateway stage):
 bao kv put secret/<cluster>/external-dns api-key=<unifi-api-key>
@@ -333,6 +335,28 @@ bao kv put secret/<cluster>/mongodb \
 #      server1 only today.
 bao kv put secret/<cluster>/mealie \
   postgres-password=$(openssl rand -base64 24)
+
+#    Open WebUI (household stage; ESO syncs before both pods start). server1 only.
+#      postgres-password: read by BOTH the postgres StatefulSet (which sets it) and
+#        Open WebUI (which interpolates it into DATABASE_URL).
+#      webui-secret-key: signs session JWTs, and is the default for
+#        OAUTH_SESSION_TOKEN_ENCRYPTION_KEY — rotating it does not merely log everyone
+#        out, it makes stored OAuth session tokens undecryptable.
+#
+#      HEX, not base64, and that is not a style preference: Open WebUI takes a single
+#      DATABASE_URL rather than a host/user/password triple, so the password lands in the
+#      userinfo field of a URL. A base64 value containing @ : / + would be parsed as URL
+#      structure and the error names a host nobody configured.
+bao kv put secret/<cluster>/open-webui \
+  postgres-password=$(openssl rand -hex 32) \
+  webui-secret-key=$(openssl rand -hex 32)
+
+#    Open WebUI's Authentik client secret is NOT seeded here — it does not exist yet.
+#      Authentik generates it when the blueprint creates the provider, so it is patched in
+#      afterwards, once, by hand. `patch`, never `put`: `put` replaces the whole path and
+#      would drop the two keys above.
+#        bao kv patch secret/<cluster>/open-webui oauth-client-secret=<paste>
+#      Same pattern as mealie's oidc-client-secret. See docs/identity.md.
 
 #    Verify all secrets are present before continuing:
 bao kv list secret/<cluster>

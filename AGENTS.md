@@ -125,7 +125,7 @@ gitops/
       telegraf.yaml         server1 overrides (currently empty)
       traefik.yaml          dashboard hostname/IP, externalIPs, statusAddress.ip,
                             ports: 1883/8883/27017 + UDP 4000-4001 for the IoT estate
-    server2/              platform only since 2026-09-13 — no datastores, no custom apps
+    server2/              LLM engine since 2026-09-20 (Ollama) — no datastores, no custom apps
       cert-manager.yaml     cluster-specific overrides
       external-dns.yaml     domainFilters, txtOwnerId
       external-secrets.yaml cluster-specific overrides
@@ -160,9 +160,10 @@ gitops/
       RootDashboards.yaml     sync-wave: "3" — App-of-Apps → apps/dashboards/
       RootApps.yaml           sync-wave: "4" — App-of-Apps → apps/apps/ (custom apps)
       RootHousehold.yaml      sync-wave: "4" — App-of-Apps → apps/household/ (third-party
-                              household apps: Mealie today; Open WebUI, Ollama and the agent
-                              tool servers next. Separate from apps/apps/ because that stage
-                              is only for OUR apps rendered by the iot-applications chart)
+                              household apps: Mealie, Open WebUI (server1) and Ollama
+                              (server2); the agent tool servers next. Separate from apps/apps/
+                              because that stage is only for OUR apps rendered by the
+                              iot-applications chart)
       RootNetworkPolicies.yaml sync-wave: "5" — App-of-Apps → apps/network-policies/
       server3/
         RootDashboards.yaml    sync-wave: "2" — App-of-Apps → server3/apps/dashboards/ (OpenBao HTTPRoute, homelab-dashboard-ui)
@@ -176,9 +177,10 @@ gitops/
       databases/   MongoDB (AppSet)
       dashboards/  Headlamp (AppSet), Hubble (AppSet), Longhorn (AppSet)
       apps/        MiotBridgeApi (AppSet), InteractiveMapFeederApi (AppSet), QrManagerApi (AppSet), QrManagerUi (AppSet)
-      household/   Mealie (AppSet, server1 only) — third-party household apps. Raw manifests,
-                   no chart and no targetRevision: the version is the image tag in the
-                   Deployment, which Renovate does not currently watch
+      household/   Mealie (AppSet, server1), OpenWebUI (AppSet, server1), Ollama (AppSet,
+                   server2) — third-party household apps. Raw manifests, no chart and no
+                   targetRevision: the version is the image tag in the Deployment, which the
+                   `kubernetes` manager in renovate.json5 now watches
       network-policies/ NetworkPolicies (AppSet, cluster × env) — MANUAL sync, deliberately
     server3/
       apps/
@@ -203,13 +205,23 @@ gitops/
                    PVC (10Gi /app/data), Deployment (image tag = the pinned version), Service,
                    HTTPRoute mealie.irha.cz (apex tier). Namespace `mealie`, outside the
                    production/sandbox default-deny set, so no NetworkPolicy work
+      open-webui/  ExternalSecret (postgres-password + webui-secret-key), ExternalSecret.oidc.yaml
+                   (Authentik client secret, copied by hand once, sync-wave 200 so a missing key
+                   cannot block the app), StatefulSet+Service for its own PostgreSQL 17 with
+                   pgvector (fsGroup 999 — Debian, not Alpine), PVC (20Gi /app/backend/data),
+                   Deployment (image tag = the pinned version), Service, HTTPRoute
+                   assistant.irha.cz (apex tier). Namespace `open-webui`
       miot-bridge-api/ production/ and sandbox/ — ExternalSecret.mqtt.yaml, ExternalSecret.mongodb.yaml
       qr-manager-api/ production/ and sandbox/ — ExternalSecret.mongodb.yaml, HTTPRoute.qr.yaml, Middleware.addprefix-qr.yaml
       network-policies/ production/ and sandbox/ — default-deny + the egress allow-list (manual-sync)
       k8s-monitoring/ ExternalSecret.otel-auth-token.yaml (shared OTLP bearer token pulled from secret/otel-gateway/auth-token)
       traefik/     Certificate.server1-tls.yaml → Secret server1-tls for the websecure listener; the Authentik proxy outpost (Deployment/Service/ExternalSecret/ReferenceGrant) + Middleware.authentik.yaml and HTTPRoute.authentik-outpost.yaml guarding the dashboard
       headlamp/    ClusterRoleBinding.headlamp-oidc.yaml — headlamp.admin/editor/reader → cluster-admin/edit/view (delivered by the Headlamp AppSet)
-    server2/              platform only since 2026-09-13
+    server2/              LLM engine since 2026-09-20
+      ollama/              PVC (100Gi /models), Deployment (Recreate, no CPU limit, 24Gi memory
+                           cap), Service, Middleware.ipallowlist.yaml (server1's node address
+                           ONLY — Ollama has no authentication), HTTPRoute
+                           ollama.server2.homelab.irha.cz
       cilium/              HTTPRoute: hubble.server2.homelab.irha.cz → hubble-dashboard:80 (forward-auth), Middleware.authentik.yaml
       cert-manager/        ExternalSecret (cloudflare-api-token), ClusterIssuer letsencrypt-staging + letsencrypt-prod (ACME DNS-01 via Cloudflare)
       external-secrets/    ClusterSecretStore → remote server3 OpenBao at vault.server3.homelab.irha.cz
@@ -273,7 +285,7 @@ All other apps use the **app-of-apps + ApplicationSet** pattern: **nine stages u
 - **dashboards** stage: Headlamp, Hubble UI, Longhorn UI (all clusters); `server3/apps/dashboards/` adds the OpenBao HTTPRoute and homelab-dashboard-ui
 - **identity** stage: Authentik + the authentik-blueprints chart — `server3/apps/identity/`, **server3 only**
 - **apps** stage: custom apps — miot-bridge-api, interactive-map-feeder-api, qr-manager-api, qr-manager-ui, per-namespace OTel collectors — **server1 only**
-- **household** stage: third-party household apps — Mealie today, Open WebUI / Ollama / agent tool servers next — **server1 only**. Kept out of the `apps` stage because that one is exclusively our own apps rendered by the in-repo `iot-applications` chart across production + sandbox; these are singletons with raw manifests
+- **household** stage: third-party household apps — Mealie and Open WebUI on server1, Ollama on server2; agent tool servers next. **Not server1-only any more** (Ollama made it multi-cluster on 2026-09-20). Kept out of the `apps` stage because that one is exclusively our own apps rendered by the in-repo `iot-applications` chart across production + sandbox; these are singletons with raw manifests
 
 Bootstrap is **two manual kubectl applies** on server3:
 
