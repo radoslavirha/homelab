@@ -616,9 +616,9 @@ data:
         identifiers:
           name: {{ $slug }}-{{ $role.name }}
         attrs:
-          # Emitted on EVERY role, empty list included. A blueprint leaves a field it does
-          # not mention exactly as it found it, so a role that loses its `inherits` in
-          # values would otherwise keep granting its parent forever.
+          {{- /* Emitted on EVERY role, empty list included. A blueprint leaves a field it does
+             not mention exactly as it found it, so a role that loses its `inherits` in
+             values would otherwise keep granting its parent forever. */}}
         {{- if $role.inherits }}
           parents:
             - !KeyOf grp-{{ $slug }}-{{ $role.inherits }}
@@ -645,9 +645,9 @@ data:
         */ -}}
         {{- if $app.accesses }}
 
-      # This client calls other applications' APIs, so it carries its own copies of the two
-      # local mappings: `aud` names every API it may call, and `roles` is collected from
-      # THEIR role groups rather than from anything named {{ $app.name }}.
+      {{- /* This client calls other applications' APIs, so it carries its own copies of the two
+         local mappings: `aud` names every API it may call, and `roles` is collected from
+         THEIR role groups rather than from anything named {{ $app.name }}. */}}
       - model: authentik_providers_oauth2.scopemapping
         id: pm-profile-{{ $slug }}
         identifiers:
@@ -663,12 +663,12 @@ data:
                 "preferred_username": request.user.username,
                 "nickname": request.user.username,
                 "picture": request.user.avatar,
-                # This client's own id, then one entry per API it may call.
-                #
-                # Widening `aud` is only half of what makes those APIs reachable: issuer_mode
-                # is per_provider, so `iss` stays {{ $slug }} whatever the audience says, and
-                # each API listed here needs a trusted-issuer row for this client on its own
-                # side. Without that row the widened audience changes nothing.
+                {{- /* This client's own id, then one entry per API it may call.
+
+                   Widening `aud` is only half of what makes those APIs reachable: issuer_mode
+                   is per_provider, so `iss` stays {{ $slug }} whatever the audience says, and
+                   each API listed here needs a trusted-issuer row for this client on its own
+                   side. Without that row the widened audience changes nothing. */}}
                 "aud": [
                     {{- range $a := $auds }}
                     "{{ $a }}",
@@ -684,34 +684,34 @@ data:
           scope_name: roles
           description: "Roles for {{ $slug }}, collected from every application it may call. Requested explicitly: scope=openid profile email roles."
           expression: |
-            # Groups name the RESOURCE, not the client that logs in. A token minted here
-            # carries `qr-manager.editor` because the user holds a qr-manager editor group
-            # -- not because they hold anything named {{ $app.name }}.
-            #
-            # This is the half that `aud` alone does not solve. The shared `homelab roles`
-            # mapping filters on the ISSUING client_id, which for this client would collect
-            # its own gate group and nothing else: a token that verifies at every API it
-            # addresses and is authorized at none of them.
-            #
-            # THE TABLE BELOW SPANS ENVIRONMENTS, and the claim it produces cannot say
-            # which one a role came from: qr-manager-server1-sandbox-admin and
-            # qr-manager-server1-production-admin both render `qr-manager.admin`. That is
-            # the accepted cost of one credential for every environment -- holding a role
-            # in ANY environment listed here grants it in ALL of them. Narrowing it means
-            # going back to a client per environment, which means a token per environment.
-            #
-            # Exact pairs, not a prefix rule: a client whose name prefixes another
-            # application's name would otherwise strip the wrong number of characters and
-            # invent a role out of the remainder.
+            {{- /* Groups name the RESOURCE, not the client that logs in. A token minted here
+               carries `qr-manager.editor` because the user holds a qr-manager editor group
+               -- not because they hold anything named {{ $app.name }}.
+
+               This is the half that `aud` alone does not solve. The shared `homelab roles`
+               mapping filters on the ISSUING client_id, which for this client would collect
+               its own gate group and nothing else: a token that verifies at every API it
+               addresses and is authorized at none of them.
+
+               THE TABLE BELOW SPANS ENVIRONMENTS, and the claim it produces cannot say
+               which one a role came from: qr-manager-server1-sandbox-admin and
+               qr-manager-server1-production-admin both render `qr-manager.admin`. That is
+               the accepted cost of one credential for every environment -- holding a role
+               in ANY environment listed here grants it in ALL of them. Narrowing it means
+               going back to a client per environment, which means a token per environment.
+
+               Exact pairs, not a prefix rule: a client whose name prefixes another
+               application's name would otherwise strip the wrong number of characters and
+               invent a role out of the remainder. */}}
             claims = {
                 {{- range $c := $claims }}
                 "{{ $c.group }}": "{{ $c.claim }}",
                 {{- end }}
             }
-            # all_groups() returns direct groups PLUS their ancestors, so a role ladder in
-            # a target application arrives here whole, exactly as it does in that
-            # application's own token. The set dedupes the same role reached through
-            # several environments.
+            {{- /* all_groups() returns direct groups PLUS their ancestors, so a role ladder in
+               a target application arrives here whole, exactly as it does in that
+               application's own token. The set dedupes the same role reached through
+               several environments. */}}
             return {
                 "roles": sorted({
                     claims[group.name]
@@ -722,38 +722,38 @@ data:
         {{- end }}
         {{- if $isProxy }}
 
-      # A forward-auth proxy provider. Authentik OWNS its OAuth2 side:
-      # ProxyProviderSerializer.create() and update() both call set_oauth_defaults(), which
-      # forces client_type (confidential), grant_types, signing_key, redirect_uris (derived
-      # from external_host) and the shipped openid/profile/email/entitlements/proxy scope
-      # mappings on EVERY apply (read from the 2026.8.1 source). None of those appear here:
-      # anything written would be overwritten by that same save. tests/proxy_test.yaml keeps
-      # it that way.
-      #
-      # So the local `homelab profile` / `homelab roles` pair is not bound either. Nothing
-      # reads a token from this provider: the outpost holds the session, and the UI behind
-      # it never sees one.
+      {{- /* A forward-auth proxy provider. Authentik OWNS its OAuth2 side:
+         ProxyProviderSerializer.create() and update() both call set_oauth_defaults(), which
+         forces client_type (confidential), grant_types, signing_key, redirect_uris (derived
+         from external_host) and the shipped openid/profile/email/entitlements/proxy scope
+         mappings on EVERY apply (read from the 2026.8.1 source). None of those appear here:
+         anything written would be overwritten by that same save. tests/proxy_test.yaml keeps
+         it that way.
+
+         So the local `homelab profile` / `homelab roles` pair is not bound either. Nothing
+         reads a token from this provider: the outpost holds the session, and the UI behind
+         it never sees one. */}}
       - model: authentik_providers_proxy.proxyprovider
         id: prov-{{ $slug }}
         identifiers:
           name: {{ $slug }}
         attrs:
           authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-implicit-consent]]
-          # Same flow as the OAuth2 providers, for the same reason: sign-out at
-          # /outpost.goauthentik.io/sign_out ends the Authentik session, not just this host's.
+          {{- /* Same flow as the OAuth2 providers, for the same reason: sign-out at
+             /outpost.goauthentik.io/sign_out ends the Authentik session, not just this host's. */}}
           invalidation_flow: !Find [authentik_flows.flow, [slug, default-invalidation-flow]]
-          # forward_single: Traefik asks the outpost about every request to THIS host, and the
-          # session cookie is scoped to this host alone. One provider per host is what keeps
-          # access per UI -- forward_domain would put every guarded UI behind one Application
-          # and one set of bindings.
+          {{- /* forward_single: Traefik asks the outpost about every request to THIS host, and the
+             session cookie is scoped to this host alone. One provider per host is what keeps
+             access per UI -- forward_domain would put every guarded UI behind one Application
+             and one set of bindings. */}}
           mode: forward_single
           external_host: {{ $base }}
-          # The Authorization header belongs to nobody here: the UIs behind a proxy have no
-          # API clients. Left on (the model default), a Basic or Bearer header would be taken
-          # by the outpost as a login attempt.
+          {{- /* The Authorization header belongs to nobody here: the UIs behind a proxy have no
+             API clients. Left on (the model default), a Basic or Bearer header would be taken
+             by the outpost as a login attempt. */}}
           intercept_header_auth: false
-          # The outpost's session length for this host. Why it is long: proxyAccessTokenValidity
-          # in values.yaml.
+          {{- /* The outpost's session length for this host. Why it is long: proxyAccessTokenValidity
+             in values.yaml. */}}
           access_token_validity: {{ default $root.Values.proxyAccessTokenValidity $app.accessTokenValidity }}
         {{- else }}
 
@@ -763,41 +763,41 @@ data:
           name: {{ $slug }}
         attrs:
           authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-implicit-consent]]
-          # default-invalidation-flow, NOT default-provider-invalidation-flow.
-          #
-          # The provider flow is the one that deliberately does not end the
-          # authentik session: it ends only the application's, so Log out
-          # followed by Log in signs the user straight back in with no prompt.
-          # With SSO across five applications that is not a logout, it is a
-          # confusing no-op, and it is why the UI used to carry a second
-          # "Sign out everywhere" button.
-          #
-          # This flow runs the user_logout stage, so RP-initiated logout ends
-          # the session itself and then honours post_logout_redirect_uri —
-          # one button, and the user lands back on the app.
+          {{- /* default-invalidation-flow, NOT default-provider-invalidation-flow.
+
+             The provider flow is the one that deliberately does not end the
+             authentik session: it ends only the application's, so Log out
+             followed by Log in signs the user straight back in with no prompt.
+             With SSO across five applications that is not a logout, it is a
+             confusing no-op, and it is why the UI used to carry a second
+             "Sign out everywhere" button.
+
+             This flow runs the user_logout stage, so RP-initiated logout ends
+             the session itself and then honours post_logout_redirect_uri —
+             one button, and the user lands back on the app. */}}
           invalidation_flow: !Find [authentik_flows.flow, [slug, default-invalidation-flow]]
-          # per_provider (the model default), reversing the earlier choice of global.
-          #
-          # Every provider signs with the SAME key -- measured 2026-09-04: identical kid,
-          # and a token minted for one application verifies cleanly against another's
-          # JWKS URL. So a valid signature says "this IdP" and nothing about which
-          # application. Under `global` the only claim separating the applications is
-          # `aud`, and `aud` is an optional argument in every JWT library: omit it and
-          # nothing complains. Under `per_provider` the iss differs too --
-          # https://auth.irha.cz/application/o/<client_id>/ -- and a verifier built from
-          # a discovery document pins iss structurally, because the client IS the issuer.
-          # That makes the lazy implementation app-scoped instead of IdP-scoped.
-          #
-          # Nothing else moves: the authorize and token endpoints stay shared, and the
-          # signing key stays shared. This is a second belt, not a fix for the key --
-          # that is per-provider signing certificates, deferred.
-          #
-          # The rejected reasoning was "each application then needs its own trusted-issuer
-          # row in packages/auth". True but small: it is ONE row per deployment carrying a
-          # per-environment value, exactly like apiBaseURL already does -- not N rows per
-          # API. Landed before any verifier existed, when the cost was zero; afterwards it
-          # would mean updating every deployment's config and breaking live tokens until
-          # their next renewal.
+          {{- /* per_provider (the model default), reversing the earlier choice of global.
+
+             Every provider signs with the SAME key -- measured 2026-09-04: identical kid,
+             and a token minted for one application verifies cleanly against another's
+             JWKS URL. So a valid signature says "this IdP" and nothing about which
+             application. Under `global` the only claim separating the applications is
+             `aud`, and `aud` is an optional argument in every JWT library: omit it and
+             nothing complains. Under `per_provider` the iss differs too --
+             https://auth.irha.cz/application/o/<client_id>/ -- and a verifier built from
+             a discovery document pins iss structurally, because the client IS the issuer.
+             That makes the lazy implementation app-scoped instead of IdP-scoped.
+
+             Nothing else moves: the authorize and token endpoints stay shared, and the
+             signing key stays shared. This is a second belt, not a fix for the key --
+             that is per-provider signing certificates, deferred.
+
+             The rejected reasoning was "each application then needs its own trusted-issuer
+             row in packages/auth". True but small: it is ONE row per deployment carrying a
+             per-environment value, exactly like apiBaseURL already does -- not N rows per
+             API. Landed before any verifier existed, when the cost was zero; afterwards it
+             would mean updating every deployment's config and breaking live tokens until
+             their next renewal. */}}
           issuer_mode: per_provider
         {{- if $isDevice }}
           # A machine: confidential, because there is no browser to run PKCE in and no
@@ -820,28 +820,28 @@ data:
           # a new secret and must be reflashed.
           client_type: confidential
         {{- else if $app.confidential }}
-          # A human still logs in via redirect, but THIS app's own backend does the code
-          # exchange and can hold a secret server-side -- unlike a browser SPA, which
-          # cannot keep one at all. Confidential lets Authentik authenticate the client
-          # itself instead of relying on PKCE alone.
-          #
-          # `client_secret` is deliberately NOT set here -- same trick as a device:
-          # Authentik generates one when it creates the provider, and a blueprint leaves
-          # a field it does not mention exactly as it found it, so the value survives
-          # every re-apply. UNLIKE a device, this secret does not go to a human to
-          # hand-copy into firmware once -- it belongs in a long-running Deployment. Read
-          # it once from the provider page in the UI and wire it OpenBao -> ExternalSecret
-          # -> env/volume in that app's OWN gitops files, not here.
+          {{- /* A human still logs in via redirect, but THIS app's own backend does the code
+             exchange and can hold a secret server-side -- unlike a browser SPA, which
+             cannot keep one at all. Confidential lets Authentik authenticate the client
+             itself instead of relying on PKCE alone.
+
+             `client_secret` is deliberately NOT set here -- same trick as a device:
+             Authentik generates one when it creates the provider, and a blueprint leaves
+             a field it does not mention exactly as it found it, so the value survives
+             every re-apply. UNLIKE a device, this secret does not go to a human to
+             hand-copy into firmware once -- it belongs in a long-running Deployment. Read
+             it once from the provider page in the UI and wire it OpenBao -> ExternalSecret
+             -> env/volume in that app's OWN gitops files, not here. */}}
           client_type: confidential
         {{- else }}
-          # SPA: public client, PKCE, no secret to store or rotate.
+          {{- /* SPA: public client, PKCE, no secret to store or rotate. */}}
           client_type: public
         {{- end }}
           client_id: {{ $slug }}
           sub_mode: user_username
-          # REQUIRED. The model default is an empty list, and empty grant_types makes
-          # /application/o/authorize/ reject every request with invalid_request
-          # ("The request is otherwise malformed") before any policy is evaluated.
+          {{- /* REQUIRED. The model default is an empty list, and empty grant_types makes
+             /application/o/authorize/ reject every request with invalid_request
+             ("The request is otherwise malformed") before any policy is evaluated. */}}
         {{- if $isDevice }}
           grant_types:
             # No authorization_code: there is no browser, and no redirect URI below for
@@ -884,23 +884,23 @@ data:
         {{- else }}
           access_token_validity: {{ default $root.Values.accessTokenValidity $app.accessTokenValidity }}
         {{- end }}
-          # For a `local` environment $base is http://localhost:<port>, so these are
-          # the loopback URIs and there is no separate special case below.
-          #
-          # Local development used to be a pair of loopback URIs bolted onto every
-          # *sandbox* application. That worked, and it meant a developer machine could
-          # complete a login as a real sandbox client — the same client_id, the same
-          # audience, the same groups as the deployed sandbox. A `local` environment
-          # is its own application instead: its own client_id, its own issuer, its own
-          # role groups, revocable on its own. Sandbox clients now register only their
-          # deployed host, and a loopback URI exists on exactly the client whose entire
-          # purpose is a developer machine.
-          #
-          # Not a bypass: localhost is a secure context so PKCE works, the flow is the
-          # real one against the real IdP, and the token is a real RS256 token. What it
-          # is not is a *sandbox* token — an API that wants to accept it needs the local
-          # application as a trusted issuer row, which is exactly the point: that row
-          # lives in the developer's own config and never ships.
+          {{- /* For a `local` environment $base is http://localhost:<port>, so these are
+             the loopback URIs and there is no separate special case below.
+
+             Local development used to be a pair of loopback URIs bolted onto every
+             *sandbox* application. That worked, and it meant a developer machine could
+             complete a login as a real sandbox client — the same client_id, the same
+             audience, the same groups as the deployed sandbox. A `local` environment
+             is its own application instead: its own client_id, its own issuer, its own
+             role groups, revocable on its own. Sandbox clients now register only their
+             deployed host, and a loopback URI exists on exactly the client whose entire
+             purpose is a developer machine.
+
+             Not a bypass: localhost is a secure context so PKCE works, the flow is the
+             real one against the real IdP, and the token is a real RS256 token. What it
+             is not is a *sandbox* token — an API that wants to accept it needs the local
+             application as a trusted issuer row, which is exactly the point: that row
+             lives in the developer's own config and never ships. */}}
         {{- if $isDevice }}
           # REQUIRED even here. client_credentials has no redirect, but the provider
           # serializer rejects the entry outright without this key -- measured 2026-09-09:
@@ -939,12 +939,12 @@ data:
             - !Find [authentik_providers_oauth2.scopemapping, [managed, goauthentik.io/providers/oauth2/scope-{{ $scope }}]]
             {{- end }}
         {{- if $app.accesses }}
-            # This client's OWN copies, carrying its audience list and its role table.
-            # Not the shared pair -- binding both would duplicate `aud`.
+            {{- /* This client's OWN copies, carrying its audience list and its role table.
+               Not the shared pair -- binding both would duplicate `aud`. */}}
             - !KeyOf pm-profile-{{ $slug }}
             - !KeyOf pm-roles-{{ $slug }}
         {{- else }}
-            # Local, not the shipped ones -- see the entries at the top of this blueprint.
+            {{- /* Local, not the shipped ones -- see the entries at the top of this blueprint. */}}
             - !KeyOf pm-profile
             - !KeyOf pm-roles
         {{- end }}
@@ -958,24 +958,24 @@ data:
         attrs:
           name: {{ $app.title }}{{ if not $isBroad }} ({{ if $isLocal }}local{{ else }}{{ $env.cluster }}/{{ $env.stage }}{{ end }}){{ end }}
           provider: !KeyOf prov-{{ $slug }}
-          # Authentik's application-grouping field, doing double duty: it groups the
-          # environments together in the user portal, AND the roles mapping reads it for
-          # the short name it puts in the claim. One spelling, from the values matrix --
-          # deriving it by stripping "-<cluster>-<stage>" off the client_id would break
-          # the day a cluster is added.
+          {{- /* Authentik's application-grouping field, doing double duty: it groups the
+             environments together in the user portal, AND the roles mapping reads it for
+             the short name it puts in the claim. One spelling, from the values matrix --
+             deriving it by stripping "-<cluster>-<stage>" off the client_id would break
+             the day a cluster is added. */}}
           group: {{ $app.name }}
-          # any: membership of ANY bound group grants access. Role groups ARE the
-          # access groups, so there is no separate access group to keep in sync.
+          {{- /* any: membership of ANY bound group grants access. Role groups ARE the
+             access groups, so there is no separate access group to keep in sync. */}}
           policy_engine_mode: any
         {{- if not $app.accesses }}
           meta_launch_url: {{ $base }}/
         {{- end }}
         {{- range $role := $ordered }}
 
-      # One binding per role, parentage notwithstanding: an `-admin`-only member is
-      # already admitted through the `-reader` binding they effectively hold
-      # (PolicyBinding.passes -> Group.is_member -> user.all_groups()), but binding every
-      # role group keeps access legible in the UI and survives a ladder being flattened.
+      {{- /* One binding per role, parentage notwithstanding: an `-admin`-only member is
+         already admitted through the `-reader` binding they effectively hold
+         (PolicyBinding.passes -> Group.is_member -> user.all_groups()), but binding every
+         role group keeps access legible in the UI and survives a ladder being flattened. */}}
       - model: authentik_policies.policybinding
         identifiers:
           target: !KeyOf app-{{ $slug }}
@@ -1027,12 +1027,12 @@ data:
           {{- end }}
           {{- range $i, $t := $targets }}
 
-      # Bound to the TARGET's role group, not to a gate group of its own.
-      #
-      # A `client` needs its own gate because many humans share one Postman client. A
-      # device does not: it has its own service account, so removing THAT user from this
-      # group revokes this device and nothing else. A second group would be an object
-      # that exists only to be a switch someone forgets to flip.
+      {{- /* Bound to the TARGET's role group, not to a gate group of its own.
+
+         A `client` needs its own gate because many humans share one Postman client. A
+         device does not: it has its own service account, so removing THAT user from this
+         group revokes this device and nothing else. A second group would be an object
+         that exists only to be a switch someone forgets to flip. */}}
       - model: authentik_policies.policybinding
         identifiers:
           target: !KeyOf app-{{ $slug }}
@@ -1096,15 +1096,15 @@ data:
           name: homelab-proxy-{{ $cluster }}
         attrs:
           type: proxy
-          # The WHOLE list. A provider assigned to this outpost in the UI is dropped on the
-          # next apply.
+          {{- /* The WHOLE list. A provider assigned to this outpost in the UI is dropped on the
+             next apply. */}}
           providers:
           {{- range $s := get $outposts $cluster }}
             - !KeyOf prov-{{ $s }}
           {{- end }}
           config:
-            # Where browsers are sent to log in. The outpost's own API connection comes from
-            # AUTHENTIK_HOST in its Deployment instead.
+            {{- /* Where browsers are sent to log in. The outpost's own API connection comes from
+               AUTHENTIK_HOST in its Deployment instead. */}}
             authentik_host: {{ $root.Values.authentikHost }}
             authentik_host_insecure: false
     {{- end }}
