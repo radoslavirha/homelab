@@ -7,7 +7,7 @@ Multi-cluster Kubernetes homelab: three Talos Linux nodes managed with a shared 
 | Cluster | Machine | Role |
 |---------|---------|------|
 | `server1` | server1 — 32 GB RAM / 6 cores / 500 GB SSD | Production workloads |
-| `server2` | server2 — 32 GB RAM / 8 cores / 500 GB SSD | Platform-only since 2026-09-13 — its IoT estate was removed and it is being repurposed to host an LLM. Doubles as the canary: platform upgrades land here first |
+| `server2` | server2 — 32 GB RAM / 8 cores / 500 GB SSD | LLM engine since 2026-09-20 — its IoT estate was removed on 2026-09-13 and it now runs Ollama (CPU-only) and nothing else. Doubles as the canary: platform upgrades land here first |
 | `server3` | server3 — 16 GB RAM / 4 cores / 500 GB SSD | Platform services — OpenBao, ArgoCD, Authentik, central observability hub (manages all clusters) |
 
 ## Technology stack
@@ -46,6 +46,9 @@ Multi-cluster Kubernetes homelab: three Talos Linux nodes managed with a shared 
 | qr-manager-ui | QR code admin SPA (React + nginx); served at `apps.server1.homelab.irha.cz/qr-manager`; runtime `config.json` via ConfigMap subPath mount; no secrets | server1 | ArgoCD `apps` | — | [base](../gitops/helm-values/apps/qr-manager-ui/base.yaml) · [production](../gitops/helm-values/apps/qr-manager-ui/production.yaml) · [sandbox](../gitops/helm-values/apps/qr-manager-ui/sandbox.yaml) · [shared](../gitops/helm-values/apps/common/values.yaml) · [appset](../gitops/argocd-manifests/apps/apps/QrManagerUi.yaml) | — |
 | [Mealie](https://mealie.io/) | Recipe manager and meal planner at `mealie.irha.cz` (apex tier); **trial**, LAN only. Authentik OIDC login only — local logins off since 2026-09-18 (confidential client, roles `mealie.admin`/`mealie.user`, accounts matched on `preferred_username`). Raw manifests — Mealie ships no official chart and is one container, so the version is the image tag in the Deployment, not a `targetRevision` | server1 | ArgoCD `household` | — | [manifests](../gitops/k8s-manifests/server1/mealie/) · [appset](../gitops/argocd-manifests/apps/household/Mealie.yaml) | — |
 | mealie-postgres | PostgreSQL 17 backing Mealie, one replica inside the `mealie` namespace rather than a fleet-wide instance — a trial should not decide shared-database placement. Moving it later is a dump and a restore | server1 | ArgoCD `household` | — | [manifests](../gitops/k8s-manifests/server1/mealie/) | — |
+| [Open WebUI](https://openwebui.com/) | The household assistant at `assistant.irha.cz` (apex tier), LAN only. General-purpose LLM chat front end and the future host for MCP tool servers and automations. Authentik OIDC only — the local login form is off and no local account was ever created (confidential client, roles `open-webui.admin`/`open-webui.user`; the first login bypasses role gating by design upstream). Model connections: the Ollama engine on server2, plus any cloud provider. Raw manifests, so the version is the image tag in the Deployment, not a `targetRevision` | server1 | ArgoCD `household` | — | [manifests](../gitops/k8s-manifests/server1/open-webui/) · [appset](../gitops/argocd-manifests/apps/household/OpenWebUI.yaml) | — |
+| open-webui-postgres | PostgreSQL 17 **with `pgvector`** backing Open WebUI, one replica inside the `open-webui` namespace. Holds the app schema *and* the RAG embeddings (`VECTOR_DB=pgvector`), so there is one datastore to back up rather than a second on-disk vector store. The app issues `CREATE EXTENSION vector` itself on first use. `fsGroup` is 999, not Mealie's 70 — this image is Debian-based, not Alpine | server1 | ArgoCD `household` | — | [manifests](../gitops/k8s-manifests/server1/open-webui/) | — |
+| [Ollama](https://ollama.com/) | CPU-only LLM inference engine at `ollama.server2.homelab.irha.cz`. **No authentication of any kind** — the protection is a Traefik `ipAllowList` middleware pinned to server1's node address, so Open WebUI reaches it and a laptop does not. Models are pulled by hand via `kubectl exec`, deliberately: a PostSync Job pulling 5–20 GB is long and fragile. Idle cost is ~0 — the model unloads after five minutes | server2 | ArgoCD `household` | — | [manifests](../gitops/k8s-manifests/server2/ollama/) · [appset](../gitops/argocd-manifests/apps/household/Ollama.yaml) | — |
 | [Prometheus](https://prometheus.io/) | TSDB receiving OTLP metrics; no scraping (remote-write only) | server3 | ArgoCD `observability` | [prometheus](https://artifacthub.io/packages/helm/prometheus-community/prometheus) | [shared](../gitops/helm-values/prometheus.yaml) · [server3](../gitops/helm-values/server3/prometheus.yaml) | [values.yaml](https://github.com/prometheus-community/helm-charts/blob/main/charts/prometheus/values.yaml) |
 | [Grafana](https://grafana.com/) | Observability dashboards; datasources: Prometheus, Loki, Tempo, InfluxDB2 (server1) | server3 | ArgoCD `observability` | [grafana](https://artifacthub.io/packages/helm/grafana-community/grafana) | [shared](../gitops/helm-values/grafana.yaml) · [server3](../gitops/helm-values/server3/grafana.yaml) | [values.yaml](https://github.com/grafana-community/helm-charts/blob/main/charts/grafana/values.yaml) |
 | [Loki](https://grafana.com/oss/loki/) | Log aggregation backend; ingest via the native OTLP endpoint `/otlp/v1/logs` (not the Loki push API) | server3 | ArgoCD `observability` | [loki](https://artifacthub.io/packages/helm/grafana-community/loki) | [shared](../gitops/helm-values/loki.yaml) | [values.yaml](https://github.com/grafana-community/helm-charts/blob/main/charts/loki/values.yaml) |
@@ -66,7 +69,7 @@ names that are, or may become, publicly reachable.
 | Tier | Shape | Members |
 |------|-------|---------|
 | Infrastructure | `<svc>.<cluster>.homelab.irha.cz` | everything, by default |
-| Apex | `<svc>.irha.cz` | `qr.irha.cz`, `grafana.irha.cz`, `auth.irha.cz` (Authentik 2026.8.1, deployed on server3 2026-09-04), `mealie.irha.cz` (LAN-only today; named for the apex because it is going public) |
+| Apex | `<svc>.irha.cz` | `qr.irha.cz`, `grafana.irha.cz`, `auth.irha.cz` (Authentik 2026.8.1, deployed on server3 2026-09-04), `mealie.irha.cz` and `assistant.irha.cz` (both LAN-only today; named for the apex because they are going public) |
 
 App routes generated by the `iot-applications` chart follow the same rule, with the stage label
 left of the component: `api.server1.homelab.irha.cz` for production,
@@ -80,7 +83,7 @@ component.
 
 | Cluster | `dnsNames` | Secret |
 |---------|-----------|--------|
-| server1 | `server1.homelab.irha.cz`, `*.server1.homelab.irha.cz`, `*.sandbox.server1.homelab.irha.cz`, `qr.irha.cz`, `mealie.irha.cz` | `server1-tls` |
+| server1 | `server1.homelab.irha.cz`, `*.server1.homelab.irha.cz`, `*.sandbox.server1.homelab.irha.cz`, `qr.irha.cz`, `mealie.irha.cz`, `assistant.irha.cz` | `server1-tls` |
 | server2 | `server2.homelab.irha.cz`, `*.server2.homelab.irha.cz`, `*.sandbox.server2.homelab.irha.cz` | `server2-tls` |
 | server3 | `server3.homelab.irha.cz`, `*.server3.homelab.irha.cz`, `auth.irha.cz`, `grafana.irha.cz` | `server3-tls` |
 
@@ -173,13 +176,13 @@ Longhorn provides durable PersistentVolumes for OpenBao. The overhead (≈500 MB
 
 | Cluster | Covered by the offsite dumps | **Not** covered |
 |---|---|---|
-| server1 | InfluxDB2 25Gi · MongoDB 10Gi · etcd | EMQX 20Mi · Mealie data 10Gi · Mealie PostgreSQL 5Gi |
-| server2 | etcd | — (no application PVCs since 2026-09-13) |
+| server1 | InfluxDB2 25Gi · MongoDB 10Gi · etcd | EMQX 20Mi · Mealie data 10Gi · Mealie PostgreSQL 5Gi · Open WebUI data 20Gi · Open WebUI PostgreSQL 10Gi |
+| server2 | etcd | Ollama models 100Gi — re-pullable from upstream, so deliberately excluded |
 | server3 | OpenBao 10Gi (raft snapshot) · Authentik PostgreSQL 10Gi · etcd | Prometheus 20Gi · Loki 20Gi · Tempo 20Gi · Grafana 5Gi |
 
 The server3 exclusions are deliberate: Prometheus, Loki and Tempo hold reconstructible telemetry, and Grafana is fully provisioned from git. EMQX's 20Mi is broker runtime state, not configuration.
 
-Mealie's two volumes are the one gap that is *not* deliberate — they are simply newer than the script. The database is a plain `pg_dump` away from fitting the path that already dumps Authentik's PostgreSQL, and `/app/data` (recipe images) needs a file copy. Adding both to `~/homelab-backups/dump-all.sh` is an open follow-up; until then, recipes entered during the trial exist on one disk only.
+Mealie's and Open WebUI's four volumes are the gap that is *not* deliberate — they are simply newer than the script. Both databases are a plain `pg_dump` away from fitting the path that already dumps Authentik's PostgreSQL, and the two data volumes (recipe images; uploads and RAG source documents) need a file copy. Adding all four to `~/homelab-backups/dump-all.sh` is an open follow-up; until then, recipes and chat history exist on one disk only.
 
 Every PVC is still single-replica on one node, so a lost disk still loses the volume — the dumps are a rebuild path, not high availability.
 
@@ -233,7 +236,8 @@ MinIO is the intended S3-compatible backend for Terraform state, and would itsel
 │        wave 3  RootDashboards       (Headlamp, Hubble, Longhorn)        │
 │        wave 3  server3/RootIdentity (Authentik + authentik-blueprints)  │
 │        wave 4  RootApps             (miot-bridge, interactive-map-feeder, qr-manager-api, qr-manager-ui) │
-│        wave 4  RootHousehold        (Mealie + its PostgreSQL)           │
+│        wave 4  RootHousehold        (Mealie, Open WebUI + their        │
+│                                      PostgreSQL; Ollama on server2)     │
 │        wave 5  RootNetworkPolicies  (default-deny + egress allow-list)  │
 │     [manual: terraform init -migrate-state for all server3 modules]     │
 │  6. terraform vault-config → OpenBao auth: OIDC login via Authentik     │

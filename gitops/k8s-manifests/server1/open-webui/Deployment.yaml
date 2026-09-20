@@ -139,16 +139,43 @@ spec:
             # comes from Authentik.
             - name: ENABLE_SIGNUP
               value: "false"
-            # Local login form ON, deliberately, for now. Same sequencing Mealie
-            # used: prove an Authentik login works BEFORE removing the fallback.
-            # Turning this off (and setting OAUTH_AUTO_REDIRECT=true) is a
-            # follow-up edit once verification steps 4, 5 and 6 in the spec pass.
+            # Local login form OFF (2026-09-20). Authentik login was verified working
+            # first, and no local account was ever created -- the first and only
+            # accounts came through Authentik -- so this form has nothing left to
+            # serve. Leaving it on would render a username/password box that nothing
+            # can satisfy.
             #
-            # What Mealie learned, recorded here before it is needed: with the form
-            # off and Authentik unreachable -- the realistic case being OpenBao
-            # sealed after a reboot, which takes Authentik's secrets with it --
-            # there is NO break-glass into the UI at all.
+            # ── THIS ENV VAR IS NOT SUFFICIENT ON ITS OWN ───────────────────
+            # `ui.enable_login_form` is a PersistentConfig key, and
+            # ENABLE_PERSISTENT_CONFIG defaults to TRUE, so the value written to the
+            # `config` table at FIRST boot outranks this line forever. Measured
+            # 2026-09-20: the row read `true` while this file said otherwise, and the
+            # form stayed up with ArgoCD green. Only `oauth.*` keys are exempt (see
+            # ENABLE_OAUTH_PERSISTENT_CONFIG below).
+            #
+            # So changing this value requires deleting the row once, which makes the
+            # next boot re-seed it from here:
+            #   delete from config where key = 'ui.enable_login_form';
+            # then restart the pod.
+            #
+            # ── Break-glass, since there is no local account ─────────────────
+            # With this off and Authentik unreachable -- the realistic case being
+            # OpenBao sealed after a reboot, which takes Authentik's secrets with it
+            # -- there is no login form to fall back to. Recovery does NOT require
+            # Authentik: flip the row back in PostgreSQL and restart.
+            #   update config set value = 'true' where key = 'ui.enable_login_form';
+            # Then the form returns and an admin can be created. This is the whole
+            # reason the row is worth knowing about.
             - name: ENABLE_LOGIN_FORM
+              value: "false"
+            # Skip the landing page and bounce straight to Authentik. Safe to set
+            # from the environment with no database surgery: `oauth.auto_redirect`
+            # is an `oauth.` key, and ENABLE_OAUTH_PERSISTENT_CONFIG=false below
+            # keeps every one of those read from here on every boot.
+            #
+            # With the form gone this is what stops the user seeing an empty page
+            # with a single button on it.
+            - name: OAUTH_AUTO_REDIRECT
               value: "true"
             # Explicit, though it is already the default, because it is the net
             # that catches the trap described under OAUTH_SCOPES below. If the
@@ -241,6 +268,29 @@ spec:
             # which is the honest rendering of a GitOps-managed setting.
             - name: ENABLE_OAUTH_PERSISTENT_CONFIG
               value: "false"
+            #
+            # ── The Ollama engine on server2 ────────────────────────────────
+            # The seam with docs/superpowers/specs/2026-09-19-ollama-server2.md.
+            # Cross-cluster over the LAN: this pod is on server1 (192.168.1.200) and
+            # Ollama's Traefik pins an ipAllowList to exactly that node address, so
+            # the call works from here and from a laptop it does not. Verified
+            # 2026-09-20 from this pod: /api/tags returned 200 and listed
+            # qwen3:30b-a3b, qwen3:8b and bge-m3.
+            #
+            # No API key: Ollama has no authentication at all, and the placeholder
+            # string its callers' SDKs demand is a form-field requirement, not a
+            # credential. There is nothing to put in OpenBao.
+            #
+            # SAME PERSISTENTCONFIG CAVEAT as ENABLE_LOGIN_FORM above:
+            # `ollama.base_urls` is seeded at first boot and then outranks this line.
+            # It was seeded with upstream's default http://host.docker.internal:11434,
+            # which resolves to nothing in a cluster. Deleting the row is what lets
+            # this value land:
+            #   delete from config where key in ('ollama.base_urls', 'rag.ollama.base_url');
+            #
+            # Semicolon-separated if a second engine is ever added; one today.
+            - name: OLLAMA_BASE_URLS
+              value: https://ollama.server2.homelab.irha.cz
             # Not needed today. It is what a future MCP tool server uses to know
             # who is asking (X-OpenWebUI-User-Id / -Name / -Email / -Role, plus
             # chat and message ids to tool servers). Turning it on now costs

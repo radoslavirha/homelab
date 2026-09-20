@@ -152,6 +152,7 @@ grant. "Remove their access" means removing the *lowest* membership they hold, n
 | `headlamp` | `headlamp.<cluster>.homelab.irha.cz` — the token goes to **kube-apiserver**, see [Headlamp](#headlamp) | admin → editor → reader, bound to `cluster-admin` / `edit` / `view` | server1 · server2 · server3, production |
 | `openbao` | `vault.server3.homelab.irha.cz` — **confidential**, see [OpenBao](#openbao) | admin → editor → reader | server3 production |
 | `mealie` | `mealie.irha.cz` — **confidential**, see [Mealie](#mealie) | `admin` → `user` — **two rungs**, because Mealie has only `OIDC_ADMIN_GROUP` and `OIDC_USER_GROUP` | server1 production |
+| `open-webui` | `assistant.irha.cz` — **confidential**, see [Open WebUI](#open-webui) | `admin` → `user` — **two rungs**: `OAUTH_ALLOWED_ROLES` gates who may log in and `OAUTH_ADMIN_ROLES` grants admin, so a middle rung would be a claim nothing reads | server1 production |
 | `postman` | none — a client, not an API | `user` (the access gate only) | one client, every environment |
 | `interactive-map` | none — an ESP32, `kind: device` | none of its own; holds `interactive-map-feeder.reader` | one client: server1 production + local |
 | `longhorn` | `longhorn.<cluster>.homelab.irha.cz` — **`kind: proxy`**, see [Proxies](#proxies--uis-with-no-login-of-their-own) | `admin` (the access gate only) | server1 · server2 · server3, production |
@@ -652,6 +653,71 @@ ESO picks it up within its refresh interval (or force it:
 Reloader restarts the pod, and the login button appears. Until then the `mealie-oidc` ExternalSecret
 reports `SecretSyncedError` and Mealie runs on local accounts — the Deployment's `envFrom` is
 `optional: true` precisely so this ordering is safe.
+
+## Open WebUI
+
+The household assistant at `assistant.irha.cz`. Authentik side is the `open-webui` entry in the matrix;
+the Open WebUI side is env on its Deployment
+([`gitops/k8s-manifests/server1/open-webui/Deployment.yaml`](../gitops/k8s-manifests/server1/open-webui/Deployment.yaml)).
+
+**Why confidential.** Open WebUI registers the OIDC provider only when `OAUTH_CLIENT_ID`, a client
+secret and `OPENID_PROVIDER_URL` are all present (`config.py`, read at the v0.11.3 tag). There is no
+PKCE-only mode. A missing secret degrades to "no OAuth" rather than breaking the pod, which is why
+`ExternalSecret.oidc.yaml` is consumed with `envFrom … optional: true`.
+
+**The callback is `/oauth/oidc/login/callback`, not `/oauth/oidc/callback`.** v0.11.3 routes both and
+marks the second `# Legacy endpoint` in its own `main.py`. The non-deprecated path was registered while
+nothing was deployed and the choice was still free. It is `matching_mode: strict`, so this string and
+`OPENID_REDIRECT_URI` must stay character-identical.
+
+**Two rungs, not three.**
+
+| Claim | Open WebUI reads it as | Effect |
+|---|---|---|
+| `open-webui.user` | `OAUTH_ALLOWED_ROLES` | may log in at all |
+| `open-webui.admin` | `OAUTH_ADMIN_ROLES` | becomes an Open WebUI admin |
+
+`admin` inherits `user`, so an admin's token carries both — which matters, because `get_user_role()`
+tests the allowed list first and the admin list second.
+
+**`OAUTH_SCOPES` is required, not optional**, and it fails worse here than in Mealie. The default is
+`openid email profile`, which omits the `roles` scope, so the claim never arrives. Mealie refuses the
+login in that state; Open WebUI does **not** — `get_user_role()` denies only when the claim is *present
+and matches nothing*. With the claim absent the gate never runs and the login falls through to
+`DEFAULT_USER_ROLE`. That is why the Deployment pins `DEFAULT_USER_ROLE=pending` explicitly: it makes
+the failure inert instead of silently admitting every Authentik account.
+
+**`email_verified` is not read at all.** The string appears nowhere in the v0.11.3 source, so
+Authentik's hardcoded `"email_verified": false` is simply irrelevant here — unlike Mealie, which had to
+have the check disabled. `OAUTH_MERGE_ACCOUNTS_BY_EMAIL` stays at its default `false` for the separate
+reason that `User.email` is `unique=False` on this IdP while `User.username` is `unique=True`.
+
+**The first account bypasses the role gate, by design upstream.** `get_user_role()` returns before the
+role-management block when no user exists yet — upstream's comment: *"First user bootstrap: skip role
+management gating so the instance can be initialized"* — and the account is promoted to `admin`
+post-insert. So whoever logs in first becomes admin **even without `open-webui.user`**. The window
+closes once one account exists; claim it deliberately on a fresh install.
+
+**Local logins are off** (`ENABLE_LOGIN_FORM=false`, 2026-09-20) and no local account was ever created,
+so Authentik is the only way in. Unlike Mealie, recovery does **not** require Authentik: the flag is a
+PersistentConfig key, so flipping the row in PostgreSQL and restarting brings the form back.
+
+```sql
+update config set value = 'true' where key = 'ui.enable_login_form';
+```
+
+**PersistentConfig outranks the environment for every non-`oauth.` key.** `ENABLE_PERSISTENT_CONFIG`
+defaults to true, so a key written to the `config` table at first boot wins over the Deployment
+forever. Measured 2026-09-20: `ui.enable_login_form` read `true` while the manifest said `false`, with
+ArgoCD green throughout. Changing such a value takes a `delete from config where key = '<key>'` plus a
+restart, which makes the next boot re-seed it from env. `oauth.*` keys are exempt because
+`ENABLE_OAUTH_PERSISTENT_CONFIG=false`, which also renders the Admin Panel's OAuth section read-only —
+the honest rendering of a GitOps-managed setting.
+
+**Reloader does not cover the first arrival of the secret.** `reloadOnCreate` is the chart default
+`false` and is not overridden fleet-wide, so Reloader reacts to *updates* of a referenced Secret but not
+to its *creation*. The first time the OIDC secret lands, the pod keeps its boot-time env and needs a
+manual `kubectl rollout restart deploy/open-webui`. The same applies to Mealie.
 
 ## Headlamp
 
