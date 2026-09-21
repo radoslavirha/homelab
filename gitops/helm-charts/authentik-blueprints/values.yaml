@@ -109,3 +109,26 @@ onboarding:
   # (which would collide with Kubernetes' system: prefix).
   usernamePattern: "[a-z][a-z0-9._-]{2,31}"
   usernameMessage: "Username must be 3-32 characters: start with a lowercase letter, then lowercase letters, digits, dots, dashes or underscores."
+
+# Login surface hardening -- anti-enumeration, brute-force throttling, MFA.
+#
+# OFF by default so the chart stays inert; gitops/helm-values/server3/ opts in.
+# Its own ConfigMap key, like onboarding: Authentik gives every .yaml key its own
+# BlueprintInstance, so a malformed entry here cannot take the applications graph
+# or the enrollment flow down with it.
+#
+# Everything here UPDATES shipped Authentik objects by identifiers -- the technique
+# templates/_onboarding.tpl uses on the brand. Two things to know about that:
+#
+#   1. Unmentioned fields keep their stored values on SAVE (the importer uses
+#      partial=True), but NOT during validation. A serializer with a cross-field
+#      validate() reads only the attrs the entry supplied, so a one-field update can
+#      be rejected for a field it never touched. See user_fields in _hardening.tpl.
+#   2. Upstream's own blueprints manage these objects too, so an Authentik upgrade
+#      can quietly revert a field. The on-cluster verification in docs/identity.md is
+#      the only thing that catches it.
+#
+# Design: docs/superpowers/specs/archive/2026-09-18-authentik-identity-hardening.md
+#         section "Out of scope", which is where this work was deferred to.
+hardening:
+  enabled: false

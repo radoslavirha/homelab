@@ -1,0 +1,45 @@
+suite: hardening
+templates:
+  - templates/configmap.yaml
+tests:
+  - it: renders no hardening key when disabled, so the chart stays inert by default
+    asserts:
+      - notExists:
+          path: data["homelab-hardening.yaml"]
+
+  - it: stops the login page confirming which usernames exist
+    set:
+      hardening:
+        enabled: true
+    asserts:
+      # An internet-reachable login page that echoes a matched user is a free
+      # account enumeration oracle. Updated by identifiers: every other field on
+      # the shipped stage is left exactly as found.
+      - matchRegex:
+          path: data["homelab-hardening.yaml"]
+          pattern: "model: authentik_stages_identification.identificationstage\\n\\s+identifiers:\\n\\s+name: default-authentication-identification\\n\\s+attrs:\\n\\s+show_matched_user: false"
+
+  - it: repeats user_fields, without which the entry fails serializer validation
+    set:
+      hardening:
+        enabled: true
+    asserts:
+      # IdentificationStageSerializer.validate() reads attrs.get("user_fields", []),
+      # and a partial update's attrs holds only what the entry supplied -- so naming
+      # show_matched_user alone is rejected as "no user fields, no sources". Caught by
+      # a dry run through authentik's own Importer.validate(), not by rendering.
+      - matchRegex:
+          path: data["homelab-hardening.yaml"]
+          pattern: "show_matched_user: false\\n(\\s+#.*\\n)*\\s+user_fields:\\n\\s+- email\\n\\s+- username"
+
+  - it: never touches recovery_flow, which must stay unset on the public login page
+    set:
+      hardening:
+        enabled: true
+    asserts:
+      # Anchored to the KEY, with its colon. The template explains in a comment why
+      # recovery_flow is left alone, and that comment renders into the ConfigMap --
+      # a bare "recovery_flow" pattern matches the prose and fails a correct template.
+      - notMatchRegex:
+          path: data["homelab-hardening.yaml"]
+          pattern: "recovery_flow:"

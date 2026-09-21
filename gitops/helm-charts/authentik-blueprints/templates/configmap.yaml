@@ -1233,3 +1233,10 @@ data:
   homelab-onboarding.yaml: |
 {{ include "authentik-blueprints.onboarding" . | indent 4 }}
 {{- end }}
+{{- if .Values.hardening.enabled }}
+
+  # Login surface hardening -- its OWN blueprint file, same isolation reasoning as
+  # onboarding above. Body: templates/_hardening.tpl
+  homelab-hardening.yaml: |
+{{ include "authentik-blueprints.hardening" . | indent 4 }}
+{{- end }}
