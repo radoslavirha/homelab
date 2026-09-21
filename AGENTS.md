@@ -55,15 +55,28 @@ gitops/
                             Both non-api kinds carry `accesses` -- the APIs their token's aud names,
                             resolved within ONE environment. A client's roles come from the human's
                             groups; a device's access must name the role. See docs/identity.md.
-                            A SECOND values key, `onboarding`, renders a SECOND ConfigMap key
-                            (homelab-onboarding.yaml, body in templates/_onboarding.tpl): an
-                            invitation-gated enrollment flow, a recovery flow reachable only from an
-                            admin-minted link, and the `household` group. Separate key because
-                            Authentik gives every .yaml key its own BlueprintInstance, so a failure
-                            in one cannot take the other down -- at the cost that !KeyOf does not
-                            cross the two. Off by default; server3 opts in. Adding a person is an
+                            TWO more values keys render TWO more ConfigMap keys, each its own
+                            blueprint file. Separate keys because Authentik gives every .yaml key its
+                            own BlueprintInstance, so a failure in one cannot take the others down --
+                            at the cost that !KeyOf does not cross them. Both off by default; server3
+                            opts in.
+                            `onboarding` -> homelab-onboarding.yaml, body in templates/_onboarding.tpl:
+                            an invitation-gated enrollment flow, a recovery flow reachable only from
+                            an admin-minted link, and the `household` group. Adding a person is an
                             invitation in the UI, never a hand-made password -- docs/identity.md
                             § Onboarding a household member.
+                            `hardening` -> homelab-hardening.yaml, body in templates/_hardening.tpl:
+                            the login surface. show_matched_user off, a username-keyed reputation
+                            policy plus a deny stage at order 15, and MFA REQUIRED of every account
+                            (passkey or TOTP chooser; static codes enrol from user settings only).
+                            These UPDATE objects upstream also manages, so an Authentik upgrade can
+                            revert them silently -- docs/identity.md § The login surface carries the
+                            post-upgrade check. Two of its lines decide whether anyone can log in at
+                            all: the order-15 deny stage must keep >= 1 policy bound (a deny stage
+                            with none runs unconditionally), and the MFA chooser must not be empty
+                            (CONFIGURATION_ERROR fails the stage for everyone). Dry-run any change
+                            through Importer.validate() before pushing -- helm unittest cannot see a
+                            bad model path, a rejected field, or an !Find that does not resolve.
     provisioner/            reusable PostSync provisioner Jobs chart (InfluxDB2, EMQX, MongoDB)
     iot-applications/       reusable chart for custom apps (Deployment/Rollout, Services, HTTPRoute,
                             Jinja2 config ConfigMap). Per-app `annotations` land on the WORKLOAD

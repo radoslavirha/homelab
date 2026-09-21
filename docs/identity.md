@@ -933,6 +933,195 @@ Both flows are rendered by the blueprint chart from the `onboarding` block in
 into their own ConfigMap key — a separate `BlueprintInstance` from the applications graph, so a
 failure in one cannot take the other down.
 
+## The login surface
+
+Three protections on the authentication flow, live on server3 since 2026-09-21. They exist because
+`auth.irha.cz` is meant to be published: on a LAN-only host none of them matter much, and the day
+the name resolves from outside, all three do.
+
+Configured from the `hardening` block in
+[`gitops/helm-values/server3/authentik-blueprints.yaml`](../gitops/helm-values/server3/authentik-blueprints.yaml),
+rendered into its own ConfigMap key — a separate `BlueprintInstance` from the applications graph and
+from onboarding, so a failure in one cannot take the others down.
+
+The flow, after the change:
+
+```
+order  10  default-authentication-identification
+order  15  homelab-reputation-deny          <- added
+order  20  default-authentication-password
+order  30  default-authentication-mfa-validation
+order 100  default-authentication-login
+```
+
+### No username enumeration
+
+`show_matched_user` is **off**. It does *not* remove the avatar from the password screen — a common
+misreading, and one worth writing down because the screen looks unchanged at a glance. What it does
+is set the pending-user identifier to **the literal string that was typed**
+(`stages/identification/stage.py:451`), so the page echoes your input rather than resolving it to
+the account's real username and display name. Type someone's email and you see the email back, not
+who it belongs to.
+
+**The other half of the oracle is `pretend_user_exists`, not `show_matched_user`.** With it `False`,
+a username that does not exist raises "Failed to authenticate." at the identification stage while a
+real one advances to the password prompt — enumeration in a single request, regardless of anything
+else here. It ships `True` and **this chart does not pin it**, so an upgrade or a UI edit can turn
+it off without anything failing.
+
+The test that actually discriminates, and the one to re-run after an upgrade: submit a real username
+and a made-up one in a private window. **The two screens must be indistinguishable.** A test account
+whose username, email and display name are all the same string cannot show the difference — use one
+where they differ, or type an email.
+
+### Brute-force throttling
+
+A reputation policy bound to a deny stage at order 15 — after identification, so the username is in
+the flow context, and before the password is ever checked.
+
+| Setting | Value | Why |
+|---|---|---|
+| `threshold` | `-5` | Five failed attempts for that username. Stops spraying; a household member fumbling twice notices nothing |
+| `check_username` | `true` | Correct regardless of what the network path does to the source address |
+| `check_ip` | **`false`** | Traefik sets no `forwardedHeaders.trustedIPs`. The moment traffic arrives through a reverse proxy every request carries *that proxy's* address, so IP-keyed scoring would have one bucket for the whole internet and the whole household — five bad guesses from anywhere would lock out everyone |
+
+**Do not set `check_ip: true` before Traefik forwards a real client address**, and verify with an
+access log line showing a genuine remote address rather than assuming.
+
+**The cost of username-only keying, which is real and accepted:** a score keyed on the username is a
+score an attacker can drive deliberately. Anyone who knows a username — `akadmin` needs no guessing —
+fails five logins and denies that account until the score expires. `reputation.expiry` is **86400**,
+so **24 hours**. Turning `show_matched_user` off hides usernames nobody already knows; it does not
+protect the ones they do. The trade is worth it while spraying is the bigger risk, and it should be
+revisited when a real client address makes `check_ip` usable.
+
+#### Unlocking someone who tripped it
+
+Symptom: *"Too many failed attempts. Try again later."* instead of a password prompt, and the person
+insists they only got it wrong once or twice. Without this, they wait 24 hours.
+
+```bash
+# who is throttled, and how far under
+kubectl --context admin@server3 -n authentik exec deploy/authentik-worker -- ak shell -c "
+from authentik.policies.reputation.models import Reputation
+print(list(Reputation.objects.values('identifier','ip','score')))
+"
+
+# clear ONE person (preferred -- leaves everyone else's score intact)
+kubectl --context admin@server3 -n authentik exec deploy/authentik-worker -- ak shell -c "
+from authentik.policies.reputation.models import Reputation
+print(Reputation.objects.filter(identifier='<username>').delete())
+"
+```
+
+A score at or below `-5` is denied; anything above it is fine. Scores also rise again on a
+successful login, so clearing is only needed when someone is locked out now.
+
+### MFA is mandatory
+
+`not_configured_action: configure` on the shipped validation stage: **every account** is pushed into
+enrolment at its next login and cannot skip. The operator is included — there is no SMTP here, so
+the operator is also the only recovery path.
+
+| | |
+|---|---|
+| Accepted at login | `webauthn`, `totp`, `static` |
+| Offered at enrolment | passkey **or** authenticator app — the user chooses |
+| Static recovery codes | **not** offered at enrolment, on purpose |
+
+Static codes are deliberately out of the chooser: they are in `device_classes` so an enrolled code
+satisfies a login, but a user forced into MFA must not be able to satisfy it with a printed sheet
+and nothing else. Enrol them from **user settings → MFA Devices → Static tokens**, as break-glass,
+once a real factor exists. That is the only path that creates them.
+
+No authenticator stages are created by this chart. Authentik ships
+`default-authenticator-{webauthn,totp,static}-setup`, each with a `configure_flow` — which is what
+makes a stage reachable from user settings. A copy made locally would have none, so enrolment
+outside the login flow would silently have nothing to offer while every check still passed.
+
+> **The chooser must never be empty.** `AuthenticatorValidateStage.prepare_stages()` raises
+> `CONFIGURATION_ERROR` and fails the stage when `configuration_stages` is empty, which under
+> `configure` is **every login broken**, not one user inconvenienced. With exactly one entry it
+> auto-selects and shows no choice. Two entries is the chooser.
+
+#### Enrolling a passkey
+
+User settings → **MFA Devices** → Add → WebAuthn. On a Mac the system sheet appears and Touch ID
+completes it; the credential lands in iCloud Keychain and syncs to iPhone and iPad, so it is enrolled
+once per person rather than once per device. The RP ID is the hostname the browser is on, so a
+passkey enrolled against `auth.irha.cz` keeps working once that name resolves from outside.
+
+**A passkey here is a second factor, not a replacement for the password** — password first, then
+Touch ID. Passwordless login is a different change to the flow and is not configured.
+
+#### Enrolling an authenticator app
+
+Choose the authenticator-app option and a QR code appears. On iPhone: **Passwords** app → **+** →
+*Set Up Verification Code* → *Scan QR Code*. On a Mac, the same via the setup key shown under the
+QR. No third-party app is needed — this is built into iOS 18 / macOS 15 and later.
+
+### After every Authentik upgrade
+
+All three protections update objects **upstream also manages**, so an upgrade can revert a field
+with nothing failing. This is the check, and it takes one command:
+
+```bash
+kubectl --context admin@server3 -n authentik exec deploy/authentik-worker -- ak shell -c "
+from authentik.stages.identification.models import IdentificationStage
+from authentik.policies.reputation.models import ReputationPolicy
+from authentik.stages.authenticator_validate.models import AuthenticatorValidateStage
+from authentik.flows.models import Flow, FlowStageBinding
+from authentik.policies.models import PolicyBinding
+s = IdentificationStage.objects.get(name='default-authentication-identification')
+print('show_matched_user  ', s.show_matched_user, '(want False)')
+print('pretend_user_exists', s.pretend_user_exists, '(want True -- NOT pinned by the chart)')
+print('recovery_flow      ', s.recovery_flow, '(want None)')
+p = ReputationPolicy.objects.get(name='homelab-reputation-login')
+print('reputation         ', p.threshold, 'ip', p.check_ip, 'username', p.check_username)
+b = FlowStageBinding.objects.get(target=Flow.objects.get(slug='default-authentication-flow'), order=15)
+print('deny gate policies ', PolicyBinding.objects.filter(target=b).count(), '(MUST be >= 1)')
+v = AuthenticatorValidateStage.objects.get(name='default-authentication-mfa-validation')
+print('mfa enforce        ', v.not_configured_action, '(want configure)')
+print('mfa chooser        ', [c.name for c in v.configuration_stages.all()], '(MUST NOT be empty)')
+"
+```
+
+Two lines decide whether anyone can log in at all:
+
+- **`deny gate policies` must be `>= 1`.** A deny stage with no policy bound to it runs
+  unconditionally — that is every login refused at order 15.
+- **`mfa chooser` must not be empty.** See the `CONFIGURATION_ERROR` note above.
+
+Before pushing any change to this blueprint, dry-run it through Authentik's own importer, which
+catches what `helm unittest` cannot — a model path that does not exist, a field a serializer
+rejects, and an `!Find` that does not resolve. It runs inside a transaction and rolls back:
+
+```bash
+helm template ab gitops/helm-charts/authentik-blueprints \
+  -f gitops/helm-values/server3/authentik-blueprints.yaml \
+  | yq -r '.data["homelab-hardening.yaml"]' > /tmp/h.yaml
+
+kubectl --context admin@server3 -n authentik exec -i deploy/authentik-worker -- sh -c \
+  'cat > /tmp/h.yaml && ak shell -c "
+from authentik.blueprints.v1.importer import Importer
+i = Importer.from_string(open(\"/tmp/h.yaml\").read())
+valid, logs = i.validate()
+print(\"VALID:\", valid)
+for l in logs:
+    if l.log_level in (\"warning\",\"error\"): print(\"  \", l.event)
+"; rm -f /tmp/h.yaml' < /tmp/h.yaml
+```
+
+Expect `VALID: True` with no warnings. Anything less is a blueprint that would have failed silently
+about an hour after the push, in a worker log nobody is watching.
+
+**A blueprint entry must satisfy the serializer's cross-field validation, not only name the fields
+it changes.** The importer updates with `partial=True`, so unmentioned fields keep their stored
+values on save — but `IdentificationStageSerializer.validate()` reads `attrs.get("user_fields", [])`,
+and a partial update's `attrs` holds only what the entry supplied. An entry naming `show_matched_user`
+alone is rejected as *"When no user fields are selected, at least one source must be selected"*. That
+is why `user_fields` is repeated in an entry that does not change it.
+
 ## Adding a social source
 
 None is configured today (`Source.objects.all()` returns only `authentik-built-in`). When one is
@@ -1010,6 +1199,15 @@ unlicensed. So people enroll with a password and link social accounts afterwards
   key yields credentials that do not decrypt. Never rotate it.
 - **The bootstrap values create `akadmin` on first startup only.** Rotating them in OpenBao afterwards
   does nothing to a running install.
+- **An Authentik upgrade can silently revert the login-surface hardening.** `show_matched_user`,
+  `pretend_user_exists` and the MFA validation stage are objects upstream's own blueprints manage
+  too, so an upgrade can move a field with nothing failing and no error anywhere. Re-run the check
+  in § The login surface after every upgrade. Two of its lines are the difference between "a setting
+  drifted" and "nobody can log in": the deny stage at order 15 must keep at least one policy bound
+  to it, or it refuses every login unconditionally, and the MFA chooser must not come back empty, or
+  `CONFIGURATION_ERROR` fails the stage for everyone.
+- **`pretend_user_exists` is not pinned by this chart**, and it is what stops a made-up username from
+  being distinguishable from a real one. It ships `True`. Nothing in git holds it there.
 - **`authentik_rbac.Role` is not used at all.** That model governs who may administer Authentik itself
   and never reaches an application's token.
 
