@@ -344,15 +344,24 @@ Be clear about what this does and does not do: it stops the redirect and serves 
 
 **2. Do you need the UI at all?** Most emergencies are queries or a provisioning fix, and those are API work. A service-account token still authenticates as Admin with `Authorization: Bearer …` — no re-enable, no restart, no ArgoCD changes. Only carry on if you genuinely need the browser.
 
-**3. Re-enable the password path.** Four commands, and the fourth is not optional.
+**3. Re-enable the password path.**
+
+Read this before running it, because the obvious version does not work. `grafana-server3` is not a top-level Application: it is owned by `root-observability-server3`, which is owned by `bootstrap`, and **every level has `selfHeal: true`**. Taking `automated` off the child alone lasts about 90 seconds — measured 2026-09-21: the parent re-synced at 10:35:43 and restored `automated` from git, the child re-synced at 10:36:40, and the env override from step 2 went with it. In an emergency that looks like the password login working and then silently vanishing while you are still using it.
+
+So the automation comes off all three, top down:
 
 ```bash
-# 1. Stop ArgoCD reverting the change — selfHeal would undo step 2 within minutes.
-kubectl --context admin@server3 -n argocd patch application grafana-server3   --type merge -p '{"spec":{"syncPolicy":{"automated":null}}}'
+# 1. Stop ArgoCD reverting the change, at EVERY level of the app-of-apps chain.
+#    Child-only is not enough — the parent puts it straight back.
+for app in bootstrap root-observability-server3 grafana-server3; do
+  kubectl --context admin@server3 -n argocd patch application "$app" \
+    --type merge -p '{"spec":{"syncPolicy":{"automated":null}}}'
+done
 
 # 2. Re-enable the form and basic auth on the running Deployment.
 #    Env vars override ini keys as GF_<SECTION>_<KEY>, periods becoming underscores.
-kubectl --context admin@server3 -n monitoring set env deploy/grafana   GF_AUTH_DISABLE_LOGIN_FORM=false GF_AUTH_BASIC_ENABLED=true GF_AUTH_GENERIC_OAUTH_AUTO_LOGIN=false
+kubectl --context admin@server3 -n monitoring set env deploy/grafana \
+  GF_AUTH_DISABLE_LOGIN_FORM=false GF_AUTH_BASIC_ENABLED=true GF_AUTH_GENERIC_OAUTH_AUTO_LOGIN=false
 kubectl --context admin@server3 -n monitoring rollout status deploy/grafana
 
 # 3. Log in as admin with the password from OpenBao (needs OpenBao unsealed — if it is not,
@@ -361,13 +370,39 @@ kubectl --context admin@server3 -n monitoring rollout status deploy/grafana
 
 # --- do the emergency thing ---
 
-# 4. Put it back. BOTH commands. Leaving automation off is how a cluster silently
-#    stops tracking git.
-kubectl --context admin@server3 -n monitoring set env deploy/grafana   GF_AUTH_DISABLE_LOGIN_FORM- GF_AUTH_BASIC_ENABLED- GF_AUTH_GENERIC_OAUTH_AUTO_LOGIN-
-kubectl --context admin@server3 -n argocd patch application grafana-server3   --type merge -p '{"spec":{"syncPolicy":{"automated":{"prune":true,"selfHeal":true}}}}'
+# 4. Put it back. ALL of it. Leaving automation off anywhere in the chain is how a cluster
+#    silently stops tracking git — and `bootstrap` being off stops the WHOLE cluster, not
+#    just Grafana.
+kubectl --context admin@server3 -n monitoring set env deploy/grafana \
+  GF_AUTH_DISABLE_LOGIN_FORM- GF_AUTH_BASIC_ENABLED- GF_AUTH_GENERIC_OAUTH_AUTO_LOGIN-
+for app in grafana-server3 root-observability-server3 bootstrap; do
+  kubectl --context admin@server3 -n argocd patch application "$app" \
+    --type merge -p '{"spec":{"syncPolicy":{"automated":{"prune":true,"selfHeal":true}}}}'
+done
 ```
 
-Afterwards, confirm you actually closed it again — the wrong-credential probe above must report `auth.unauthorized`, and the Application must read `Synced`/`Healthy`.
+Afterwards, confirm you actually closed it again, and that nothing was left switched off:
+
+```bash
+# want: messageId auth.unauthorized
+curl -s -u nosuchuser:wrongpassword https://grafana.irha.cz/api/org
+
+# want: only the two network-policies apps, which are deliberately manual
+kubectl --context admin@server3 -n argocd get applications \
+  -o custom-columns='NAME:.metadata.name,AUTOMATED:.spec.syncPolicy.automated' --no-headers | grep '<none>'
+```
+
+`network-policies-server1-production` and `-sandbox` are **expected** in that output — they run manual on purpose ([NetworkPolicies.yaml](../gitops/argocd-manifests/apps/network-policies/NetworkPolicies.yaml)), for the same reason this runbook exists: `selfHeal` would undo the emergency rollback the next time ArgoCD reconciled. Anything *else* listed still has automation off and you left it that way.
+
+#### What of this is tested
+
+Measured against the live instance on 2026-09-21, not reasoned about:
+
+- **All three env overrides work**, each confirmed by its own signal: `/login` answering 200 instead of a 307 (`auto_login` off), `"disableLoginForm":false` in the login page's bootstrap data (form back), and the wrong-credential probe flipping from `auth.unauthorized` to `password-auth.failed` (Basic back). The last is the one that matters — it is the password client being registered again, which is what makes the admin password usable.
+- **The child-only automation patch does not hold**, with the timings above.
+- **The restore is clean**: `spec.syncPolicy` came back byte-identical to its pre-test value.
+
+Not tested: whether disabling all three levels holds for the length of a real emergency. The three-level form above follows from the ownership chain but has not been exercised end to end.
 
 ### Provisioning reloads are restarts now
 
