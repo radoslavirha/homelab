@@ -89,6 +89,30 @@ onboarding:
   enrollmentTitle: Welcome — finish setting up your account
   recoveryTitle: Choose a new password
 
+# Login surface hardening. Chart default is off; this is the opt-in.
+# Design: docs/superpowers/specs/archive/2026-09-18-authentik-identity-hardening.md
+#         section "Out of scope".
+#
+# Every tunable below is explained in the chart's own values.yaml. The two that
+# carry a cost worth knowing before you touch them:
+#
+#   reputation.checkIp  stays false until Traefik forwards a real client address,
+#                       or one proxy IP becomes a house-wide lockout bucket.
+#   mfa.notConfiguredAction: configure applies to EVERY account, the operator's
+#                       included. Enrol your own passkey before anyone else logs in.
+hardening:
+  enabled: true
+  reputation:
+    threshold: -5
+    checkIp: false
+    checkUsername: true
+  mfa:
+    deviceClasses:
+      - webauthn
+      - totp
+      - static
+    notConfiguredAction: configure
+
 applications:
   - name: qr-manager
     title: QR Manager
