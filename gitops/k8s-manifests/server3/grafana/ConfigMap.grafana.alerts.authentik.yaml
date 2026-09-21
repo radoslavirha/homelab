@@ -1,0 +1,172 @@
+---
+# Failed logins against Authentik.
+#
+# Certificate expiry is the alert the homelab needed while it was private; these are the ones
+# that matter now auth.irha.cz answers from the internet. No new plumbing — Authentik's pod
+# logs already reach Loki through Alloy.
+#
+# Provisioned like every other alert here: the grafana-init-sc-alerts initContainer writes the
+# file before Grafana boots, and a change reaches Grafana by POD RESTART (Stakater Reloader
+# matches `grafana-alerts-.*`). Routing needs nothing here — the labels below are matched by
+# the policy tree in ConfigMap.grafana.alerting.notifications.yaml.
+#
+# ---------------------------------------------------------------------------
+# WHY TWO RULES, AND WHY NOT A SIMPLE FAILURE COUNT
+#
+# The reputation policy locks an account out at 5 failed attempts. That ceiling is what makes
+# a naive "N failures in 5 minutes" rule wrong: above N=5 it is UNREACHABLE for a single
+# account, so a targeted attack on one username would never alert, no matter how long it ran.
+#
+# So the primary signal is the lockout itself, and the failure count is only a backstop.
+#
+# MEASURED 2026-09-21 against this Loki (7-day window), not guessed:
+#
+#   * `amount` on authentik.policies.reputation.signals is the CUMULATIVE SCORE, not a
+#     per-event delta. A failure streak logs -1, -2, -3, -4, -5; successes log 0..+5.
+#     Filtering `amount="-1"` counts only the FIRST failure of each streak — 7 lines where
+#     there were really 22. `amount="-5"` is therefore an exact lockout detector.
+#   * Those lines carry `for_user` AND `for_ip`. The password stage's own failure line
+#     ("Invalid credentials", logger authentik.flows.stage) carries NEITHER — only a
+#     request_id — which is why the lockout rule is the one that can name anything.
+#   * Baseline: 22 failures total in 7 days, 4 lockouts (radoslav ×3, mfatest ×1), worst
+#     5-minute window 5 failures. All of it the operator's own login-hardening testing.
+#   * Matching is done with `| json | field=`, never a bare `|=` substring. `login_failed`
+#     as a substring ALSO matches the admin UI's own request URLs
+#     (/api/v3/events/events/volume/?actions=login_failed), so opening the events page in
+#     Authentik would fire the alert.
+#   * `cluster` exists only as structured metadata in this Loki, not as a label, so it cannot
+#     reach an alert from the log stream. Both rules carry a static `cluster: server3` label
+#     instead — the policy tree groups by alertname + cluster, and without it the group key
+#     would carry an empty cluster. Authentik runs on server3 only.
+#
+# EXPECT BOTH TO FIRE TOGETHER for anything past one lockout: 5 failures is simultaneously a
+# lockout and 5 failures. They are separate alertnames, so that is two Slack messages, not
+# one. Accepted deliberately — the backstop's whole job is to still be there when the first
+# rule is silent.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-alerts-authentik
+  namespace: monitoring
+  labels:
+    grafana_alert: "1"
+  annotations:
+    argocd.argoproj.io/sync-wave: "-50"
+data:
+  authentik.yaml: |-
+    apiVersion: 1
+    groups:
+      - orgId: 1
+        name: authentik
+        folder: Platform
+        interval: 1m
+        rules:
+          # ---------------------------------------------------------------------------
+          # PRIMARY. An account reached the reputation policy's lockout threshold, which is
+          # 5 failed attempts. This fires for a targeted attack (one account, locked) and for
+          # a spray (each username locked in turn), and it is the only signal that can say
+          # WHO and FROM WHERE.
+          - uid: authentik-account-lockout
+            title: Authentik account locked out by failed logins
+            condition: B
+            # No `for`: a lockout is a discrete event, not a level to confirm. Waiting would
+            # only delay it, and the 5-minute query window already holds it.
+            for: 0s
+            # No data means nobody is being locked out — the good case. Unlike the
+            # certificate rules, where a missing series means the scrape broke.
+            noDataState: OK
+            execErrState: Alerting
+            data:
+              - refId: A
+                relativeTimeRange:
+                  from: 300
+                  to: 0
+                datasourceUid: loki
+                model:
+                  editorMode: code
+                  # by (for_user, for_ip): one alert instance per account+source, so the
+                  # notification names both. They group into one Slack message because the
+                  # policy tree groups by alertname + cluster.
+                  expr: sum by (for_user, for_ip) (count_over_time({k8s_namespace_name="authentik"} | json | logger="authentik.policies.reputation.signals" | amount="-5" [5m]))
+                  queryType: instant
+                  intervalMs: 1000
+                  maxDataPoints: 43200
+              - refId: B
+                relativeTimeRange:
+                  from: 300
+                  to: 0
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  expression: A
+                  conditions:
+                    - evaluator:
+                        # Any lockout at all. Baseline is 4 in 7 days, all of them the
+                        # operator's own testing, so this is not a noisy bar.
+                        type: gt
+                        params: [0]
+            labels:
+              severity: warning
+              component: authentik
+              cluster: server3
+            annotations:
+              summary: 'Account {{ $labels.for_user }} locked out after repeated failed logins from {{ $labels.for_ip }}'
+              description: >-
+                The reputation policy denied further attempts for this identifier, so this is
+                contained rather than an outage — but it is either someone guessing, or a
+                household member locked out of their own account. Check the source address
+                above first: a LAN address is almost certainly the latter. Full detail is in
+                Authentik's event log (auth.irha.cz → Admin → Events → Logs, action=login_failed),
+                and clearing the lock is the Reputation snippet in docs/identity.md § Login surface.
+          # ---------------------------------------------------------------------------
+          # BACKSTOP. Raw password-stage failures, independent of the reputation policy.
+          # Exists for the case that silences the rule above completely: the reputation policy
+          # being unbound from the authentication flow, after which nothing is ever locked out
+          # and failures can run without limit. Names nobody — this signal has no username.
+          - uid: authentik-login-failure-burst
+            title: Burst of failed logins against Authentik
+            condition: B
+            for: 0s
+            noDataState: OK
+            execErrState: Alerting
+            data:
+              - refId: A
+                relativeTimeRange:
+                  from: 300
+                  to: 0
+                datasourceUid: loki
+                model:
+                  editorMode: code
+                  expr: sum(count_over_time({k8s_namespace_name="authentik"} | json | event="Invalid credentials" [5m]))
+                  queryType: instant
+                  intervalMs: 1000
+                  maxDataPoints: 43200
+              - refId: B
+                relativeTimeRange:
+                  from: 300
+                  to: 0
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  expression: A
+                  conditions:
+                    - evaluator:
+                        # >4, i.e. 5 or more. 5 is exactly one account driven to the lockout
+                        # ceiling; the worst window in the 7-day baseline was also 5, and that
+                        # was the operator locking a test account out on purpose. Anything
+                        # above this either involves several accounts or means the lockout is
+                        # not working — both worth a message.
+                        type: gt
+                        params: [4]
+            labels:
+              severity: warning
+              component: authentik
+              cluster: server3
+            annotations:
+              summary: 'More than 4 failed logins against Authentik in five minutes'
+              description: >-
+                This signal carries no username and no client IP — only a request_id — so it
+                cannot say who. If the lockout alert did NOT also fire, that is the finding:
+                the reputation policy is not stopping these, and the login surface is taking
+                unlimited guesses. Check the policy binding on the authentication flow, then
+                Authentik's event log at auth.irha.cz → Admin → Events → Logs.
