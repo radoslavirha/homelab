@@ -11,9 +11,38 @@
 # client_id is the rendered slug: <app>-<cluster>-<stage>, no `local` environment
 # exists for this application (see gitops/helm-values/server3/authentik-blueprints.yaml).
 #
-# admin/password login (grafana-admin ExternalSecret, see admin: below) is kept on as a
-# fallback: if Authentik or the network path to it is down, admin still gets in.
+# Authentik is the ONLY way in -- see `auth:` below and the break-glass runbook in
+# docs/observability.md.
 grafana.ini:
+  # Authentik is the ONLY way in. Two settings, because they close two different doors
+  # and closing one alone closes neither:
+  #
+  #   disable_login_form   removes the username/password form from the browser.
+  #   auth.basic.enabled   removes HTTP Basic from the API. Left on, a password still
+  #                        authenticates every /api/ call --
+  #                        `curl -u admin:... https://grafana.irha.cz/api/org` -- from
+  #                        anywhere the name resolves. Measured 2026-09-21 against the
+  #                        live instance: the reload endpoint answers a bad basic
+  #                        credential with messageId `password-auth.failed` and a bad
+  #                        bearer with `api-key.invalid`, i.e. two independent clients.
+  #                        This setting unregisters the first one only.
+  #
+  # Bearer keeps working: the `claude` and `copilot` service accounts (both Admin) reach
+  # the full API with a token, which is the first thing to reach for in an emergency --
+  # no re-enable needed. The kubectl dance in the runbook is only for UI access.
+  #
+  # The admin account and the grafana-admin ExternalSecret both stay: the account still
+  # owns provisioned objects, and the password is what the break-glass uses once the form
+  # is temporarily re-enabled.
+  #
+  # NOTE the flat, dotted section keys below. The chart flattens `grafana.ini` exactly one
+  # level -- top key becomes [section], second becomes `key = value` -- so a NESTED
+  # `auth: {basic: {enabled: false}}` renders the literal garbage `basic = map[enabled:false]`
+  # and basic auth stays ON. Verified by `helm template` before committing.
+  auth:
+    disable_login_form: true
+  auth.basic:
+    enabled: false
   # Chart's default `server.domain`/`root_url` templating derives from `ingress.hosts[0]`
   # -- this repo uses `httpRoute`, not `ingress`, so that default came up empty
   # (`domain = ''`, no root_url at all) and Grafana fell back to its built-in template
@@ -31,6 +60,15 @@ grafana.ini:
   auth.generic_oauth:
     name: Authentik
     enabled: true
+    # Skip the "Sign in with Authentik" click -- with no local form there is nothing else
+    # on that page to choose.
+    #
+    # The cost, stated because it is the failure everyone hits: if Authentik is
+    # unreachable this page becomes a redirect into a dead IdP. `/login?disableAutoLogin=true`
+    # stops the redirect, but with the form disabled it lands on a page offering only the
+    # same OAuth button -- it is not a password path. Getting a password prompt back is
+    # the break-glass in docs/observability.md.
+    auto_login: true
     client_id: grafana-server3-production
     # Deliberately absent. Authentik's client_type for this provider is `public` — no
     # secret exists to set. Grafana's own default for this key is also empty, so an
@@ -55,3 +93,87 @@ extraSecretMounts:
     defaultMode: 0440
     mountPath: /etc/secrets/server1-influxdb2-grafana
     readOnly: true
+
+# ---------------------------------------------------------------------------
+# Provisioning reload, without a password
+#
+# All three k8s-sidecars authenticate to Grafana's admin API as the admin USER over HTTP
+# Basic: the chart injects REQ_USERNAME/REQ_PASSWORD from the grafana-admin Secret and
+# POSTs /api/admin/provisioning/<kind>/reload. `auth.basic.enabled: false` above closes
+# exactly that door, so those POSTs would 401 forever, retrying and logging. k8s-sidecar
+# 2.11 speaks Basic only -- helpers.py, fetch_basic_auth_credentials(), no bearer branch --
+# so there is no token to hand it instead.
+#
+# skipReload stops the doomed POST, and with it REQ_URL. The chart also drops
+# REQ_USERNAME/REQ_PASSWORD everywhere except the datasources initContainer, which renders
+# them outside the skipReload gate -- harmless, since without REQ_URL nothing is called,
+# but do not read their presence there as the reload still being wired up.
+#
+# What replaces the hot reload, per kind:
+#   dashboards    nothing. The sidecar's own provider (sc-dashboardproviders.yaml) carries
+#                 updateIntervalSeconds: 30 -- Grafana re-reads the files by itself.
+#   datasources   a pod restart. File provisioning for these runs at STARTUP ONLY.
+#   alerts        a pod restart. Same.
+#
+# The restart comes from Reloader -- see annotations: below.
+#
+# initX does NOT add an initContainer beside the watcher -- it REPLACES it. The chart
+# renders the watching sidecar only `if enabled AND (not initX)` (_pod.tpl:606). So the
+# setting is per kind, and the right answer differs:
+#
+#   alerts, datasources   initX: true. There is nothing for a watcher to achieve once the
+#                         reload endpoint is closed -- fresh files that Grafana will not
+#                         re-read are not fresh state. The one-shot initContainer instead
+#                         guarantees the provisioning directory is complete BEFORE Grafana
+#                         boots, which is what makes the Reloader restart deterministic.
+#   dashboards            initX stays FALSE, keep the watcher. Dashboards are deliberately
+#                         not in the Reloader list below, so an init-only container would
+#                         freeze them until something else restarted the pod. The watcher
+#                         keeps writing files and the provider's 30s poll picks them up --
+#                         only the doomed reload POST is skipped.
+sidecar:
+  alerts:
+    skipReload: true
+    initAlerts: true
+  datasources:
+    skipReload: true
+    initDatasources: true
+    # CHART BUG, grafana 13.2.1 -- do NOT remove this line.
+    #
+    # The alerts init container hardcodes `METHOD: "LIST"` (_pod.tpl:157). The datasources
+    # one does not: it renders `METHOD: {{ .Values.sidecar.datasources.watchMethod }}`
+    # (_pod.tpl:248), which defaults to WATCH. An initContainer in WATCH mode never exits,
+    # so the pod hangs in Init forever and Grafana never starts. Caught by reading the
+    # rendered output before pushing, not by the cluster.
+    #
+    # Safe to set globally for this kind: with initDatasources: true the WATCHING sidecar
+    # is not rendered at all (_pod.tpl:868), so nothing else reads this value.
+    watchMethod: LIST
+  dashboards:
+    skipReload: true
+
+# Reloader: restart Grafana when a provisioning ConfigMap changes.
+#
+# The base values already carry reloader.stakater.com/auto for the mounted Secrets. `auto`
+# only sees ConfigMaps and Secrets the Deployment REFERENCES, and these are not referenced
+# -- the sidecar discovers them through the Kubernetes API by label. The named list is the
+# annotation for exactly that case, and the two coexist: ShouldReload() (pkg/common/common.go)
+# tests the named list first and falls through to `auto` on a miss, per CHANGED resource.
+# Secrets are untouched by this key -- they are matched against `secret.reloader...` instead.
+#
+# NOT search/match, which would also be self-maintaining: `auto` and `search` are mutually
+# exclusive with `auto` winning (Reloader README), so adding `search` here would be silently
+# ignored while the secret-rotation restarts quietly stopped.
+#
+# ENTRIES ARE ANCHORED REGEXES, not literal names: `regexp.MustCompile("^" + value + "$")`.
+# Prefix patterns are deliberate -- a new alert or datasource ConfigMap is then covered the
+# moment it is created, instead of failing silently until someone remembers this list.
+# Keep them simple: MustCompile panics on a bad pattern, and that panic is Reloader's, not
+# Grafana's.
+#
+# grafana_dashboard ConfigMaps are deliberately NOT matched -- the 30s poll already applies
+# them, and a full restart per dashboard edit is pure cost. That cost is real: every restart
+# re-runs the download-dashboards initContainer, which fetches every third-party dashboard
+# with `curl -skf` under `set -euf`. Unreachable upstream means Grafana does not start.
+annotations:
+  configmap.reloader.stakater.com/reload: "grafana-alerts-.*,grafana-alerting-.*,grafana-datasource-.*"
