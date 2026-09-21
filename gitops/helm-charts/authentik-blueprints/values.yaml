@@ -132,3 +132,41 @@ onboarding:
 #         section "Out of scope", which is where this work was deferred to.
 hardening:
   enabled: false
+
+  # Brute-force throttling. Authentik keeps a reputation score per IP and per
+  # username: a failed login decrements it, a successful one increments it, and the
+  # policy PASSES when the score is at or below the threshold. "Policy passes" is
+  # wired to a deny stage, so passing means the login is refused.
+  reputation:
+    # -5, i.e. five failed attempts for that username inside the score's lifetime.
+    # Low enough to stop spraying, high enough that a household member fumbling a
+    # password twice notices nothing.
+    #
+    # The cost, stated rather than discovered later: a score keyed on the username
+    # alone is a score an attacker can drive on purpose. Anyone who knows a username
+    # -- and akadmin needs no guessing -- fails five logins and that account is
+    # refused until the score expires. Measured on server3: reputation expiry is
+    # 86400, so TWENTY-FOUR HOURS. show_matched_user: false hides usernames nobody
+    # already knows; it does not protect the ones they do.
+    #
+    # Accepted trade: throttling a spray is worth more than denying a stranger the
+    # ability to annoy one account, and clearing a score is two lines of ak shell
+    # (runbook in docs/identity.md). It stops being the right trade once a real
+    # client address is available -- then check_ip carries the load and this can
+    # loosen.
+    threshold: -5
+    # OFF, deliberately, and this is not a preference.
+    #
+    # Traefik sets no forwardedHeaders.trustedIPs today, so the moment traffic
+    # arrives through a reverse proxy, every request carries that proxy's address
+    # rather than the client's. IP-keyed reputation then has ONE bucket for the
+    # whole internet and the whole household, and five bad guesses from anywhere
+    # lock out everyone.
+    #
+    # Turn this on in the same change that gives Traefik a trusted range and a real
+    # client address -- never before, and verify with an access log line that shows
+    # a genuine remote address.
+    checkIp: false
+    # ON: a username-keyed score is correct regardless of what the network path
+    # does to the source address.
+    checkUsername: true

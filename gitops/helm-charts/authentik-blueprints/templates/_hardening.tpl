@@ -46,4 +46,50 @@ entries:
       user_fields:
         - email
         - username
+
+  # ---------- brute-force throttling ----------
+  # The score itself needs no configuration: Authentik writes it on every login
+  # outcome. What this builds is the consequence.
+  - model: authentik_policies_reputation.reputationpolicy
+    id: policy-reputation-login
+    identifiers:
+      name: homelab-reputation-login
+    attrs:
+      check_ip: {{ .Values.hardening.reputation.checkIp }}
+      check_username: {{ .Values.hardening.reputation.checkUsername }}
+      threshold: {{ .Values.hardening.reputation.threshold }}
+
+  # A deny stage is how a policy becomes a refusal. The policy is bound to THIS
+  # stage's binding below: when the score is bad the policy passes, the stage runs,
+  # and the flow ends here.
+  - model: authentik_stages_deny.denystage
+    id: stage-reputation-deny
+    identifiers:
+      name: homelab-reputation-deny
+    attrs:
+      deny_message: Too many failed attempts. Try again later.
+
+  # order 15 -- after identification (10), before password (20). The username is in
+  # the flow context by then, which is what a username-keyed score needs. Measured
+  # on server3: the shipped flow binds 10, 20, 30 and 100, so 15 is free.
+  - model: authentik_flows.flowstagebinding
+    id: binding-reputation-deny
+    identifiers:
+      target: !Find [authentik_flows.flow, [slug, default-authentication-flow]]
+      stage: !KeyOf stage-reputation-deny
+      order: 15
+    attrs:
+      # Evaluate when the stage RUNS, not when the flow is planned: a plan-time
+      # evaluation reads the score from before the current attempt.
+      evaluate_on_plan: false
+      re_evaluate_policies: true
+
+  - model: authentik_policies.policybinding
+    identifiers:
+      target: !KeyOf binding-reputation-deny
+      policy: !KeyOf policy-reputation-login
+      order: 0
+    attrs:
+      enabled: true
+      timeout: 30
 {{- end -}}
