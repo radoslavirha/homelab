@@ -1,0 +1,81 @@
+---
+# Where alerts go. The rules themselves live in ConfigMap.grafana.alerts.*.yaml and
+# attach labels; this file is the only thing that turns a label into a notification,
+# which is why adding a rule never means touching this file.
+#
+# Provisioned exactly like the rules: the grafana-init-sc-alerts initContainer LISTs
+# every ConfigMap labelled grafana_alert and writes it into
+# /etc/grafana/provisioning/alerting BEFORE Grafana boots. There is no reload endpoint
+# any more (closing basic auth closed it — see gitops/helm-values/server3/grafana.yaml
+# and docs/observability.md § Provisioning reloads are restarts now), so a change here
+# reaches Grafana by POD RESTART. Stakater Reloader supplies the restart: this name
+# matches the anchored regex `grafana-alerting-.*` in that values file.
+#
+# Reloader does NOT fire on ConfigMap create, only on update — so the commit that first
+# creates this file also changes extraSecretMounts, which rolls the pod for its own
+# reason. Verify by pod age, never by the ArgoCD sync badge.
+#
+# NOTE: `policies:` REPLACES the whole notification policy tree rather than merging
+# into it. The tree below is therefore the complete routing configuration for this
+# Grafana, and the UI's copy is not editable while this file provisions it.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-alerting-notifications
+  namespace: monitoring
+  labels:
+    grafana_alert: "1"
+  annotations:
+    argocd.argoproj.io/sync-wave: "-50"
+data:
+  notifications.yaml: |-
+    apiVersion: 1
+    contactPoints:
+      - orgId: 1
+        name: homelab
+        receivers:
+          # Slack incoming webhook. `recipient` and `token` are the required pair for
+          # the bot-token flavour of this integration; with a webhook `url` set, neither
+          # applies — the URL already names the channel.
+          #
+          # Future ntfy.sh swap: change `type: slack` to `type: webhook`, add
+          # `httpMethod: POST`, drop title/text (ntfy takes the body as-is), and put the
+          # topic URL in the same OpenBao key. Nothing else in this repo moves.
+          - uid: homelab-default
+            type: slack
+            settings:
+              # $__file{} is expanded by Grafana at provisioning time, so the URL
+              # never appears in git. Same mechanism as the InfluxDB2 datasource
+              # token in this directory.
+              url: $__file{/etc/secrets/grafana-alerting/webhook-url}
+              title: '{{ .Status | toUpper }}: {{ .CommonLabels.alertname }}'
+              text: |-
+                {{ range .Alerts }}*{{ .Labels.severity }}* — {{ .Annotations.summary }}
+                {{ .Annotations.description }}
+                {{ end }}
+            # Send the recovery too. An alert that goes away silently teaches the
+            # operator that a firing message might mean nothing.
+            disableResolveMessage: false
+    policies:
+      - orgId: 1
+        receiver: homelab
+        # Group by the rule and the cluster it fired for, so three clusters'
+        # certificate warnings do not collapse into one message that names one.
+        group_by:
+          - alertname
+          - cluster
+        group_wait: 30s
+        group_interval: 5m
+        # 12h, not the 4h default: these are slow-burning infrastructure alerts —
+        # a certificate has three weeks left when the first one fires. Hourly
+        # repeats would train the operator to ignore the channel.
+        repeat_interval: 12h
+        routes:
+          # critical jumps the queue and repeats more often. Today that is a
+          # certificate that is not Ready, i.e. every HTTPS name on a cluster is
+          # about to stop working.
+          - receiver: homelab
+            object_matchers:
+              - ['severity', '=', 'critical']
+            group_wait: 10s
+            repeat_interval: 2h

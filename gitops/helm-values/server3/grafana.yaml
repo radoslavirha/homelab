@@ -93,6 +93,16 @@ extraSecretMounts:
     defaultMode: 0440
     mountPath: /etc/secrets/server1-influxdb2-grafana
     readOnly: true
+  # Read by the provisioned contact point with $__file{}. Grafana expands that at
+  # provisioning time, which is STARTUP ONLY here -- there is no reload endpoint left
+  # to call (see the sidecar block below). So a rotated webhook needs a pod restart,
+  # and it gets one: this Secret IS referenced by the Deployment, so the base values'
+  # `reloader.stakater.com/auto` covers it without naming it anywhere.
+  - name: grafana-alerting
+    secretName: grafana-alerting
+    defaultMode: 0440
+    mountPath: /etc/secrets/grafana-alerting
+    readOnly: true
 
 # ---------------------------------------------------------------------------
 # Provisioning reload, without a password
