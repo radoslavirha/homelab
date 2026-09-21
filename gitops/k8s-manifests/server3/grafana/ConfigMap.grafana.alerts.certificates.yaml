@@ -7,12 +7,16 @@
 # a pod nobody reads.
 #
 # Provisioned as a ConfigMap because that is how this Grafana already gets its datasources
-# and dashboards — the k8s-sidecar watches for the grafana_alert label, writes the file into
-# /etc/grafana/provisioning/alerting and calls the reload endpoint.
+# and dashboards — the grafana-init-sc-alerts initContainer LISTs every ConfigMap labelled
+# grafana_alert and writes the file into /etc/grafana/provisioning/alerting before Grafana
+# boots. There is no reload endpoint left to call: closing HTTP Basic closed it too, so a
+# change here reaches Grafana by POD RESTART, supplied by Stakater Reloader. See
+# docs/observability.md § Provisioning reloads are restarts now.
 #
-# NO CONTACT POINT YET, deliberately. These rules surface state in Grafana's alert list and
-# nothing is pushed anywhere; notification routing is a separate decision. The rules do not
-# need to change when it is made — a notification policy is attached to the labels below.
+# ROUTED since 2026-09-21: the `severity` and `component` labels below are matched by the
+# notification policy tree in ConfigMap.grafana.alerting.notifications.yaml, which is the
+# only file that turns a label into a notification. Adding a rule here never means editing
+# that one — attach `severity: warning` or `severity: critical` and it routes itself.
 apiVersion: v1
 kind: ConfigMap
 metadata:
