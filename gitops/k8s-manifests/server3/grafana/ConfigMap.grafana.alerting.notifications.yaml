@@ -32,7 +32,9 @@ data:
     apiVersion: 1
     contactPoints:
       - orgId: 1
-        name: homelab
+        # Named for the channel it delivers to, so a second one (ntfy, a phone) reads
+        # obviously different in the policy tree below.
+        name: slack-irha-homelab
         receivers:
           # Slack incoming webhook. `recipient` and `token` are the required pair for
           # the bot-token flavour of this integration; with a webhook `url` set, neither
@@ -41,6 +43,11 @@ data:
           # Future ntfy.sh swap: change `type: slack` to `type: webhook`, add
           # `httpMethod: POST`, drop title/text (ntfy takes the body as-is), and put the
           # topic URL in the same OpenBao key. Nothing else in this repo moves.
+          #
+          # The uid is deliberately NOT renamed alongside `name:` above. Provisioning keys a
+          # contact point by uid, so a new uid creates a SECOND receiver and orphans this one
+          # — and the orphan cannot be deleted while a route still names it. uid stays put;
+          # the display name is the part that is free to change.
           - uid: homelab-default
             type: slack
             settings:
@@ -58,7 +65,7 @@ data:
             disableResolveMessage: false
     policies:
       - orgId: 1
-        receiver: homelab
+        receiver: slack-irha-homelab
         # Group by the rule and the cluster it fired for, so three clusters'
         # certificate warnings do not collapse into one message that names one.
         group_by:
@@ -74,7 +81,7 @@ data:
           # critical jumps the queue and repeats more often. Today that is a
           # certificate that is not Ready, i.e. every HTTPS name on a cluster is
           # about to stop working.
-          - receiver: homelab
+          - receiver: slack-irha-homelab
             object_matchers:
               - ['severity', '=', 'critical']
             group_wait: 10s
