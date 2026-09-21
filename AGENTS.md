@@ -156,7 +156,9 @@ gitops/
       traefik.yaml          dashboard hostname/IP, externalIPs, statusAddress.ip, OTLP tracing endpoint
       prometheus.yaml       server3 overrides (currently empty)
       grafana.yaml          server3 overrides: Authentik OIDC (public + PKCE), root_url/domain,
-                            extraSecretMounts for influxdb2-grafana secret. Authentik is the ONLY
+                            extraSecretMounts for the influxdb2-grafana and grafana-alerting secrets
+                            (both read by $__file{} at provisioning time, which is startup only).
+                            Authentik is the ONLY
                             way in -- disable_login_form + auth.basic.enabled: false close the
                             browser form and the API's HTTP Basic respectively; the sidecars
                             authenticated as the admin USER over Basic, so alerts/datasources move
@@ -257,7 +259,13 @@ gitops/
       external-secrets/    ClusterSecretStore → local OpenBao
       longhorn/            HTTPRoute: longhorn.server3.homelab.irha.cz → longhorn-frontend:80 (forward-auth), Middleware.authentik.yaml
       openbao/             HTTPRoute: vault.server3.homelab.irha.cz → openbao:8200
-      grafana/             ExternalSecret (grafana-admin), ExternalSecret (influxdb2-grafana), datasource ConfigMaps (prometheus/loki/tempo/influxdb2), dashboard ConfigMaps (traefik-opentelemetry, platform, loxone), HTTPRoute: grafana.irha.cz
+      grafana/             ExternalSecret (grafana-admin), ExternalSecret (influxdb2-grafana), ExternalSecret (image-renderer),
+                           ExternalSecret (grafana-alerting — the Slack webhook, read by $__file{} at startup),
+                           datasource ConfigMaps (prometheus/loki/tempo/influxdb2), dashboard ConfigMaps
+                           (traefik-opentelemetry, platform, loxone, applications-red, homelab-overview, iot-jobs, iot-traces),
+                           alert ConfigMaps (alerts-certificates + alerts-authentik = rules, alerting-notifications =
+                           the ONE contact point + the WHOLE policy tree — `policies:` replaces, never merges),
+                           HTTPRoute: grafana.irha.cz
       k8s-monitoring/      HTTPRoute: otel.server3.homelab.irha.cz → alloy-receiver:4318, IngressRouteTCP (otel gRPC :4317, plaintext)
       traefik/             Certificate.server3-tls.yaml → Secret server3-tls for the websecure listener; the Authentik proxy outpost (Deployment/Service/ExternalSecret/ReferenceGrant) + Middleware.authentik.yaml and HTTPRoute.authentik-outpost.yaml guarding the dashboard
       headlamp/            ClusterRoleBinding.headlamp-oidc.yaml — headlamp.admin/editor/reader → cluster-admin/edit/view (delivered by the Headlamp AppSet)

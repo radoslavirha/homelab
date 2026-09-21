@@ -15,7 +15,7 @@ Every stage in `docs/iac.md` and `gitops/README.md` that requires secrets links 
 | `secret/server3/openbao` | `oidc-client-secret` | `vault-config` stage — itself only **after** Authentik is up | server3 |
 | `secret/<cluster>/cert-manager` | `api-token` | infra stage — cert-manager | any |
 | `secret/<cluster>/external-dns` | `api-key` | gateway stage | any |
-| `secret/server3/grafana` | `admin-user`, `admin-password` | observability stage | server3 |
+| `secret/server3/grafana` | `admin-user`, `admin-password`, `alert-webhook-url` | observability stage | server3 |
 | `secret/server3/grafana-image-renderer` | `token` | *optional — image-renderer pods only* | server3 |
 | `secret/<cluster>/influxdb2` | `admin-password`, `admin-token` | iot stage | server1 |
 | `secret/<cluster>/emqx` | `dashboard-username`, `dashboard-password` | iot stage | server1 |
@@ -103,6 +103,24 @@ bao kv put secret/server3/grafana \
 # Verify
 bao kv get secret/server3/grafana
 ```
+
+**`alert-webhook-url` lives on this same path** — the Slack incoming webhook behind Grafana's
+`slack-irha-homelab` contact point (ExternalSecret `grafana-alerting`, read with `$__file{}`; see
+[observability.md § Alert routing](observability.md#alert-routing--where-a-firing-alert-goes)).
+Add it with **`patch`, never `put`** — `put` replaces the whole path and would take the admin
+credential above with it:
+
+```bash
+read -rs U && bao kv patch secret/server3/grafana alert-webhook-url="$U"; unset U
+
+# Verify — keys only. A plain `bao kv get` prints admin-password to your terminal.
+bao kv get -format=json secret/server3/grafana | jq '.data.data | keys'
+```
+
+`admin-password` has a second copy: Grafana applies it only when it **creates** the admin user
+at first run, so rotating it here does not change the live login. Reset that copy too with
+`kubectl exec deploy/grafana -c grafana -- grafana cli --homepath /usr/share/grafana admin
+reset-admin-password <new>`, or the break-glass runbook is holding a password that no longer works.
 
 ---
 

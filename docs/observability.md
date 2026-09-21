@@ -630,6 +630,157 @@ Prerequisites before the `RootObservability` waves sync:
 
 After that, `RootObservability` and `server3/RootObservability` sync automatically in wave 3 via `Bootstrap.yaml`. No standalone applies.
 
+## Alert routing — where a firing alert goes
+
+Since 2026-09-21 a firing alert reaches Slack. One contact point, one policy tree, both in git:
+[`ConfigMap.grafana.alerting.notifications.yaml`](../gitops/k8s-manifests/server3/grafana/ConfigMap.grafana.alerting.notifications.yaml).
+
+| Piece | Value |
+|---|---|
+| Contact point | `slack-irha-homelab`, uid `homelab-default` (uid is stable on purpose — renaming it orphans the receiver), type `slack` |
+| Destination | Slack incoming webhook, `irha-homelab` workspace |
+| Credential | OpenBao `secret/server3/grafana`, key `alert-webhook-url` |
+| Path to the pod | ExternalSecret `grafana-alerting` → Secret → `/etc/secrets/grafana-alerting/webhook-url` → `$__file{}` |
+
+**Adding a rule never means editing the routing file.** Attach `severity: warning` or
+`severity: critical` to a rule and it routes itself — the policy tree matches labels, not rule
+names. That is the whole reason the rules and the routing are separate files.
+
+**`policies:` replaces the entire notification policy tree — it does not merge.** The tree in
+that file is therefore the complete routing configuration for this Grafana, and the UI's copy
+is not editable while provisioning is in place. There is no way to add a route "just for now"
+in the UI; edit the file.
+
+**The credential path has one rule: `bao kv patch`, never `bao kv put`.** That OpenBao path
+also holds `admin-user` and `admin-password`, and `put` replaces the whole path — it would take
+the break-glass credential with it.
+
+```bash
+export BAO_ADDR=https://vault.server3.homelab.irha.cz
+read -rs U && bao kv patch secret/server3/grafana alert-webhook-url="$U"; unset U
+
+# keys only — never dump the whole path, it prints admin-password too
+bao kv get -format=json secret/server3/grafana | jq '.data.data | keys'
+```
+
+`$__file{}` is expanded at **provisioning time, which is startup only** (there is no reload
+endpoint left — see [Provisioning reloads are restarts
+now](#provisioning-reloads-are-restarts-now)). A rotated webhook therefore needs a pod restart.
+It gets one automatically: the Secret is mounted by the Deployment, so `reloader.stakater.com/auto`
+covers it.
+
+### Timing, and why it is slow on purpose
+
+| Setting | Root | `severity: critical` |
+|---|---|---|
+| `group_wait` | 30s | 10s |
+| `group_interval` | 5m | 5m |
+| `repeat_interval` | **12h** | 2h |
+
+The 12h repeat is deliberate, against Grafana's 4h default. These are slow-burning
+infrastructure alerts — a certificate has three weeks left when the first warning fires.
+Hourly repeats would train the operator to swipe the channel away, which is the one failure
+mode that makes the whole channel worthless.
+
+Grouping is `alertname` + `cluster`, not the default `grafana_folder` + `alertname`: three
+clusters' certificate warnings would otherwise collapse into one message that names one
+cluster.
+
+### Two things this does not do
+
+- **A silence is runtime state, not git.** Grafana → Alerting → Silences. It lives in the
+  Grafana DB on the Longhorn PVC and survives the restarts above — so a silence set to cover a
+  maintenance window does not disappear when a ConfigMap changes, and equally will not
+  disappear on its own if you forget it.
+- **Every channel depends on the house's internet connection.** An alert *about* the internet
+  connection will not arrive. Accepted deliberately: the alternative is a second delivery path
+  nobody maintains, which fails silently and is discovered exactly when it is needed.
+
+### Verifying it, and changing channel later
+
+Password auth is gone from the API, so `curl -u admin:…` **401s**. Use a service-account token
+(`claude` and `copilot` are both Admin) or the Grafana MCP:
+
+```bash
+GET /api/v1/provisioning/contact-points   # want the `slack-irha-homelab` receiver
+GET /api/v1/provisioning/policies         # want the tree, with the critical route
+```
+
+A file on disk is not a provisioned contact point — and after a ConfigMap **create** (as
+opposed to an update) Reloader does not roll the pod at all, so confirm by pod age, never by
+the ArgoCD sync badge:
+
+```bash
+kubectl --context admin@server3 -n monitoring get pods -l app.kubernetes.io/name=grafana
+```
+
+Swapping Slack for ntfy.sh later is a two-line change: `type: slack` → `type: webhook` plus
+`httpMethod: POST` in the receiver, and a new value under the same OpenBao key. The key is
+named `webhook-url` rather than `slack-url` for exactly that reason.
+
+## Failed logins against Authentik
+
+[`ConfigMap.grafana.alerts.authentik.yaml`](../gitops/k8s-manifests/server3/grafana/ConfigMap.grafana.alerts.authentik.yaml),
+`Platform` folder, evaluated every minute. Certificate expiry is the alert the homelab needed
+while it was private; these are the ones that matter now `auth.irha.cz` answers from the
+internet. No new plumbing — Authentik's pod logs already reach Loki through Alloy.
+
+**The reputation policy locks an account out at 5 failed attempts, and that ceiling is the
+whole design.** It makes a naive "N failures in five minutes" rule wrong: above N=5 it is
+unreachable for a single account, so a targeted attack on one username would never alert no
+matter how long it ran. The lockout is therefore the primary signal, and a failure count is
+only a backstop.
+
+| Rule | Fires when | What it can name |
+|------|-----------|------------------|
+| Authentik account locked out by failed logins | any account reaches reputation score `-5` | the account **and** the source IP |
+| Burst of failed logins against Authentik | more than 4 `Invalid credentials` in 5m | nothing — this signal has no username |
+
+```logql
+# primary — the lockout, one instance per account + source
+sum by (for_user, for_ip) (count_over_time({k8s_namespace_name="authentik"}
+  | json | logger="authentik.policies.reputation.signals" | amount="-5" [5m]))
+
+# backstop — raw password-stage failures, independent of the reputation policy
+sum(count_over_time({k8s_namespace_name="authentik"} | json | event="Invalid credentials" [5m]))
+```
+
+**Expect both to fire together** for anything past one lockout — 5 failures is simultaneously a
+lockout and 5 failures. Separate alertnames means two Slack messages, not one. That is
+deliberate: the backstop exists for the case that silences the first rule entirely, which is the
+reputation policy being unbound from the authentication flow. **If the burst alert fires and the
+lockout alert does not, that is the finding** — nothing is stopping the guesses.
+
+### What was measured, 2026-09-21
+
+Every number and field name below came from this Loki over a 7-day window. Each contradicts the
+obvious guess, which is why they are written down:
+
+- **`amount` is the cumulative reputation score, not a per-event delta.** A failure streak logs
+  `-1, -2, -3, -4, -5`; successes log `0`…`+5`. Filtering `amount="-1"` counts only the *first*
+  failure of each streak — 7 lines where there were really 22. `amount="-5"` is an exact lockout
+  detector.
+- **Only the reputation line carries identity.** It has `for_user` and `for_ip`. The password
+  stage's own failure line (`event: "Invalid credentials"`, logger `authentik.flows.stage`)
+  carries neither — only a `request_id`.
+- **Match with `| json | field=`, never a bare `|=` substring.** `login_failed` as a substring
+  also matches the admin UI's own request URLs
+  (`/api/v3/events/events/volume/?actions=login_failed`), so browsing the events page in
+  Authentik would fire the alert.
+- **`cluster` is structured metadata here, not a label**, so it cannot reach an alert from the
+  log stream. Both rules carry a static `cluster: server3` label — the policy tree groups by
+  `alertname` + `cluster`, and without it the group key would carry an empty cluster.
+- **Baseline:** 22 failures, 4 lockouts (`radoslav` ×3, `mfatest` ×1), worst 5-minute window 5 —
+  all of it login-hardening testing by the operator.
+
+Both rules use `noDataState: OK`, unlike the certificate rules: no data means nobody is failing
+a login, which is the good case, whereas a missing certificate series means the scrape broke.
+
+**When one fires**, check the source address first — a LAN address is almost certainly a
+household member locked out of their own account rather than an attack. Full detail is in
+Authentik's own event log (Admin → Events → Logs, `action=login_failed`); clearing a lock is the
+Reputation snippet in [identity.md](identity.md) § Login surface.
+
 ## Certificate alerting and the renewal path
 
 Three wildcard certificates carry every HTTPS name in the homelab — `server1-tls`,
@@ -646,8 +797,9 @@ exactly why the alerts below exist.
 
 **Alert rules** — [`ConfigMap.grafana.alerts.certificates.yaml`](../gitops/k8s-manifests/server3/grafana/ConfigMap.grafana.alerts.certificates.yaml),
 provisioned through the same labelled-ConfigMap path as datasources and dashboards
-(`grafana_alert: "1"`, picked up by the `grafana-sc-alerts` sidecar). They live in the
-`Platform` folder in Grafana.
+(`grafana_alert: "1"`, collected by the `grafana-init-sc-alerts` **initContainer** — see
+[Provisioning reloads are restarts now](#provisioning-reloads-are-restarts-now)). They live
+in the `Platform` folder in Grafana.
 
 | Rule | Fires when | Why that threshold |
 |------|-----------|--------------------|
@@ -659,9 +811,10 @@ All three use `noDataState: Alerting`. A missing series is the *more* dangerous 
 quieter one — it means the scrape broke or cert-manager is gone, and nothing is watching
 expiry at all.
 
-**There is no contact point yet.** Alerts surface in Grafana's alert list and push nowhere.
-Adding a destination later does not require touching these rules: attach a notification policy
-to the `severity` and `component: cert-manager` labels they already carry.
+**These are routed** — since 2026-09-21 they reach Slack through the `slack-irha-homelab`
+contact point.
+`severity: critical` (a certificate that is not Ready) takes the faster route; `severity:
+warning` takes the root. See [Alert routing](#alert-routing--where-a-firing-alert-goes).
 
 **When one fires:**
 
