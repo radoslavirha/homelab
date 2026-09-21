@@ -170,3 +170,27 @@ hardening:
     # ON: a username-keyed score is correct regardless of what the network path
     # does to the source address.
     checkUsername: true
+
+  mfa:
+    # What the validation stage will ACCEPT at login. Order is cosmetic here; the
+    # enrolment chooser is what the user actually picks from.
+    #
+    # `static` is one-time recovery codes. It is in this list so an enrolled code
+    # satisfies a login, and it is deliberately NOT in the enrolment chooser: a
+    # forced user must not be able to satisfy mandatory MFA with a printed sheet
+    # and nothing else. Enrol them from user settings, as break-glass, once a real
+    # factor exists.
+    deviceClasses:
+      - webauthn
+      - totp
+      - static
+    # Enforcement for EVERYONE (decided 2026-09-21).
+    #
+    # `configure` pushes every user, household members included, into enrolment at
+    # their next login, with no skip. Nobody reaches anything until they finish.
+    # The operator is the only recovery path -- there is no SMTP here.
+    #
+    # Hard requirement that comes with it: configuration_stages must never be empty.
+    # Authentik raises CONFIGURATION_ERROR and fails the stage when it is, which
+    # under `configure` is every login broken rather than one user inconvenienced.
+    notConfiguredAction: configure

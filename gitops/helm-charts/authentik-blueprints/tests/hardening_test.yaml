@@ -89,3 +89,68 @@ tests:
       - matchRegex:
           path: data["homelab-hardening.yaml"]
           pattern: "check_ip: false"
+
+  - it: forces every user into enrolment
+    set:
+      hardening:
+        enabled: true
+    asserts:
+      - matchRegex:
+          path: data["homelab-hardening.yaml"]
+          pattern: "not_configured_action: configure"
+
+  - it: offers passkey and TOTP as a chooser, so the user picks their factor
+    set:
+      hardening:
+        enabled: true
+    asserts:
+      # Measured in authentik's own stage.py: configuration_stages with ONE entry is
+      # auto-selected and shows no choice; with more than one the challenge carries
+      # them and the response names a selected_stage. Two entries is the chooser.
+      - matchRegex:
+          path: data["homelab-hardening.yaml"]
+          pattern: "configuration_stages:\\n\\s+- !Find \\[authentik_stages_authenticator_webauthn.authenticatorwebauthnstage, \\[name, default-authenticator-webauthn-setup\\]\\]\\n\\s+- !Find \\[authentik_stages_authenticator_totp.authenticatortotpstage, \\[name, default-authenticator-totp-setup\\]\\]"
+
+  - it: never leaves the chooser empty, which would break every login
+    set:
+      hardening:
+        enabled: true
+    asserts:
+      # if not stage.configuration_stages.exists(): -> CONFIGURATION_ERROR, stage_invalid().
+      # With not_configured_action: configure that is every user locked out, not a
+      # degraded experience. The list must never render empty.
+      - notMatchRegex:
+          path: data["homelab-hardening.yaml"]
+          pattern: "configuration_stages: \\[\\]"
+      - matchRegex:
+          path: data["homelab-hardening.yaml"]
+          pattern: "configuration_stages:\\n\\s+- !Find"
+
+  - it: creates no authenticator stages of its own
+    set:
+      hardening:
+        enabled: true
+    asserts:
+      # Authentik ships all three with configure_flow wired. A copy made here would
+      # have none, so it would be invisible to user-settings enrolment.
+      - notMatchRegex:
+          path: data["homelab-hardening.yaml"]
+          pattern: "authenticatorwebauthnstage\\n\\s+id:"
+      - notMatchRegex:
+          path: data["homelab-hardening.yaml"]
+          pattern: "authenticatorstaticstage"
+
+  - it: keeps static codes validatable but out of the enrolment chooser
+    set:
+      hardening:
+        enabled: true
+    asserts:
+      # In device_classes, so an enrolled recovery code satisfies a login. NOT in
+      # configuration_stages, or a forced user could satisfy mandatory MFA with a
+      # printed sheet and nothing else.
+      - matchRegex:
+          path: data["homelab-hardening.yaml"]
+          pattern: "device_classes:\\n\\s+- webauthn\\n\\s+- totp\\n\\s+- static"
+      - notMatchRegex:
+          path: data["homelab-hardening.yaml"]
+          pattern: "default-authenticator-static-setup"

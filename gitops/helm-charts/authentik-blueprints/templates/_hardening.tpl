@@ -92,4 +92,32 @@ entries:
     attrs:
       enabled: true
       timeout: 30
+
+  # ---------- MFA ----------
+  # No stages are created here. Authentik ships default-authenticator-{webauthn,totp,
+  # static}-setup, each with a configure_flow -- which is what makes a stage reachable
+  # from user settings. A copy made by this chart would have none, so enrolment outside
+  # the login flow would silently have nothing to offer.
+  #
+  # UPDATED, not created: the shipped validation stage is already bound into the
+  # authentication flow at order 30. Only these three fields move.
+  - model: authentik_stages_authenticator_validate.authenticatorvalidatestage
+    identifiers:
+      name: default-authentication-mfa-validation
+    attrs:
+      device_classes:
+{{- range .Values.hardening.mfa.deviceClasses }}
+        - {{ . }}
+{{- end }}
+      not_configured_action: {{ .Values.hardening.mfa.notConfiguredAction }}
+      # The enrolment chooser. TWO entries on purpose: authentik auto-selects a
+      # single one without showing a choice, and refuses the login outright when the
+      # list is empty. Passkey first on Apple hardware is Face ID or Touch ID with the
+      # credential in iCloud Keychain; TOTP is the answer for a device without a
+      # platform authenticator.
+      #
+      # Static setup is NOT here -- see deviceClasses in values.yaml.
+      configuration_stages:
+        - !Find [authentik_stages_authenticator_webauthn.authenticatorwebauthnstage, [name, default-authenticator-webauthn-setup]]
+        - !Find [authentik_stages_authenticator_totp.authenticatortotpstage, [name, default-authenticator-totp-setup]]
 {{- end -}}
