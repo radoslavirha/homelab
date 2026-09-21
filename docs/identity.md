@@ -966,8 +966,10 @@ who it belongs to.
 **The other half of the oracle is `pretend_user_exists`, not `show_matched_user`.** With it `False`,
 a username that does not exist raises "Failed to authenticate." at the identification stage while a
 real one advances to the password prompt — enumeration in a single request, regardless of anything
-else here. It ships `True` and **this chart does not pin it**, so an upgrade or a UI edit can turn
-it off without anything failing.
+else here. It is a **Django model default** (`stages/identification/models.py:87`, `default=True`),
+not a value any blueprint writes — upstream's included. So an upgrade will not move it: a migration
+does not rewrite an existing row's value for an unchanged field. The realistic way it flips is
+somebody toggling it in the admin UI. This chart does not pin it.
 
 The test that actually discriminates, and the one to re-run after an upgrade: submit a real username
 and a made-up one in a private window. **The two screens must be indistinguishable.** A test account
@@ -1074,7 +1076,7 @@ from authentik.flows.models import Flow, FlowStageBinding
 from authentik.policies.models import PolicyBinding
 s = IdentificationStage.objects.get(name='default-authentication-identification')
 print('show_matched_user  ', s.show_matched_user, '(want False)')
-print('pretend_user_exists', s.pretend_user_exists, '(want True -- NOT pinned by the chart)')
+print('pretend_user_exists', s.pretend_user_exists, '(want True -- model default, not pinned)')
 print('recovery_flow      ', s.recovery_flow, '(want None)')
 p = ReputationPolicy.objects.get(name='homelab-reputation-login')
 print('reputation         ', p.threshold, 'ip', p.check_ip, 'username', p.check_username)
@@ -1199,15 +1201,17 @@ unlicensed. So people enroll with a password and link social accounts afterwards
   key yields credentials that do not decrypt. Never rotate it.
 - **The bootstrap values create `akadmin` on first startup only.** Rotating them in OpenBao afterwards
   does nothing to a running install.
-- **An Authentik upgrade can silently revert the login-surface hardening.** `show_matched_user`,
-  `pretend_user_exists` and the MFA validation stage are objects upstream's own blueprints manage
-  too, so an upgrade can move a field with nothing failing and no error anywhere. Re-run the check
+- **An Authentik upgrade can silently revert the login-surface hardening.** `show_matched_user` and
+  the MFA validation stage live on objects upstream's own blueprints manage too, so an upgrade can
+  move a field with nothing failing and no error anywhere. Re-run the check
   in § The login surface after every upgrade. Two of its lines are the difference between "a setting
   drifted" and "nobody can log in": the deny stage at order 15 must keep at least one policy bound
   to it, or it refuses every login unconditionally, and the MFA chooser must not come back empty, or
   `CONFIGURATION_ERROR` fails the stage for everyone.
-- **`pretend_user_exists` is not pinned by this chart**, and it is what stops a made-up username from
-  being distinguishable from a real one. It ships `True`. Nothing in git holds it there.
+- **`pretend_user_exists` is not pinned by this chart**, and it is what stops a made-up username
+  from being distinguishable from a real one. It is a model default (`default=True`) that no
+  blueprint writes, so an upgrade will not move it — but nothing in git holds it either, and a UI
+  toggle would go unnoticed. The A/B test in § The login surface is what catches it.
 - **`authentik_rbac.Role` is not used at all.** That model governs who may administer Authentik itself
   and never reaches an application's token.
 
