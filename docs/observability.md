@@ -285,9 +285,37 @@ Five panels read alarming and are reporting the truth about a deliberate (or at 
 
 The `longhorn_*_usage_millicpu` / `_memory_usage_bytes` families are absent for a different reason: Longhorn derives them from the Kubernetes metrics API, and no metrics-server is deployed on any cluster (`v1beta1.metrics.k8s.io` does not resolve). Container CPU and memory for those same pods are already available from cadvisor via the Kubernetes dashboards, so no panel here depends on them.
 
-## Grafana admin credentials
+## Grafana access
 
-Admin credentials are stored in OpenBao and synced to the `monitoring` namespace via ExternalSecret ([ExternalSecret.grafana.admin.yaml](../gitops/k8s-manifests/server3/grafana/ExternalSecret.grafana.admin.yaml)).
+Authentik is the only way in. `grafana.irha.cz` is in the Public tier of the exposure spec, so the password form is not something to leave reachable on it.
+
+Two settings in [grafana.yaml](../gitops/helm-values/server3/grafana.yaml) do the work, and they close **different** doors — closing one alone closes neither:
+
+| Setting | What it closes | If left open |
+|---|---|---|
+| `[auth] disable_login_form` | The username/password form in the browser | Anyone reaching the page gets a password prompt |
+| `[auth.basic] enabled` | HTTP Basic on the whole API | `curl -u admin:… https://grafana.irha.cz/api/org` authenticates from anywhere the name resolves |
+
+A third, `[auth.generic_oauth] auto_login`, skips the "Sign in with Authentik" click — with no local form there is nothing else on that page to choose.
+
+How to tell the API door is actually shut, without needing the password: send a **deliberately wrong** basic credential and read the `messageId`.
+
+```bash
+curl -s -u nosuchuser:wrongpassword https://grafana.irha.cz/api/org
+```
+
+| Response | Means |
+|---|---|
+| `"messageId":"auth.unauthorized"` or `"api-key.invalid"` | Correct. No password client is registered — the request fell through to the bearer/API-key client, which cannot accept a username and password at all |
+| `"messageId":"password-auth.failed"` | **Basic auth is still on.** Grafana routed it to the password client and merely rejected the value. A correct password would have worked |
+
+Bearer tokens are a separate client and keep working throughout. The `claude` and `copilot` service accounts are both Admin, so the full API stays reachable with a token — reach for that before the break-glass below.
+
+### Admin credentials
+
+The admin account and its password both stay. The account still owns provisioned objects, and the password is what the break-glass uses once the form is temporarily back. What disappeared is the ability to use it without a deliberate re-enable.
+
+Credentials are stored in OpenBao and synced to the `monitoring` namespace via ExternalSecret ([ExternalSecret.grafana.admin.yaml](../gitops/k8s-manifests/server3/grafana/ExternalSecret.grafana.admin.yaml)).
 
 | OpenBao path | Key | Maps to |
 |---|---|---|
@@ -298,6 +326,72 @@ Seed command (run before applying RootObservability):
 
 ```bash
 bao kv put secret/server3/grafana admin-user=admin admin-password=<strong-password>
+```
+
+### Break-glass: getting in when Authentik is down
+
+The real dependency chain is **OpenBao → Authentik → Grafana**. OpenBao reseals on a reboot and needs three key shares by hand; until it is unsealed Authentik has no secrets, and until Authentik answers, Grafana's login page is a redirect into a dead IdP. Losing Grafana's login is a *symptom* of that chain, so check it from the bottom up before touching anything here.
+
+Try these in order. The first two cost nothing and need no privileges.
+
+**1. Is it only the redirect?** `auto_login` sends `/login` straight to Authentik. Append the bypass parameter to stop that for one visit:
+
+```
+https://grafana.irha.cz/login?disableAutoLogin=true
+```
+
+Be clear about what this does and does not do: it stops the redirect and serves the login page. With the form disabled that page offers the same Authentik button and nothing else — **it is not a password path**. It is worth 5 seconds because it tells you whether Grafana itself is healthy.
+
+**2. Do you need the UI at all?** Most emergencies are queries or a provisioning fix, and those are API work. A service-account token still authenticates as Admin with `Authorization: Bearer …` — no re-enable, no restart, no ArgoCD changes. Only carry on if you genuinely need the browser.
+
+**3. Re-enable the password path.** Four commands, and the fourth is not optional.
+
+```bash
+# 1. Stop ArgoCD reverting the change — selfHeal would undo step 2 within minutes.
+kubectl --context admin@server3 -n argocd patch application grafana-server3   --type merge -p '{"spec":{"syncPolicy":{"automated":null}}}'
+
+# 2. Re-enable the form and basic auth on the running Deployment.
+#    Env vars override ini keys as GF_<SECTION>_<KEY>, periods becoming underscores.
+kubectl --context admin@server3 -n monitoring set env deploy/grafana   GF_AUTH_DISABLE_LOGIN_FORM=false GF_AUTH_BASIC_ENABLED=true GF_AUTH_GENERIC_OAUTH_AUTO_LOGIN=false
+kubectl --context admin@server3 -n monitoring rollout status deploy/grafana
+
+# 3. Log in as admin with the password from OpenBao (needs OpenBao unsealed — if it is not,
+#    that is the actual outage, and `bao` is where to go first):
+#      bao kv get -field=admin-password secret/server3/grafana
+
+# --- do the emergency thing ---
+
+# 4. Put it back. BOTH commands. Leaving automation off is how a cluster silently
+#    stops tracking git.
+kubectl --context admin@server3 -n monitoring set env deploy/grafana   GF_AUTH_DISABLE_LOGIN_FORM- GF_AUTH_BASIC_ENABLED- GF_AUTH_GENERIC_OAUTH_AUTO_LOGIN-
+kubectl --context admin@server3 -n argocd patch application grafana-server3   --type merge -p '{"spec":{"syncPolicy":{"automated":{"prune":true,"selfHeal":true}}}}'
+```
+
+Afterwards, confirm you actually closed it again — the wrong-credential probe above must report `auth.unauthorized`, and the Application must read `Synced`/`Healthy`.
+
+### Provisioning reloads are restarts now
+
+Closing basic auth had one non-obvious consequence, because the k8s-sidecars are themselves API clients: all three authenticated to `/api/admin/provisioning/*/reload` as the admin **user** over HTTP Basic, and k8s-sidecar speaks Basic only. So the hot reload is gone and `skipReload` stops the calls from failing forever.
+
+What replaces it, per kind:
+
+| Kind | How a change now reaches Grafana |
+|---|---|
+| Dashboards | Unchanged. The sidecar still watches and writes files; the provider's `updateIntervalSeconds: 30` poll picks them up |
+| Datasources | A pod restart. File provisioning for these runs at startup only |
+| Alert rules | A pod restart. Same |
+
+The restart is automatic. Stakater Reloader watches by name for `grafana-alerts-*`, `grafana-alerting-*` and `grafana-datasource-*` ConfigMaps in `monitoring` and rolls the Deployment when one changes — the entries are anchored regexes, so a **new** alert or datasource ConfigMap is covered the moment it is created. A one-shot initContainer repopulates the provisioning directory before Grafana boots, which is what makes the restart deterministic rather than a race.
+
+Two things worth knowing:
+
+- `grafana_dashboard` ConfigMaps are deliberately **not** matched. The 30s poll already applies them and a full restart per dashboard edit is pure cost.
+- Every restart re-runs the `download-dashboards` initContainer, which fetches each third-party dashboard with `curl -skf` under `set -euf`. **If upstream is unreachable, Grafana does not start.** That trade-off is described in [grafana.yaml](../gitops/helm-values/grafana.yaml); it is the price of not vendoring the JSON.
+
+To apply a provisioning change by hand (or if you suspect the restart did not happen):
+
+```bash
+kubectl --context admin@server3 -n monitoring rollout restart deploy/grafana
 ```
 
 ## Traefik integration

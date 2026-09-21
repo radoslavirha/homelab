@@ -94,7 +94,8 @@ gitops/
     mongodb.yaml            shared: root credentials existingSecret, auth enabled
     telegraf.yaml           shared: InfluxDB2 + MQTT outputs, env secretKeyRefs
     prometheus.yaml         shared: TSDB only, remote-write receiver, Longhorn 20Gi, 30d retention
-    grafana.yaml            shared: existingSecret grafana-admin, sidecar datasources+dashboards, Longhorn 5Gi
+    grafana.yaml            shared: existingSecret grafana-admin, sidecar alerts+datasources+dashboards,
+                            Longhorn 5Gi, imageRenderer, third-party dashboards by url/gnetId
     loki.yaml               shared: Monolithic, filesystem storage, Longhorn 20Gi.
                             Ingest is the native OTLP endpoint (/otlp/v1/logs); index labels
                             come from Loki's default_resource_attributes_as_index_labels
@@ -141,7 +142,13 @@ gitops/
       headlamp.yaml         hostname + config.oidc (public client, PKCE) for headlamp.server3.homelab.irha.cz
       traefik.yaml          dashboard hostname/IP, externalIPs, statusAddress.ip, OTLP tracing endpoint
       prometheus.yaml       server3 overrides (currently empty)
-      grafana.yaml          server3 overrides: extraSecretMounts for influxdb2-grafana secret
+      grafana.yaml          server3 overrides: Authentik OIDC (public + PKCE), root_url/domain,
+                            extraSecretMounts for influxdb2-grafana secret. Authentik is the ONLY
+                            way in -- disable_login_form + auth.basic.enabled: false close the
+                            browser form and the API's HTTP Basic respectively; the sidecars
+                            authenticated as the admin USER over Basic, so alerts/datasources move
+                            to initContainers + a Reloader restart (configmap.reloader.stakater.com/
+                            reload, anchored regexes). Break-glass: docs/observability.md
       k8s-monitoring.yaml   server3 self-contained: cluster name + local LGTM destinations.
                             Logs destination is type: otlp -> Loki's NATIVE OTLP endpoint
                             (:3100/otlp), NOT type: loki — that renders the deprecated
