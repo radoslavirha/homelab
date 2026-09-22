@@ -1,8 +1,17 @@
 # Provisioner credentials — stop minting long-lived tokens by hand
 
-**Status:** open. Nothing is broken right now — the tokens were re-minted on 2026-09-06 and every
-provisioner Job succeeds. This is about the fact that they will break again, on a date we can
-already name.
+**Status:** RESOLVED 2026-09-22, superseded by
+[`2026-09-22-provisioner-kubernetes-auth.md`](2026-09-22-provisioner-kubernetes-auth.md) — which
+this document's diagnosis pointed at and which is now shipped (`f1e45a7`). The provisioner Jobs log
+in with Kubernetes auth; both hand-minted tokens have been revoked and their KV paths deleted, so
+the 2026-10-08 expiry named below never arrived. Kept for the diagnosis: the 768h `max_lease_ttl`
+clamp, and why `-period` alone does not survive it.
+
+The original text follows unchanged.
+
+**Status when written:** open. Nothing is broken right now — the tokens were re-minted on 2026-09-06
+and every provisioner Job succeeds. This is about the fact that they will break again, on a date we
+can already name.
 
 **Trigger:** a real outage on 2026-09-06. All eight `mongodb-provision-*` PostSync Jobs on server1
 and server2 were in `CrashLoopBackOff` with
@@ -31,7 +40,7 @@ human runs `bao token create` once
 - One token per cluster, shared by both namespaces (verified: identical SHA-256 within a cluster,
   different across clusters). server3 has no provisioner token.
 - The Jobs run with `automountServiceAccountToken: false` and **no** `serviceAccountName`
-  ([`provisioner/templates/mongodb/job.yaml`](../../../gitops/helm-charts/provisioner/templates/mongodb/job.yaml)).
+  ([`provisioner/templates/mongodb/job.yaml`](../../../../gitops/helm-charts/provisioner/templates/mongodb/job.yaml)).
   They have no Kubernetes identity at all, which is *why* a stored token is needed.
 - `provisioner.baoPrelude` runs `bao token lookup` before touching any datastore, so a dead token
   fails cleanly instead of stranding a rotated password. **That safety net worked** — nothing was
@@ -71,7 +80,7 @@ Refresh does not revive them — only a Sync does, via `BeforeHookCreation`.
 **ESO already solves this exact problem on the same OpenBao, and the provisioner should copy it.**
 Each cluster has a dedicated Kubernetes auth mount (`kubernetes-server1`, `kubernetes-server2`,
 `kubernetes-server3`) with role `external-secrets` bound to a ServiceAccount
-([`ClusterSecretStore.yaml`](../../../gitops/k8s-manifests/server2/external-secrets/ClusterSecretStore.yaml)).
+([`ClusterSecretStore.yaml`](../../../../gitops/k8s-manifests/server2/external-secrets/ClusterSecretStore.yaml)).
 No token is stored anywhere and nothing expires.
 
 The provisioner Jobs would log in at run time instead:
