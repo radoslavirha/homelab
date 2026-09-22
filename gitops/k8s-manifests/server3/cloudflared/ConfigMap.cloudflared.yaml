@@ -1,0 +1,41 @@
+---
+# THE ALLOW-LIST. This file, not DNS, is what makes a hostname reachable from the
+# internet: cloudflared refuses anything whose Host header is not named below, so a
+# CNAME pointing here for an unlisted name gets Cloudflare's 1033 error rather than a
+# service. That is the opt-in property the exposure spec is built on -- guard it.
+#
+# Names are added ONE AT A TIME and proven before the next (see the per-name checklist
+# in docs/superpowers/specs/2026-09-01-public-exposure.md). auth.irha.cz goes first and
+# alone, because Grafana, Mealie and Open WebUI all redirect to it to log in.
+#
+# Traffic goes THROUGH Traefik, not around it: every HTTPRoute, middleware, access log
+# and trace keeps working. Pointing at backing Services directly would discard all of it.
+#
+# Changing this file rolls the pods (Stakater Reloader, annotation on the Deployment) --
+# cloudflared reads its config at startup.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cloudflared
+  namespace: cloudflared
+data:
+  config.yaml: |
+    tunnel: 3a5ee8bd-9356-433b-93ee-b1e4d0a6bb16
+    credentials-file: /etc/cloudflared/creds/credentials.json
+
+    # Readiness/liveness endpoint, and the tunnel's own metrics.
+    metrics: 0.0.0.0:2000
+
+    # The image tag is the version. An in-place self-update would make the running
+    # binary disagree with git and survive no restart.
+    no-autoupdate: true
+
+    ingress:
+      # ---- published names go here, one at a time ----
+
+      # THE CATCH-ALL MUST STAY LAST AND MUST STAY http_status:404.
+      # A catch-all pointing at Traefik with no `hostname` forwards EVERYTHING and
+      # destroys the opt-in property in one line -- every HTTPRoute on this cluster
+      # would answer from the internet, Longhorn and Hubble and the Traefik dashboard
+      # included.
+      - service: http_status:404

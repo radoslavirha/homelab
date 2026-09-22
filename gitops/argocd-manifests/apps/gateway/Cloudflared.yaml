@@ -1,0 +1,52 @@
+# cloudflared — ApplicationSet
+# Raw manifests: gitops/k8s-manifests/{{cluster}}/cloudflared/
+#
+# ── Why it lives under gateway/ ─────────────────────────────────────────────
+# It is ingress, not an app: it is the WAN half of the same path Traefik serves on
+# the LAN, and it belongs next to Traefik and ExternalDNS rather than among the
+# household apps it happens to carry.
+#
+# ── One tunnel per cluster, and why ─────────────────────────────────────────
+# WAN :443 could only ever forward to one of the three Traefiks, which is the
+# argument that decided against port-forwarding even before CGNAT settled it. Each
+# cluster dials its own tunnel with its own credential, so nothing makes one cluster
+# a SPOF for another's public names.
+#
+# server3 first: it holds auth.irha.cz, and every other published name redirects
+# there to log in. server1 (mealie, assistant, qr) is added as a second element once
+# its tunnel exists and its credential is in OpenBao at secret/server1/cloudflared.
+#
+# ── Raw manifests, not a chart ──────────────────────────────────────────────
+# Cloudflare publishes no official chart; this is one Deployment, a ConfigMap and an
+# ExternalSecret. The version is the image tag in Deployment.yaml, which is what
+# Renovate watches.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: cloudflared
+  namespace: argocd
+spec:
+  generators:
+    - list:
+        elements:
+          - cluster: server3
+            clusterServer: https://192.168.1.202:6443
+  template:
+    metadata:
+      name: cloudflared-{{cluster}}
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/radoslavirha/homelab
+        targetRevision: HEAD
+        path: gitops/k8s-manifests/{{cluster}}/cloudflared
+      destination:
+        server: '{{clusterServer}}'
+        namespace: cloudflared
+      syncPolicy:
+        syncOptions:
+          # Nothing else creates this namespace.
+          - CreateNamespace=true
+        automated:
+          selfHeal: true
+          prune: true
