@@ -26,6 +26,14 @@ data:
     ingress:
       # ---- published names go here, one at a time ----
 
+      # PUBLISHED 2026-09-22. Mealie logs in through auth.irha.cz (ALLOW_SIGNUP is
+      # false and accounts match on preferred_username), so this name is only usable
+      # because auth.irha.cz was published first, from server3's tunnel.
+      - hostname: mealie.irha.cz
+        service: https://traefik.traefik.svc.cluster.local:443
+        originRequest:
+          originServerName: mealie.irha.cz
+
       # THE CATCH-ALL MUST STAY LAST AND MUST STAY http_status:404.
       # A catch-all pointing at Traefik with no `hostname` forwards EVERYTHING and
       # destroys the opt-in property -- on THIS cluster that would publish the
