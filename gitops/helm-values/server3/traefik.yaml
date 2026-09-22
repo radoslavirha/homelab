@@ -83,3 +83,35 @@ ports:
     protocol: TCP
     expose:
       default: true
+
+  # ── Whose X-Forwarded-* does this cluster believe? ───────────────────────────
+  # PER-CLUSTER ON PURPOSE. The shared gitops/helm-values/traefik.yaml deliberately
+  # leaves this unset, which means "trust nobody": Traefik overwrites the header
+  # from the TCP peer, so every service sees the real client. That is correct for
+  # server1 and server2, and server2 DEPENDS on it -- the Ollama ipAllowList
+  # middleware documents that it works precisely because no entrypoint trusts
+  # forwarded headers. Putting this in the shared file would silently let any pod
+  # on server2 forge a client IP past that allow-list.
+  #
+  # server3 is different only because cloudflared runs here. It dials out from
+  # INSIDE the cluster, so the peer Traefik sees for public traffic is its POD --
+  # never Cloudflare's edge addresses, which is the usual wrong answer. Trusting
+  # the pod network means headers from cloudflared are believed (carrying the real
+  # client IP), while headers from anything on the LAN are still overwritten. LAN
+  # attribution is unchanged.
+  #
+  # TRADE, stated rather than buried: every pod on this cluster shares this CIDR,
+  # so any workload here could forge X-Forwarded-For toward Traefik. Accepted
+  # because pinning cloudflared's pod IPs breaks on every reschedule. If server3
+  # ever runs workloads we do not author, narrow this with a NetworkPolicy rather
+  # than widening the list.
+  #
+  # NEVER `insecure: true`: that trusts forged headers from anyone, defeating the
+  # Authentik reputation policy and every ipAllowList in one line.
+  #
+  # Measured 2026-09-22: the server3 node's podCIDR is 10.244.0.0/24. The /16
+  # covers a second node without another edit.
+  websecure:
+    forwardedHeaders:
+      trustedIPs:
+        - 10.244.0.0/16
