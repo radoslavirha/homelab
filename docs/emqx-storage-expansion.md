@@ -78,8 +78,9 @@ Good news: the `longhorn` StorageClass has `allowVolumeExpansion: true` (verifie
 ## Procedure for option A
 
 Written for two clusters; server1 is the only one left. Substitute `<ctx>` with `admin@server1`.
-There is no longer a second cluster to rehearse on — see the canary-fixture spec before doing this
-unrehearsed on the cluster that carries the Loxone integration.
+There is no longer a second cluster to rehearse on: server2 has no EMQX, so this runs unrehearsed on
+the cluster that carries the Loxone integration. Take a dump first (`~/homelab-backups/dump-all.sh`)
+and keep `kubectl rollout undo` ready.
 
 **1. Land the values change** — the two defect fixes plus the new size — and commit.
 
