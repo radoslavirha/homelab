@@ -23,12 +23,23 @@
 # correct, pass review, and match nothing — leaving exactly the timeout it was
 # written to fix. `toEntities: [kube-apiserver]` is the supported form.
 #
-# ── Both ports, deliberately ─────────────────────────────────────────────────
-# 443 is what the pod connects to (the ClusterIP port). 6443 is what the packet
-# carries once translated, and is the port that actually appeared in the drop.
-# Listing both means the rule holds whichever side of the translation policy is
-# evaluated on, and costs nothing: the `kube-apiserver` entity is the apiserver
-# either way.
+# ── 6443 only, and never 443 ─────────────────────────────────────────────────
+# The pod connects to 10.96.0.1:443, but the socket-LB rewrites that to
+# 192.168.1.200:6443 at connect(), before policy is evaluated. Measured
+# 2026-09-22 from a sandbox pod: the ClusterIP connection reached policy as
+# :6443, and no flow carried 10.96.0.1 at all. 6443 is the only port apiserver
+# traffic ever presents.
+#
+# 443 used to be listed too, on the theory that it cost nothing. It did not.
+# On a single-node Talos cluster the apiserver runs on the node IP, so the
+# `kube-apiserver` entity IS the host identity (ID 1: reserved:host +
+# reserved:kube-apiserver). This rule means "the node", and Cilium cannot
+# narrow it further. Traefik is hostNetwork on :443, so allowing 443 let every
+# pod here reach every HTTPRoute on the cluster: sandbox -> production APIs,
+# Headlamp, InfluxDB. That is the lateral path and the node that
+# NetworkPolicy.egress-internet.yaml exists to deny. The port is the only thing
+# separating the apiserver from everything else listening on the node, so do
+# not add 443 back.
 #
 # ── Namespace-wide, deliberately ─────────────────────────────────────────────
 # `endpointSelector: {}` rather than per-app, matching how dns-egress is scoped.
@@ -62,7 +73,5 @@ spec:
         - kube-apiserver
       toPorts:
         - ports:
-            - port: "443"
-              protocol: TCP
             - port: "6443"
               protocol: TCP

@@ -59,7 +59,11 @@ empty.
 | --- | --- | --- |
 | CoreDNS (`kube-system`) | UDP+TCP 53 | `NetworkPolicy.dns-egress.yaml` |
 | the internet, excluding RFC1918 | TCP 80, 443 | `NetworkPolicy.egress-internet.yaml` |
-| the Kubernetes apiserver | TCP 443, 6443 | `CiliumNetworkPolicy.egress-apiserver.yaml` |
+| the Kubernetes apiserver | TCP 6443 | `CiliumNetworkPolicy.egress-apiserver.yaml` |
+
+Call the apiserver at `https://kubernetes.default.svc` (port 443) as usual. Cilium rewrites that
+to the node's `:6443` before policy sees it, so 6443 is the only port the rule needs. Do not add
+443: the rule's target is the whole node, and 443 on the node is Traefik.
 
 Reaching the apiserver is not the same as being able to use it: the app
 ServiceAccounts set `automountServiceAccountToken: false`, so pods hold no cluster credentials
