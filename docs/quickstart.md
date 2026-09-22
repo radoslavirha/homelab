@@ -245,27 +245,19 @@ bao write auth/kubernetes-<cluster>/role/external-secrets \
   policies=<cluster>-external-secrets \
   ttl=1h
 
-# Provisioner write policy + long-lived token (for PostSync credential Jobs):
+# Provisioner write policy (for PostSync credential Jobs):
 # `read` + `patch` + metadata `list` are needed so provisioner Jobs can check whether
 # credentials already exist (idempotency) before deciding to create or rotate them.
 bao policy write <cluster>-provisioner - <<'EOF'
 path "secret/data/<cluster>/*"     { capabilities = ["create", "read", "update", "patch"] }
 path "secret/metadata/<cluster>/*" { capabilities = ["read", "list"] }
 EOF
-
-# -orphan is mandatory — a child token dies with its parent (your login/root token).
-# -period is NOT enough on its own: it is silently clamped by the token auth mount's
-# max_lease_ttl, which defaults to 768h — so the token dies in 32 DAYS, not a year, and
-# nothing renews it. Raise the mount's Maximum Lease TTL to 8760h first, then confirm
-# `expire_time` on the new token is a year out. This caused an outage on 2026-09-06.
-PROVISIONER_TOKEN=$(bao token create \
-  -policy=<cluster>-provisioner \
-  -period=8760h \
-  -orphan \
-  -display-name="<cluster>-provisioner" \
-  -format=json | jq -r .auth.client_token)
-bao kv put secret/<cluster>/provisioner-token token="$PROVISIONER_TOKEN"
 ```
+
+There is **no provisioner token to mint**. The Jobs log in with Kubernetes auth, like ESO. The
+matching role is Terraform — `kubernetes_provisioner_roles` in
+`iac/clusters/server3/vault-config/main.tf`, applied in the last stage below. A cluster that runs no
+provisioner Jobs declares nothing and needs no role.
 
 ### Step 4 — Seed all cluster secrets (one block)
 

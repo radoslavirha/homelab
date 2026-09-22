@@ -23,8 +23,11 @@ ArgoCD syncs app
 ```
 
 Key properties of every provisioner Job:
-- `automountServiceAccountToken: false` — makes no K8s API calls
-- No `serviceAccountName` — accesses secrets via `secretKeyRef` (kubelet-injected, no RBAC needed)
+- `serviceAccountName: provisioner` — the identity it logs in to OpenBao with. Datastore admin
+  credentials still arrive by `secretKeyRef` (kubelet-injected, no RBAC needed)
+- `automountServiceAccountToken: false` — the repo-wide default stays. The Job mounts a *projected*
+  10-minute ServiceAccount token instead, used once to log in. It makes no K8s API calls and needs
+  no RBAC and no `ca.crt`: OpenBao verifies the token itself
 - All Jobs use `ghcr.io/radoslavirha/homelab-provisioner` — single image with `influx` CLI, `bao` CLI, `mongosh`, `curl`, `jq`. **Pinned by digest**, see below
 - Idempotent — safe to re-run on every sync
 
@@ -92,37 +95,50 @@ Then **sync each datastore app explicitly** — a hook-only change never shows a
 
 ---
 
-## Shared provisioner token (IotInfra)
+## How a Job authenticates to OpenBao
 
-Provisioner Jobs need a long-lived OpenBao token with write access to write credentials back after calling each datastore's API. This token is stored in OpenBao and synced into the `iot` namespace as a Secret by the `IotInfra` ApplicationSet — which runs at `sync-wave: -1` so it is available before InfluxDB2 and EMQX sync.
+Kubernetes auth, the same method ESO uses. Each Job exchanges its own ServiceAccount token for a
+1-hour OpenBao token at login, so there is nothing to mint, store, rotate or expire.
 
 ```
-gitops/k8s-manifests/server1/iot/ExternalSecret.provisioner-token.yaml
-  → Secret: openbao-provision-token (namespace: iot)
-  → remoteRef: secret/server1/provisioner-token → token
+ServiceAccount `provisioner` (ns iot, ns mongodb)
+  → projected token, 600s, at /var/run/secrets/kubernetes.io/serviceaccount/token
+    → bao write auth/kubernetes-server1/login role=provisioner jwt=@<that file>
+      → OpenBao TokenReviews it against server1's API server
+        → 1h token carrying the server1-provisioner policy
 ```
 
-**One-time setup (per cluster):**
-```bash
-# `read` and `patch` are not optional: the Jobs call `bao kv get` to decide whether a
-# credential already exists before rotating it. A create/update-only token authenticates
-# fine and then fails partway through a run.
-bao policy write server1-provisioner - <<'EOF'
-path "secret/data/server1/*"     { capabilities = ["create", "read", "update", "patch"] }
-path "secret/metadata/server1/*" { capabilities = ["read", "list"] }
-EOF
+The login lives in `provisioner.baoPrelude`
+([`_helpers.tpl`](../gitops/helm-charts/provisioner/templates/_helpers.tpl)) and runs before any
+datastore is touched. The `bao token lookup` guard stays immediately after it: a login can succeed
+and still hand back a token bound to the wrong policy.
 
-# -orphan is mandatory: a child token is revoked together with the login/root token that
-# created it, which takes down every provisioner Job at once. See Troubleshooting below.
-TOKEN=$(bao token create \
-  -policy=server1-provisioner \
-  -period=8760h \
-  -orphan \
-  -display-name="server1-provisioner" \
-  -field=token)
+**What this replaced, and why.** Until 2026-09-22 the Jobs read a hand-minted token out of KV via
+ESO. `-period=8760h` was silently clamped by the token mount's `max_lease_ttl` of 768h, so the token
+was minted for 32 days rather than a year and nothing renewed it — the cause of the 2026-09-06
+outage. Kubernetes auth removes the whole class of problem.
 
-bao kv put secret/server1/provisioner-token token="${TOKEN}"
-```
+**Setup is two things, both declarative:**
+
+| | Where |
+|---|---|
+| ServiceAccount `provisioner`, `automountServiceAccountToken: false` | `gitops/k8s-manifests/server1/{iot,mongodb}/ServiceAccount.provisioner.yaml` |
+| OpenBao role `provisioner` on `auth/kubernetes-<cluster>` | `kubernetes_provisioner_roles` in [`iac/clusters/server3/vault-config/main.tf`](../iac/clusters/server3/vault-config/main.tf) → [`modules/vault-config/kubernetes.tf`](../iac/modules/vault-config/kubernetes.tf) |
+
+The `<cluster>-provisioner` **policy** is still created by the CLI, unchanged
+([`docs/iac.md`](iac.md) § 3.e). `read` and `patch` in it are not optional: the Jobs call
+`bao kv get` to decide whether a credential already exists before rotating it, so a
+create/update-only policy authenticates fine and then fails partway through a run.
+
+The auth **mount** itself (`auth/kubernetes-<cluster>`, its config and the `external-secrets` role)
+also stays on the CLI. ESO must be able to log in before the first Application carrying an
+ExternalSecret syncs, and the `vault-config` Terraform stage runs after that point — see the header
+of `modules/vault-config/kubernetes.tf`.
+
+> **A sealed OpenBao blocks a sync.** OpenBao reseals on reboot and needs three unseal keys by hand.
+> A Job against a sealed OpenBao now fails at the login rather than at `bao token lookup` — one line
+> earlier, still before any datastore call. **Do not sync a datastore Application while OpenBao is
+> sealed.**
 
 > **There is no cross-cluster write path, and there never was a working one.** Earlier revisions of this document granted `secret/data/server3/<cluster>-influxdb2-grafana` so the InfluxDB2 provisioner could write the Grafana datasource token into server3's tree. No provisioner token has ever been allowed to write there — each is scoped to `secret/data/<own cluster>/*` — so every run 403'd silently while Grafana kept working off a value seeded at bootstrap. The token is now written to the provisioner's **own** cluster tree as `influxdb2-grafana`, and server3's ESO reads it from there (`key: server1/influxdb2-grafana`). See [`gitops/helm-values/server1/provisioner/influxdb2.yaml`](../gitops/helm-values/server1/provisioner/influxdb2.yaml). Do not re-add the grant.
 
@@ -297,7 +313,7 @@ OpenBao KV layout:
 
 ### EMQX MQTT user (PostSync Job)
 
-Declared in [`gitops/helm-values/server1/provisioner/emqx.yaml`](../gitops/helm-values/server1/provisioner/emqx.yaml) under `emqx.jobs.miot-bridge-production` and `emqx.jobs.miot-bridge-sandbox`. Runs in `iot` namespace (where `openbao-provision-token` and `emqx-credentials` already exist):
+Declared in [`gitops/helm-values/server1/provisioner/emqx.yaml`](../gitops/helm-values/server1/provisioner/emqx.yaml) under `emqx.jobs.miot-bridge-production` and `emqx.jobs.miot-bridge-sandbox`. Runs in `iot` namespace (where the `provisioner` ServiceAccount and `emqx-credentials` already exist):
 
 1. Checks if `mqtt-username` already exists in `secret/server1/{env}/miot-bridge-api-emqx` → skip if yes (idempotencyStrategy: `bao-check`)
 2. Generates a random 24-char password and creates (or rotates) MQTT user `miot-bridge-{env}`
@@ -311,7 +327,11 @@ Declared in [`gitops/helm-values/server1/provisioner/mongodb.yaml`](../gitops/he
 2. Generates a random 24-char password, creates (or rotates) MongoDB user `miot-bridge-{env}` in database `miot-bridge-{env}`
 3. Writes `mongodb-database` + `mongodb-username` + `mongodb-password` to OpenBao at `secret/server1/{env}/miot-bridge-api-mongodb`
 
-> **Note:** The provisioner token `openbao-provision-token` must exist in both `iot` and `mongodb` namespaces. The `iot` copy is deployed by `IotInfra`. The `mongodb` copy is deployed by the MongoDB ApplicationSet via [`gitops/k8s-manifests/server1/mongodb/ExternalSecret.provisioner-token.yaml`](../gitops/k8s-manifests/server1/mongodb/ExternalSecret.provisioner-token.yaml).
+> **Note:** the `provisioner` ServiceAccount must exist in both `iot` and `mongodb`, and the OpenBao
+> role must bind both namespaces. The `iot` copy is deployed by `IotInfra`, the `mongodb` copy by the
+> MongoDB ApplicationSet. In `iot` that is a cross-Application dependency — the ServiceAccount comes
+> from `IotInfra` while the Jobs come from `EMQX` and `InfluxDB2` — exactly as the token Secret it
+> replaced did.
 
 ### No manual seeding required
 
@@ -347,16 +367,52 @@ Declared in [`gitops/helm-values/server1/provisioner/mongodb.yaml`](../gitops/he
 1. **Provisioner values** — add a job entry to `gitops/helm-values/<cluster>/provisioner/{influxdb2,emqx,mongodb}.yaml` for each resource the app needs. No new Job YAML file required.
 2. **OpenBao path** — choose a service-owned path such as `secret/<cluster>/<env>/<app>/<service>` and set it as `baoPath` in the values entry.
 3. **ExternalSecret in consumer namespace** — referencing the path the provisioner writes to.
-4. **Provisioner token** — ensure `openbao-provision-token` Secret exists in the provisioner’s namespace (deployed by `IotInfra`-equivalent ApplicationSet). The MongoDB provisioner runs in `mongodb` namespace and needs its own copy via `ExternalSecret.provisioner-token.yaml`.
+4. **Provisioner identity** — only if the app introduces a **new namespace** for provisioner Jobs: add a `ServiceAccount.provisioner.yaml` there, and add the namespace to `kubernetes_provisioner_roles` in `iac/clusters/server3/vault-config/main.tf`. Nothing to do for `iot` or `mongodb`.
 5. **Idempotency** — the chart handles this; choose `idempotencyStrategy: bao-check` (skip if path already in OpenBao) or `api-check` (skip if resource already exists in the service API).
 
 ---
 
 ## Troubleshooting
 
+### Provisioner Jobs fail to log in to OpenBao
+
+Symptom, from a Job's logs — the first thing the Job does:
+
+```text
+ERROR: Kubernetes auth login to https://vault.server3.homelab.irha.cz failed -- refusing to touch any datastore.
+```
+
+Nothing has been touched: the login is the first statement in `provisioner.baoPrelude` and the Job
+exits before any datastore call. Work down this list.
+
+1. **Is OpenBao sealed?** `bao status`. It reseals on every server3 reboot and needs three unseal
+   keys by hand. Most likely cause.
+2. **Does the ServiceAccount exist in the Job's namespace?** `kubectl get sa provisioner -n <ns>`.
+   If it is missing the pod never starts at all —
+   `error looking up service account <ns>/provisioner` on the Job, and no pod is created.
+3. **Does the role bind that namespace?**
+   `bao read auth/kubernetes-<cluster>/role/provisioner` — check `bound_service_account_names` and
+   `bound_service_account_namespaces`. Adding a namespace means editing
+   `kubernetes_provisioner_roles` and applying the `vault-config` stage, not a CLI write.
+4. **Is the mount healthy?** `bao read auth/kubernetes-<cluster>/config` —
+   `token_reviewer_jwt_set` must be `true`. That reviewer JWT is created by hand
+   (`docs/iac.md` § 3.a) and is not managed by Terraform.
+
+Reproduce the login by hand without running a Job, from the namespace in question:
+
+```bash
+kubectl --context admin@<cluster> run bao-login-check -n <ns> --rm --restart=Never --attach=true \
+  --image=ghcr.io/radoslavirha/homelab-provisioner:latest \
+  --overrides='{"spec":{"serviceAccountName":"provisioner","automountServiceAccountToken":false,
+    "volumes":[{"name":"t","projected":{"sources":[{"serviceAccountToken":{"path":"token","expirationSeconds":600}}]}}],
+    "containers":[{"name":"c","image":"ghcr.io/radoslavirha/homelab-provisioner:latest",
+      "volumeMounts":[{"name":"t","mountPath":"/var/run/secrets/kubernetes.io/serviceaccount"}],
+      "command":["/bin/sh","-c"],"args":["bao write -address=https://vault.server3.homelab.irha.cz -field=token auth/kubernetes-<cluster>/login role=provisioner jwt=@/var/run/secrets/kubernetes.io/serviceaccount/token"]}]}}'
+```
+
 ### Provisioner Jobs fail with `403 permission denied`
 
-Symptom, from a Job's logs:
+Symptom, from a Job's logs, *after* a successful login:
 
 ```text
 URL: GET https://vault.server3.homelab.irha.cz/v1/sys/internal/ui/mounts/secret/<cluster>/<env>/<app>
@@ -364,26 +420,26 @@ Code: 403. Errors:
 * permission denied
 ```
 
-That URL is the `bao kv` preflight mount lookup — it 403s on an **invalid token**, before any path ACL is consulted. So this is almost never a policy or path problem. Confirm:
+That URL is the `bao kv` preflight mount lookup. Since the login now mints the token seconds
+earlier, an expired-token cause is gone — this is a **policy** problem. Check what the login
+actually handed back, using the reproduce-by-hand pod above followed by
+`bao token lookup -format=json | jq .data.policies`: it must contain `<cluster>-provisioner`. If it
+contains only `default`, `token_policies` on the role is wrong. If the policy is attached but a
+specific path 403s, read the policy — `read` and `patch` on `secret/data/<cluster>/*` and
+`read`/`list` on `secret/metadata/<cluster>/*` are all required.
 
-```bash
-TOKEN=$(kubectl --context admin@<cluster> get secret openbao-provision-token -n mongodb \
-  -o jsonpath='{.data.token}' | base64 -d)
-curl -s -H "X-Vault-Token: $TOKEN" https://vault.server3.homelab.irha.cz/v1/auth/token/lookup-self
-```
-
-`{"errors":["permission denied"]}` means the token stored at `secret/<cluster>/provisioner-token` is dead. Note this test cannot tell you *why*: OpenBao answers `permission denied` for an expired token, a revoked one, and no token at all. There are two causes, and the second is the more likely one:
-
-1. **The token expired.** `-period=8760h` is **silently clamped** by the token auth mount's `max_lease_ttl`, which defaults to `768h` — so a token you asked to live a year actually dies in **32 days**, and nothing renews it. Check `expire_time` on a freshly minted token: if it is ~32 days out rather than a year, raise the mount's Maximum Lease TTL to `8760h` and re-mint. Measured on 2026-09-06: `period=31536000`, `ttl=2764553` (= 768h exactly).
-2. **The token was created without `-orphan`** — it is revoked along with the login/root token that minted it.
-
-Longer term this manual token should go away entirely; see [`superpowers/specs/2026-09-06-provisioner-token-lifecycle.md`](superpowers/specs/2026-09-06-provisioner-token-lifecycle.md).
+A provisioner is scoped to its **own** cluster tree. `secret/server2/*` from a server1 Job is denied
+by design, not a misconfiguration.
 
 **Recovery:**
 
-1. Stop the retries first — a Job that reaches the datastore before failing rotates a password it cannot persist. Delete the failed Jobs (ArgoCD recreates them on the next sync).
-2. Mint a replacement with `-orphan` (see the setup block above) and `bao kv put secret/<cluster>/provisioner-token token="${TOKEN}"`.
-3. Delete any **stale** app secrets in OpenBao — paths whose stored password no longer matches the datastore because a previous run rotated it. `bao-check` treats an existing path as "already provisioned" and skips, so a stale path never self-heals.
-4. Force an ESO refresh of `openbao-provision-token` in every provisioner namespace (`iot`, `mongodb`), then re-sync the ArgoCD Applications.
+1. Stop the retries first — a Job that reaches the datastore before failing rotates a password it
+   cannot persist. Delete the failed Jobs (ArgoCD recreates them on the next sync).
+2. Fix the role or policy, then re-sync the Application. There is no token to re-mint.
+3. Delete any **stale** app secrets in OpenBao — paths whose stored password no longer matches the
+   datastore because a previous run rotated it. `bao-check` treats an existing path as "already
+   provisioned" and skips, so a stale path never self-heals.
 
-Since [`_helpers.tpl`](../gitops/helm-charts/provisioner/templates/_helpers.tpl) gained `provisioner.baoPrelude`, Jobs verify the token with `bao token lookup` **before** touching any datastore, so a dead token now fails cleanly instead of stranding credentials.
+Both guards in `provisioner.baoPrelude` fail closed: the login aborts the Job, and the
+`bao token lookup` after it catches a login that succeeded with the wrong policy. Neither reaches a
+datastore.

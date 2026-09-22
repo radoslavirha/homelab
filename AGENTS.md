@@ -215,13 +215,13 @@ gitops/
       cilium/              HTTPRoute: hubble.server1.homelab.irha.cz → hubble-dashboard:80 (forward-auth), Middleware.authentik.yaml
       cert-manager/        ExternalSecret (cloudflare-api-token), ClusterIssuer letsencrypt-staging + letsencrypt-prod (ACME DNS-01 via Cloudflare)
       external-secrets/    ClusterSecretStore → remote server3 OpenBao at vault.server3.homelab.irha.cz
-      iot/         ExternalSecret.provisioner-token.yaml (openbao-provision-token; sync-wave -1 via IotInfra)
+      iot/         ServiceAccount.provisioner.yaml (identity the PostSync Jobs log in to OpenBao with; via IotInfra)
       influxdb2/   ExternalSecret.yaml, HTTPRoute.yaml
       emqx/        ExternalSecret.yaml, HTTPRoute.yaml, IngressRouteTCP.yaml (1883 plaintext + 8883 TLS)
       telegraf/    ExternalSecret.telegraf.influxdb2.yaml, ExternalSecret.telegraf.mqtt.yaml
       external-dns/ ExternalSecret (unifi-credentials), DNSEndpoint server1-anchor (server1.homelab.irha.cz A record)
       longhorn/    HTTPRoute: longhorn.server1.homelab.irha.cz → longhorn-frontend:80 (forward-auth), Middleware.authentik.yaml
-      mongodb/     ExternalSecret, IngressRouteTCP (27017, TLS-only), ExternalSecret.provisioner-token.yaml
+      mongodb/     ExternalSecret, IngressRouteTCP (27017, TLS-only), ServiceAccount.provisioner.yaml
       mealie/      ExternalSecret (postgres-password), ExternalSecret.oidc.yaml (Authentik client
                    secret, copied by hand once), StatefulSet+Service for its own PostgreSQL 17,
                    PVC (10Gi /app/data), Deployment (image tag = the pinned version), Service,

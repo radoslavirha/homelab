@@ -4,8 +4,9 @@ metadata:
   name: iot-infra
   namespace: argocd
   annotations:
-    # Sync before EMQX and InfluxDB2 so the shared openbao-provision-token Secret
-    # exists before their PostSync provisioner Jobs and rotation CronJobs run.
+    # Sync before EMQX and InfluxDB2 so the shared `provisioner` ServiceAccount exists
+    # before their PostSync provisioner Jobs run -- a pod naming a missing ServiceAccount
+    # is never created at all, so the Job stalls rather than failing usefully.
     argocd.argoproj.io/sync-wave: "-1"
 spec:
   generators:
