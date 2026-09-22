@@ -1,0 +1,91 @@
+---
+# cloudflared on server1 -- the WAN leg of the split horizon for this cluster.
+#
+# The house is behind CGNAT (Vodafone CZ; UX7 WAN 100.67.147.18, traceroute hop 2
+# 100.67.128.2), so no inbound port exists and no port-forward or VPN listener can work.
+# cloudflared dials OUT to Cloudflare and holds those connections open, which is why it
+# works at all here. Nothing ever points at this house's address.
+#
+# Two replicas on one node is deliberate: Cloudflare load-balances across replicas of one
+# tunnel, so a pod restart does not drop the tunnel. They are not a HA story for the node.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudflared
+  namespace: cloudflared
+  annotations:
+    # Config or credential changes reach cloudflared by RESTART -- it reads both at
+    # startup and has no reload endpoint.
+    reloader.stakater.com/auto: "true"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: cloudflared
+  template:
+    metadata:
+      labels:
+        app: cloudflared
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        # fsGroup is load-bearing, not boilerplate: a projected Secret lands owned by
+        # root, so with runAsUser 65532 and a 0400 credential the container cannot read
+        # its own tunnel credentials and CrashLoops with "permission denied". fsGroup
+        # makes the mount group-owned by 65532; the file below is then 0440.
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: cloudflared
+          # Renovate watches this reference; there is no chart and no targetRevision.
+          image: cloudflare/cloudflared:2026.9.1
+          args:
+            - tunnel
+            - --config
+            - /etc/cloudflared/config/config.yaml
+            - run
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          ports:
+            - name: metrics
+              containerPort: 2000
+          livenessProbe:
+            httpGet:
+              path: /ready
+              port: metrics
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: metrics
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 10m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+          volumeMounts:
+            - name: config
+              mountPath: /etc/cloudflared/config
+              readOnly: true
+            - name: creds
+              mountPath: /etc/cloudflared/creds
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: cloudflared
+        - name: creds
+          secret:
+            secretName: cloudflared
+            # 0440, not 0400: readable by fsGroup 65532 above. 0400 would be root-only.
+            defaultMode: 0440

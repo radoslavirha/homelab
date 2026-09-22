@@ -1,0 +1,33 @@
+---
+# THE ALLOW-LIST for server1. This file, not DNS, is what makes a hostname reachable
+# from the internet: cloudflared refuses any Host header not named below, so a CNAME
+# pointing here for an unlisted name gets Cloudflare's 1033 error rather than a service.
+#
+# Separate tunnel from server3's on purpose: one tunnel reaches one cluster's Traefik,
+# and a shared one would make either cluster a dependency of the other's public names.
+#
+# Traffic goes THROUGH Traefik, not around it, so every HTTPRoute, middleware, access
+# log and trace keeps working.
+#
+# Changing this file rolls the pods (Stakater Reloader) -- cloudflared reads its config
+# at startup only.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cloudflared
+  namespace: cloudflared
+data:
+  config.yaml: |
+    tunnel: bcd33540-dbb9-4a5d-a419-f60626a44fce
+    credentials-file: /etc/cloudflared/creds/credentials.json
+    metrics: 0.0.0.0:2000
+    no-autoupdate: true
+
+    ingress:
+      # ---- published names go here, one at a time ----
+
+      # THE CATCH-ALL MUST STAY LAST AND MUST STAY http_status:404.
+      # A catch-all pointing at Traefik with no `hostname` forwards EVERYTHING and
+      # destroys the opt-in property -- on THIS cluster that would publish the
+      # production and sandbox APIs, Longhorn, and every other HTTPRoute at once.
+      - service: http_status:404

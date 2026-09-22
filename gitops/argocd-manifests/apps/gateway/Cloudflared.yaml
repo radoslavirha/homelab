@@ -12,9 +12,8 @@
 # cluster dials its own tunnel with its own credential, so nothing makes one cluster
 # a SPOF for another's public names.
 #
-# server3 first: it holds auth.irha.cz, and every other published name redirects
-# there to log in. server1 (mealie, assistant, qr) is added as a second element once
-# its tunnel exists and its credential is in OpenBao at secret/server1/cloudflared.
+# server3 went first because it holds auth.irha.cz, and every other published name
+# redirects there to log in. server1 followed on 2026-09-22 for mealie.irha.cz.
 #
 # ── Raw manifests, not a chart ──────────────────────────────────────────────
 # Cloudflare publishes no official chart; this is one Deployment, a ConfigMap and an
@@ -29,6 +28,10 @@ spec:
   generators:
     - list:
         elements:
+          # server1 carries mealie.irha.cz (and later assistant./qr.); its tunnel is
+          # bcd33540-dbb9-4a5d-a419-f60626a44fce, credential at secret/server1/cloudflared.
+          - cluster: server1
+            clusterServer: https://192.168.1.200:6443
           - cluster: server3
             # ArgoCD runs ON server3, so its own cluster is registered as the
             # in-cluster destination -- there is no cluster secret for
