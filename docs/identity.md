@@ -115,7 +115,8 @@ and agree with it. Issuing the roles correctly keeps the claim the whole truth a
 consumer a plain set-membership test.
 
 **What it buys an API.** One role as a class-level floor, narrowed per route, instead of every role
-repeated on every route:
+repeated on every route. The block below is the *mechanism*; today only `miot-bridge-api`'s
+`CommandController` uses it, and the class-level floor is carried by no controller:
 
 ```ts
 @Controller('/qr-codes')
@@ -415,8 +416,9 @@ entries, which still use the prefix rule.
 
 **The API side needs one row.** `issuer_mode` is `per_provider`, so `iss` stays `postman` however wide
 `aud` is: every API needs a trusted-issuer row for `https://auth.irha.cz/application/o/postman/` — the
-same value in every deployment, one row, not one per environment. That is `homelab-apps` config, and
-nothing works end to end until it lands.
+same value in every deployment, one row, not one per environment. **Deployed since 2026-09-09**, and
+the row is **this** repo's config, not `homelab-apps`: `gitops/helm-values/apps/<api>/{production,sandbox}.yaml`,
+under `auth.IDP.trustedIssuers`. All three APIs load it at boot and refuse anonymous callers with `401`.
 
 **In Postman** it is one collection-level OAuth 2.0 config, and nothing about it varies by environment:
 
