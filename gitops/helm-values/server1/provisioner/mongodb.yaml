@@ -1,7 +1,7 @@
 global:
   cluster: server1
   baoHost: "https://vault.server3.homelab.irha.cz"
-  baoTokenSecret: openbao-provision-token
+  serviceAccountName: provisioner
 
 mongodb:
   host: "mongodb.mongodb.svc.cluster.local:27017"

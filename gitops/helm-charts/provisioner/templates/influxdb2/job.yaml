@@ -19,8 +19,7 @@ metadata:
 spec:
   template:
     spec:
-      restartPolicy: OnFailure
-      automountServiceAccountToken: false
+      {{- include "provisioner.jobSpec" $ | nindent 6 }}
       containers:
         - name: provisioner
           image: {{ include "provisioner.image" $ }}
@@ -30,11 +29,8 @@ spec:
                 secretKeyRef:
                   name: {{ $.Values.influxdb2.adminTokenSecret }}
                   key: {{ $.Values.influxdb2.adminTokenKey | default "admin-token" }}
-            - name: BAO_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: {{ $.Values.global.baoTokenSecret }}
-                  key: token
+          volumeMounts:
+            {{- include "provisioner.baoLoginVolumeMount" $ | nindent 12 }}
           command: ["/bin/sh", "-c"]
           args:
             - |

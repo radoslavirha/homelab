@@ -1,7 +1,7 @@
 global:
   cluster: server1
   baoHost: "https://vault.server3.homelab.irha.cz"
-  baoTokenSecret: openbao-provision-token
+  serviceAccountName: provisioner
 
 influxdb2:
   host: "http://influxdb2.iot.svc.cluster.local"

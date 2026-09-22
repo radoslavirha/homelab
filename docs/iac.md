@@ -258,31 +258,19 @@ bao write auth/kubernetes-<cluster>/role/external-secrets \
   policies=<cluster>-external-secrets \
   ttl=1h
 
-#    ── 3.e  Provisioner write policy + long-lived token ──────────────────────────────────────
-#    Provisioner Jobs (PostSync hooks) use this token to write scoped app credentials back to
-#    OpenBao after calling each datastore's management API. See docs/provisioning.md.
+#    ── 3.e  Provisioner write policy ──────────────────────────────────────────────────────────
+#    Provisioner Jobs (PostSync hooks) write scoped app credentials back to OpenBao after calling
+#    each datastore's management API. See docs/provisioning.md.
+#
+#    Only the POLICY is created here. There is no token to mint: the Jobs log in with Kubernetes
+#    auth using their own ServiceAccount, the same way ESO does. The matching role is Terraform --
+#    kubernetes_provisioner_roles in iac/clusters/server3/vault-config/main.tf, applied in the
+#    vault-config stage (step 6). A cluster with no provisioner Jobs declares no role.
 
 bao policy write <cluster>-provisioner - <<'EOF'
 path "secret/data/<cluster>/*"     { capabilities = ["create", "read", "update", "patch"] }
 path "secret/metadata/<cluster>/*" { capabilities = ["read", "list"] }
 EOF
-
-# -orphan is mandatory: without it the token is a child of your current login/root token
-# and is revoked the moment that parent is revoked, silently breaking every provisioner Job.
-# -period is NOT enough on its own: it is silently clamped by the token auth mount's
-# max_lease_ttl, which defaults to 768h — so the token dies in 32 DAYS, not a year, and
-# nothing renews it. Raise the mount's Maximum Lease TTL to 8760h first, then confirm
-# `expire_time` on the new token is a year out. This caused an outage on 2026-09-06.
-PROVISIONER_TOKEN=$(bao token create \
-  -policy=<cluster>-provisioner \
-  -period=8760h \
-  -orphan \
-  -display-name="<cluster>-provisioner" \
-  -format=json | jq -r .auth.client_token)
-
-# Store the provisioner token so provisioner Jobs can consume it via ESO:
-# ExternalSecret: gitops/k8s-manifests/<cluster>/iot/ExternalSecret.provisioner-token.yaml
-bao kv put secret/<cluster>/provisioner-token token="$PROVISIONER_TOKEN"
 
 #    ── 3.f  Seed initial KV secrets ──────────────────────────────────────────────────────────
 #    ⚠️  PREREQUISITE: all secrets below MUST exist in OpenBao before any ArgoCD stage
