@@ -87,7 +87,14 @@ data:
                   # by (for_user, for_ip): one alert instance per account+source, so the
                   # notification names both. They group into one Slack message because the
                   # policy tree groups by alertname + cluster.
-                  expr: sum by (for_user, for_ip) (count_over_time({k8s_namespace_name="authentik"} | json | logger="authentik.policies.reputation.signals" | amount="-5" [5m]))
+                  # `or vector(0)` is not decoration. Without it this query returns NO
+                  # SERIES whenever nobody is locked out -- which is the normal case -- so
+                  # Grafana parks a NoData instance carrying none of the labels below, and
+                  # the summary renders them as "[no value]". It also makes "no lockouts"
+                  # and "Loki is unreachable" look identical. With the fallback the rule
+                  # always evaluates to a number, so a broken datasource surfaces as an
+                  # ERROR (execErrState below) instead of hiding as OK.
+                  expr: sum by (for_user, for_ip) (count_over_time({k8s_namespace_name="authentik"} | json | logger="authentik.policies.reputation.signals" | amount="-5" [5m])) or vector(0)
                   queryType: instant
                   intervalMs: 1000
                   maxDataPoints: 43200
@@ -110,7 +117,9 @@ data:
               component: authentik
               cluster: server3
             annotations:
-              summary: 'Account {{ $labels.for_user }} locked out after repeated failed logins from {{ $labels.for_ip }}'
+              # The labels are guarded: an error or no-data instance carries none of
+              # them, and an unguarded template renders "[no value]" in Slack.
+              summary: 'Account {{ if $labels.for_user }}{{ $labels.for_user }}{{ else }}(unknown){{ end }} locked out after repeated failed logins from {{ if $labels.for_ip }}{{ $labels.for_ip }}{{ else }}(unknown){{ end }}'
               description: >-
                 The reputation policy denied further attempts for this identifier, so this is
                 contained rather than an outage — but it is either someone guessing, or a
@@ -137,7 +146,9 @@ data:
                 datasourceUid: loki
                 model:
                   editorMode: code
-                  expr: sum(count_over_time({k8s_namespace_name="authentik"} | json | event="Invalid credentials" [5m]))
+                  # Same reason as the lockout rule above: no failures means no series,
+                  # which Grafana reports as NoData rather than "zero".
+                  expr: sum(count_over_time({k8s_namespace_name="authentik"} | json | event="Invalid credentials" [5m])) or vector(0)
                   queryType: instant
                   intervalMs: 1000
                   maxDataPoints: 43200

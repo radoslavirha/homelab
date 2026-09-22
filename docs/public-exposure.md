@@ -132,7 +132,7 @@ the traffic is HTTP through Cloudflare's edge.
 |---|---|
 | The name is in the **apex tier** (`<svc>.irha.cz`) and on its cluster's certificate SAN list | `homelab.irha.cz` names are LAN-only by definition |
 | The service **authenticates its own traffic** | Publishing a frontend publishes whatever it calls |
-| If it is a frontend, **the API it calls is not published**, or that API verifies tokens *and* enforces roles | The SPAs call APIs directly from the browser |
+| If it is a frontend, **the API it calls is not published** | The SPAs call APIs directly from the browser, so publishing a frontend publishes whatever it calls. The APIs verify tokens and carry the roles they need — see `identity.md` — but none has an apex hostname, and none needs one yet |
 | `auth.irha.cz` is already published | Everything redirects there to log in |
 | Absolute-URL settings name the public hostname | e.g. Grafana's `root_url` and `server.domain` |
 | The alert path works | A published login page is when you find out it does not |

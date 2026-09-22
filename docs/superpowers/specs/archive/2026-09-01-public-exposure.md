@@ -71,12 +71,12 @@ connection a dependency for reaching a machine on the same switch.
 The SPAs call the APIs **directly from the browser** — `qr-manager-ui` renders
 `"apiBaseURL": "…/iot/qr-manager"` and attaches its own bearer token per target. No proxy in
 between. Authentication is no longer the problem; **authorization is**: only `miot-bridge`'s
-`CommandController` carries `@RequireRoles`, so six other controllers accept any token a trusted
-issuer minted for that audience. See
-[`2026-09-22-api-token-verification.md`](2026-09-22-api-token-verification.md).
+`CommandController` carries `@RequireRoles` — deliberately, and the rest of the role model is
+settled in [`2026-09-08-role-hierarchy.md`](2026-09-08-role-hierarchy.md): the ladder is issued by
+the IdP so a token describes what its holder can do, and class-level floors were weighed there with
+their cost. **This is not an open gap.**
 
-> **No API hostname is published while a `postman` token carrying no application role can drive
-> it.**
+> **No API hostname is published, because no frontend needs one published.**
 
 The APIs have no apex hostname today, so this is not a live exposure — it becomes one the moment
 someone adds one. `qr.irha.cz` is redirect-only (an `addPrefix /r` middleware) and reaches no API.
@@ -221,7 +221,7 @@ Run all of it for each name before adding the next:
   replacement for this one.
 - **SMTP.** The zone has no `MX`/`SPF`/`DMARC`, and enrolment and recovery are both admin-minted
   links. Deferred, not rejected.
-- **Publishing any API hostname.** Gated on role floors — see the invariant above.
+- **Publishing any API hostname.** Not needed by anything published so far; revisit only when a published frontend actually calls one from the browser.
 
 ## Open questions
 
