@@ -33,6 +33,17 @@ data:
     ingress:
       # ---- published names go here, one at a time ----
 
+      # PUBLISHED 2026-09-22, first and alone. Grafana, Mealie and Open WebUI all
+      # redirect here to log in, so publishing any of them before this one would kill
+      # off-LAN login at the redirect.
+      #
+      # originServerName sets SNI, so Traefik presents server3-tls and this hop
+      # validates against the same certificate a LAN browser gets.
+      - hostname: auth.irha.cz
+        service: https://traefik.traefik.svc.cluster.local:443
+        originRequest:
+          originServerName: auth.irha.cz
+
       # THE CATCH-ALL MUST STAY LAST AND MUST STAY http_status:404.
       # A catch-all pointing at Traefik with no `hostname` forwards EVERYTHING and
       # destroys the opt-in property in one line -- every HTTPRoute on this cluster
