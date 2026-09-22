@@ -30,7 +30,11 @@ spec:
     - list:
         elements:
           - cluster: server3
-            clusterServer: https://192.168.1.202:6443
+            # ArgoCD runs ON server3, so its own cluster is registered as the
+            # in-cluster destination -- there is no cluster secret for
+            # https://192.168.1.202:6443 and naming it fails the destination check.
+            # Same convention as Traefik.yaml in this directory.
+            clusterServer: https://kubernetes.default.svc
   template:
     metadata:
       name: cloudflared-{{cluster}}
