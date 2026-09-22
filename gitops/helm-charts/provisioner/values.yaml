@@ -1,7 +1,11 @@
 global:
+  # Also names the OpenBao auth mount the Jobs log in at: auth/kubernetes-<cluster>.
   cluster: ""
   baoHost: ""
-  baoTokenSecret: openbao-provision-token
+  # ServiceAccount the Jobs run as and log in to OpenBao with. Not created by this chart --
+  # see the `provisioner.jobSpec` helper. Must match bound_service_account_names on the
+  # `provisioner` role (iac/modules/vault-config/kubernetes.tf).
+  serviceAccountName: provisioner
 
 # Provisioner image, pinned by digest.
 #

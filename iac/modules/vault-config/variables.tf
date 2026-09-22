@@ -57,3 +57,21 @@ variable "oidc_groups" {
   }))
   description = "Keyed by a `roles` claim value (e.g. openbao.admin). Each entry becomes an ACL policy, an external identity group named after the claim, and a group alias on the OIDC mount. Pass policy content with file() in the cluster instance."
 }
+
+# ── Kubernetes auth — provisioner roles ──────────────────────────────────────
+variable "kubernetes_provisioner_role_name" {
+  type        = string
+  description = "Role name created on each mount below. The provisioner chart's login uses a fixed role name across clusters, so this is one value, not one per mount."
+  default     = "provisioner"
+}
+
+variable "kubernetes_provisioner_roles" {
+  type = map(object({
+    service_account_name = optional(string, "provisioner")
+    namespaces           = list(string)
+    token_policies       = list(string)
+    token_ttl            = optional(number, 3600)
+  }))
+  default     = {}
+  description = "Keyed by the Kubernetes auth MOUNT PATH (e.g. kubernetes-server1), which is created by the CLI and only referenced here. `namespaces` must list every namespace a provisioner Job runs in; `token_policies` names policies that also already exist on the CLI. Empty by default: a cluster with no provisioner Jobs declares nothing."
+}

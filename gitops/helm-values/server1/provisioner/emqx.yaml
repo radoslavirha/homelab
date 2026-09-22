@@ -1,7 +1,7 @@
 global:
   cluster: server1
   baoHost: "https://vault.server3.homelab.irha.cz"
-  baoTokenSecret: openbao-provision-token
+  serviceAccountName: provisioner
 
 emqx:
   host: "http://emqx.iot.svc.cluster.local:18083"
