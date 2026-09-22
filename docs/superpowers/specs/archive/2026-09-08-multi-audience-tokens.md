@@ -10,8 +10,10 @@
 
 **Status: built and applied 2026-09-08.** The six `postman` applications, their providers, gate groups,
 bindings and per-client scope mappings exist on `authentik-server3` — verified in its database, see
-*Evidence*. The other half — the trusted-issuer rows — is `iot-miniservers` work and has not started,
-so **no API accepts one of these tokens yet**. See *What is left*.
+*Evidence*. **The other half landed 2026-09-09** (`iot-miniservers`, since renamed `homelab-apps`,
+PR #100; arriving in `homelab` as `5ebc097` / `a4a3d7f`): all three APIs carry the trusted-issuer rows,
+accept these tokens and refuse anonymous callers with `401`. *What is left* items 4–6 are done — in the
+one-client shape the superseded note above describes, not the six-client one below.
 
 **Related:** [`archive/2026-09-04-authentik-tenancy-topology.md`](archive/2026-09-04-authentik-tenancy-topology.md),
 which named this design without building it, and
