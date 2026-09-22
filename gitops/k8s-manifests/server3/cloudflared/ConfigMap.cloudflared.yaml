@@ -44,6 +44,15 @@ data:
         originRequest:
           originServerName: auth.irha.cz
 
+      # PUBLISHED 2026-09-22, second. Grafana has no local login at all -- the form and
+      # HTTP Basic are both off -- so this name is only usable if auth.irha.cz above is
+      # reachable, which is why the order is not negotiable. root_url and server.domain
+      # are already grafana.irha.cz, so deep links and the image renderer survive.
+      - hostname: grafana.irha.cz
+        service: https://traefik.traefik.svc.cluster.local:443
+        originRequest:
+          originServerName: grafana.irha.cz
+
       # THE CATCH-ALL MUST STAY LAST AND MUST STAY http_status:404.
       # A catch-all pointing at Traefik with no `hostname` forwards EVERYTHING and
       # destroys the opt-in property in one line -- every HTTPRoute on this cluster
