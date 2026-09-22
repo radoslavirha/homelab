@@ -14,6 +14,31 @@
 # via global.envFrom below — NOT via authentik.existingSecret, which is all-or-nothing
 # and would silently discard every value in this file.
 authentik:
+  # ── Which sources may set X-Forwarded-* ───────────────────────────────────
+  # Upstream's default is loopback plus EVERY private range (10/8, 172.16/12,
+  # 192.168/16), which is far broader than this deployment needs: anything on the
+  # house LAN that can reach authentik directly could declare its own client IP.
+  # That silently undermines the reputation policy (docs/identity.md), the lockout
+  # alert's for_ip, and the accuracy of the event log -- upstream's own hardening
+  # page says to narrow it.
+  #
+  # Setting this REPLACES the default list, it does not add to it.
+  #
+  # The trusted address is where the proxy connects FROM, not the client IP.
+  # Traefik runs with hostNetwork on this node (192.168.1.202); the pod range is
+  # included because Cilium may present node-originated traffic as the cilium_host
+  # address (10.244.0.38 was observed for kubelet probes on 2026-09-22).
+  #
+  # VERIFY AFTER APPLYING, do not assume: make a request through Traefik from a LAN
+  # machine and read the authentik-server log --
+  #   kubectl --context admin@server3 -n authentik logs deploy/authentik-server \
+  #     --since=2m | grep health/live
+  # The "remote" field must still show the CLIENT's address (e.g. 192.168.1.251).
+  # If it shows the node or a pod address instead, this list is too narrow and
+  # authentik has fallen back to the peer -- widen it, do not leave it broken.
+  listen:
+    trusted_proxy_cidrs: "192.168.1.202/32,10.244.0.0/16"
+
   # Gunicorn sizing. Measured on this node: the chart/app default of 2 workers costs
   # ~356Mi on the server pod against ~526Mi when left to scale with CPU count.
   web:
