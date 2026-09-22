@@ -30,6 +30,11 @@ spec:
       securityContext:
         runAsNonRoot: true
         runAsUser: 65532
+        # fsGroup is load-bearing, not boilerplate: a projected Secret lands owned by
+        # root, so with runAsUser 65532 and a 0400 credential the container cannot read
+        # its own tunnel credentials and CrashLoops with "permission denied". fsGroup
+        # makes the mount group-owned by 65532; the file below is then 0440.
+        fsGroup: 65532
         seccompProfile:
           type: RuntimeDefault
       containers:
@@ -82,4 +87,5 @@ spec:
         - name: creds
           secret:
             secretName: cloudflared
-            defaultMode: 0400
+            # 0440, not 0400: readable by fsGroup 65532 above. 0400 would be root-only.
+            defaultMode: 0440
