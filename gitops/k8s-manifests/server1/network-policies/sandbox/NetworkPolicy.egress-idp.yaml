@@ -18,10 +18,18 @@
 # not editing. Every API here will verify tokens against this host eventually,
 # so scoping it per app buys nothing and costs one silent timeout per new app.
 #
-# ── What it does not open ────────────────────────────────────────────────────
-# One address, one port. The rest of 192.168.0.0/16 stays denied by
-# egress-internet, and the miot devices keep their own narrow rule
-# (NetworkPolicy.egress-lan-miio.yaml, UDP/54321).
+# ── What it opens, honestly ──────────────────────────────────────────────────
+# One address, one port — but that address is ALL of server3's Traefik, not just
+# Authentik: ArgoCD, OpenBao, Headlamp and the OTLP ingest answer there too. A
+# NetworkPolicy cannot narrow it: TLS hides the Host header, and SNI is
+# spoofable. Accepted deliberately (2026-09-23): everything behind that Traefik
+# authenticates its own traffic, so a pod here sees exactly what any LAN device
+# already sees. A dedicated JWKS-only port on server3 was designed and dropped as
+# not worth a non-standard JWKS URI in every API's config. Do not re-propose it
+# without a new threat.
+#
+# The rest of 192.168.0.0/16 stays denied by egress-internet, and the miot
+# devices keep their own narrow rule (NetworkPolicy.egress-lan-miio.yaml, UDP/54321).
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:

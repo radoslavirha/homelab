@@ -133,6 +133,16 @@ anything on the LAN that speaks TLS can still inject telemetry. Authentication n
 because the receiving end has never validated a bearer token — k8s-monitoring exposes no
 server-side OTLP auth, so sending one would authenticate nothing while looking like it did.
 
+**Accepted, not pending (decided 2026-09-23).** The risk is injection, not disclosure: a
+misconfigured or compromised LAN device writing junk telemetry. The LAN's untrusted population is
+ESP devices, there is no inbound path from the internet, and the OTLP/HTTP route
+(`otel.server3.homelab.irha.cz`) is just as open, so an allow-list on 4317 alone would close
+nothing. Revisit only if one of these becomes true: an untrusted device joins the LAN, a guest or
+IoT VLAN gets routed to the cluster subnet, the endpoint is exposed beyond the LAN, or a second
+site sends telemetry over a link you do not control. At that point the options are a Traefik
+`ipAllowList` on **both** OTLP paths (cheap, authenticates an address), or mTLS. mTLS is real
+identity, but nothing here renews client certificates, so every renewal becomes a manual step.
+
 Port 80 also still serves — there is no blanket 80 → 443 redirect, because ESPHome devices on
 the LAN fetch over plain HTTP and may not follow one.
 
