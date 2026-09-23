@@ -6,8 +6,8 @@ Pick by **what the probe needs to exercise**, not by what is convenient:
 
 | To test | Use |
 |---|---|
-| ingress + telemetry pipeline, cheapest and safest | `interactive-map-feeder-api` → `/v1/data-sources/list` |
-| internet egress / FQDN policy | `interactive-map-feeder-api` → `/v1/data-sources/radar/image` |
+| ingress + telemetry pipeline, cheapest and safest | `interactive-map-feeder-api` → `/data-sources/list` |
+| internet egress / FQDN policy | `interactive-map-feeder-api` → `/data-sources/radar/image` |
 | MongoDB reachability from an app | `qr-manager-api` → `/<slug>` |
 | ingress only, no app logic | any `/…/docs` Swagger UI |
 | that a pod is alive (nothing else) | `/health/live` — **emits no telemetry** |
@@ -21,8 +21,8 @@ below for the externally reachable form.
 
 | Path | Side effects | Notes |
 |---|---|---|
-| `GET /v1/data-sources/list` | none — no Mongo, no external call | **The default probe.** Verified: 200, `{"dataSources":["radar"]}`, ~37 ms end-to-end from the laptop |
-| `GET /v1/data-sources/<ds>/image` | **calls the CHMI external APIs** | The only way to generate internet egress on demand. `<ds>` = `radar`. Returns an image — always `-o /dev/null`. Not for bursts: it hits a third party |
+| `GET /data-sources/list` | none — no Mongo, no external call | **The default probe.** Verified: 200, `{"dataSources":["radar"]}`, ~37 ms end-to-end from the laptop |
+| `GET /data-sources/<ds>/image` | **calls the CHMI external APIs** | The only way to generate internet egress on demand. `<ds>` = `radar`. Returns an image — always `-o /dev/null`. Not for bursts: it hits a third party |
 | `GET /v1/docs` | none | Swagger UI |
 
 ### miot-bridge-api
@@ -79,8 +79,8 @@ V1 URL and the V2 port-forward URL differ for the same request.
 Worked examples:
 
 ```
-production  server2  http://api.server2.home/iot/interactive-map-feeder/v1/data-sources/list
-sandbox     server2  http://api.sandbox.server2.home/iot/interactive-map-feeder/v1/data-sources/list
+production  server2  http://api.server2.home/iot/interactive-map-feeder/data-sources/list
+sandbox     server2  http://api.sandbox.server2.home/iot/interactive-map-feeder/data-sources/list
 production  server1  http://api.server1.home/iot/qr-manager/<slug>
 production  server2  http://apps.server2.home/qr-manager/
 ```

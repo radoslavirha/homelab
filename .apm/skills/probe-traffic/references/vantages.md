@@ -28,7 +28,7 @@ curl -sS -o /dev/null \
   -H "X-Probe-Run: $RUN_ID" \
   -H "traceparent: 00-${TRACE_ID}-${SPAN_ID}-01" \
   -A "homelab-probe/$RUN_ID" \
-  "http://api.server2.home/iot/interactive-map-feeder/v1/data-sources/list?probe=$RUN_ID"
+  "http://api.server2.home/iot/interactive-map-feeder/data-sources/list?probe=$RUN_ID"
 ```
 
 Keep the trailing `?probe=$RUN_ID` — it lands in the Traefik `RequestPath` field, which makes
@@ -40,7 +40,7 @@ the run greppable in Loki even if header propagation ever regresses.
 for i in $(seq 1 20); do
   curl -sS -o /dev/null -w '%{http_code} ' \
     -H "X-Probe-Run: $RUN_ID" -H "traceparent: 00-${TRACE_ID}-$(head -c8 /dev/urandom | xxd -p)-01" \
-    "http://api.server2.home/iot/interactive-map-feeder/v1/data-sources/list?probe=$RUN_ID"
+    "http://api.server2.home/iot/interactive-map-feeder/data-sources/list?probe=$RUN_ID"
 done; echo
 ```
 
@@ -52,7 +52,7 @@ watched at the same time:
 
 ```bash
 for i in $(seq 1 60); do
-  curl -sS -o /dev/null -H "X-Probe-Run: $RUN_ID" "http://api.server2.home/iot/interactive-map-feeder/v1/data-sources/list?probe=$RUN_ID"
+  curl -sS -o /dev/null -H "X-Probe-Run: $RUN_ID" "http://api.server2.home/iot/interactive-map-feeder/data-sources/list?probe=$RUN_ID"
   sleep 2
 done
 ```
@@ -72,7 +72,7 @@ kubectl port-forward -n production svc/api-iot-interactive-map-feeder-api-http 8
 PF=$!
 curl -sS -o /dev/null -w 'http=%{http_code} total=%{time_total}s\n' \
   -H "X-Probe-Run: $RUN_ID" -H "traceparent: 00-${TRACE_ID}-${SPAN_ID}-01" \
-  "http://127.0.0.1:8080/v1/data-sources/list?probe=$RUN_ID"
+  "http://127.0.0.1:8080/data-sources/list?probe=$RUN_ID"
 kill $PF
 ```
 

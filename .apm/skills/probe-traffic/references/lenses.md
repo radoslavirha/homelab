@@ -74,7 +74,7 @@ mcp__grafana__grafana_api_request
 Healthy result for the default probe — two services, the chain visible end to end:
 
 ```json
-[{"svc":"interactive-map-feeder-api","spans":["middleware - …","request handler - /v1/data-sources/list","GET /v1/data-sources/list"]},
+[{"svc":"interactive-map-feeder-api","spans":["middleware - …","request handler - /data-sources/list","GET /data-sources/list"]},
  {"svc":"traefik","spans":["GET","GET"]}]
 ```
 

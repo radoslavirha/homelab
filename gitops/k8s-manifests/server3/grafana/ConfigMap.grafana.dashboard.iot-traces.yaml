@@ -17,8 +17,8 @@
 #                                findOne|find <db>.<collection>
 #                                -- MQTT and mongo only. NO HTTP server spans, ever, in the
 #                                whole retention window.
-#   span names, feeder           GET /v1/data-sources/:dataSource/image  (SPAN_KIND_SERVER)
-#                                request handler - /v1/data-sources/:dataSource/image
+#   span names, feeder           GET /data-sources/:dataSource/image  (SPAN_KIND_SERVER)
+#                                request handler - /data-sources/:dataSource/image
 #                                middleware - {jsonParser,compression,cookieParser,cors,...}
 #                                GET  (SPAN_KIND_CLIENT, outbound)
 #                                -- full Express auto-instrumentation, unlike miot-bridge-api.

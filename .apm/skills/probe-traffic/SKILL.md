@@ -87,7 +87,7 @@ Report what was observed, per signal, including misses. A miss is a finding, not
 ```
 Run:     <RUN_ID>   trace <TRACE_ID>
 Vantage: V1 laptop → api.server2.home
-Target:  GET /iot/interactive-map-feeder/v1/data-sources/list  (production, server2)
+Target:  GET /iot/interactive-map-feeder/data-sources/list  (production, server2)
 Shape:   single
 
 response    PASS  200 in 37ms

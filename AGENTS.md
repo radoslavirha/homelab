@@ -506,9 +506,6 @@ Two things it is not:
   three hold reconstructible telemetry, Grafana is provisioned from git, and EMQX's PVC is broker
   runtime state. See [docs/architecture.md](docs/architecture.md) for the per-cluster table.
 
-The OpenBao raft snapshot is taken with `BAO_TOKEN` from `.env` and **only works while OpenBao is
-unsealed** — so dump before a reboot of server3, not after.
-
 ## Credentials
 
 Written to `iac/clusters/<cluster>/credentials/` (gitignored) by the bootstrap stage.
