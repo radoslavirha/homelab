@@ -93,12 +93,12 @@ In Cilium's `default` enforcement mode, a policy that *selects* a pod flips that
 to deny-by-default. `20-allow-egress-in-cluster.yaml` applied alone denies DNS immediately. The
 draft set is one atomic unit. This skill never applies policy — it observes.
 
-## ArgoCD does not auto-deploy here
+## A green Synced badge can hide an undeployed change
 
-Periodic reconciliation is broken upstream in this setup; pushing a commit is not deploying it.
-Irrelevant to probing, relevant the moment a probe result leads to a manifest change: the change
-needs a manual Sync, and values-only commits need a hard refresh before the Synced badge means
-anything.
+Irrelevant to probing, relevant the moment a probe result leads to a manifest change. Most apps
+deploy a push within ~3 min, but values-only commits hit a stale multi-source cache and read
+`Synced` while serving the old values — hard refresh before the badge means anything. The
+network-policies Applications are manual-sync and deploy nothing until synced.
 
 ## The redirect from `qr-manager-api /<slug>` points at user data
 

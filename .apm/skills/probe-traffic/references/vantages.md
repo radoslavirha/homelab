@@ -28,7 +28,7 @@ curl -sS -o /dev/null \
   -H "X-Probe-Run: $RUN_ID" \
   -H "traceparent: 00-${TRACE_ID}-${SPAN_ID}-01" \
   -A "homelab-probe/$RUN_ID" \
-  "http://api.server2.home/iot/interactive-map-feeder/data-sources/list?probe=$RUN_ID"
+  "https://api.server1.homelab.irha.cz/iot/interactive-map-feeder/data-sources/list?probe=$RUN_ID"
 ```
 
 Keep the trailing `?probe=$RUN_ID` — it lands in the Traefik `RequestPath` field, which makes
@@ -40,7 +40,7 @@ the run greppable in Loki even if header propagation ever regresses.
 for i in $(seq 1 20); do
   curl -sS -o /dev/null -w '%{http_code} ' \
     -H "X-Probe-Run: $RUN_ID" -H "traceparent: 00-${TRACE_ID}-$(head -c8 /dev/urandom | xxd -p)-01" \
-    "http://api.server2.home/iot/interactive-map-feeder/data-sources/list?probe=$RUN_ID"
+    "https://api.server1.homelab.irha.cz/iot/interactive-map-feeder/data-sources/list?probe=$RUN_ID"
 done; echo
 ```
 
@@ -52,12 +52,12 @@ watched at the same time:
 
 ```bash
 for i in $(seq 1 60); do
-  curl -sS -o /dev/null -H "X-Probe-Run: $RUN_ID" "http://api.server2.home/iot/interactive-map-feeder/data-sources/list?probe=$RUN_ID"
+  curl -sS -o /dev/null -H "X-Probe-Run: $RUN_ID" "https://api.server1.homelab.irha.cz/iot/interactive-map-feeder/data-sources/list?probe=$RUN_ID"
   sleep 2
 done
 ```
 
-Fails when: the laptop is off the LAN, `*.server?.home` does not resolve (ExternalDNS or the
+Fails when: the laptop is off the LAN, `*.server?.homelab.irha.cz` does not resolve (ExternalDNS or the
 Unifi record is the suspect — check `dns=` in the `-w` output), or Traefik is down. `dns=` and
 `connect=` in the timing output separate those three cases without any cluster access.
 

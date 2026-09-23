@@ -79,10 +79,10 @@ V1 URL and the V2 port-forward URL differ for the same request.
 Worked examples:
 
 ```
-production  server2  http://api.server2.home/iot/interactive-map-feeder/data-sources/list
-sandbox     server2  http://api.sandbox.server2.home/iot/interactive-map-feeder/data-sources/list
-production  server1  http://api.server1.home/iot/qr-manager/<slug>
-production  server2  http://apps.server2.home/qr-manager/
+production  server1  https://api.server1.homelab.irha.cz/iot/interactive-map-feeder/data-sources/list
+sandbox     server1  https://api.sandbox.server1.homelab.irha.cz/iot/interactive-map-feeder/data-sources/list
+production  server1  https://api.server1.homelab.irha.cz/iot/qr-manager/<slug>
+production  server1  https://apps.server1.homelab.irha.cz/qr-manager/
 ```
 
 Do not hand-assemble a URL that a run depends on without confirming against the values files —
@@ -102,8 +102,8 @@ Do not hand-assemble a URL that a run depends on without confirming against the 
 | Loxone (LAN) | `192.168.1.140:50450` UDP | same form |
 | CHMI (internet) | `opendata.chmi.cz:443`, `produkty.chmi.cz:443` | `curl -sS -o /dev/null -w '%{http_code}'` |
 | miot-spec (internet) | `miot-spec.org:443` | same |
-| OpenBao (server3) | `vault.server3.home:80` | plain HTTP, from server1/server2 via ExternalSecrets |
-| Cross-cluster OTLP | `192.168.1.202:4317` / `otel.server3.home` | belongs to the `monitoring` namespace, **not** to app pods |
+| OpenBao (server3) | `vault.server3.homelab.irha.cz:443` | HTTPS, from server1/server2 via ExternalSecrets |
+| Cross-cluster OTLP | `192.168.1.202:4317` / `otel.server3.homelab.irha.cz` | belongs to the `monitoring` namespace, **not** to app pods |
 
 UDP probes prove that **egress was permitted**, never that anything received the packet. There
 is no response to observe. For UDP, the lens must be Hubble, not the response.

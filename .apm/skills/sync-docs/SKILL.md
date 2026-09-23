@@ -1,6 +1,6 @@
 ---
 name: sync-docs
-description: "Update and sync all repository documentation after any change. Use when: adding a cluster, adding an app, changing a version, adding a Terraform module, changing directory structure, modifying a bootstrap sequence, after terraform apply, after ArgoCD manifest changes, updating helm values, renaming resources, changing machine specs, adding stages, or any other repository change that may make docs stale. Keeps README.md, AGENTS.md, docs/architecture.md, and docs/iac.md perfectly in sync with the actual codebase."
+description: "Update repository documentation after a change that could make it stale. Use after any change to what exists (clusters, apps, Terraform modules or stages, directories), where versions live, how things are bootstrapped or operated, or machine specs. Keeps README.md, AGENTS.md, docs/architecture.md, docs/iac.md and docs/provisioning.md in sync with the codebase."
 argument-hint: "Describe what changed, e.g. 'added server4 cluster' or 'bumped Cilium to 1.17'"
 ---
 

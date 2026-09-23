@@ -202,7 +202,7 @@ gitops/
       household/   Mealie (AppSet, server1), OpenWebUI (AppSet, server1), Ollama (AppSet,
                    server2) — third-party household apps. Raw manifests, no chart and no
                    targetRevision: the version is the image tag in the Deployment, which the
-                   `kubernetes` manager in renovate.json5 now watches
+                   `kubernetes` manager in renovate.json5 watches
       network-policies/ NetworkPolicies (AppSet, cluster × env) — MANUAL sync, deliberately
     server3/
       apps/
@@ -313,7 +313,7 @@ All other apps use the **app-of-apps + ApplicationSet** pattern: **nine stages u
 - **dashboards** stage: Headlamp, Hubble UI, Longhorn UI (all clusters); `server3/apps/dashboards/` adds the OpenBao HTTPRoute and homelab-dashboard-ui
 - **identity** stage: Authentik + the authentik-blueprints chart — `server3/apps/identity/`, **server3 only**
 - **apps** stage: custom apps — miot-bridge-api, interactive-map-feeder-api, qr-manager-api, qr-manager-ui, per-namespace OTel collectors — **server1 only**
-- **household** stage: third-party household apps — Mealie and Open WebUI on server1, Ollama on server2; agent tool servers next. **Not server1-only any more** (Ollama made it multi-cluster on 2026-09-20). Kept out of the `apps` stage because that one is exclusively our own apps rendered by the in-repo `iot-applications` chart across production + sandbox; these are singletons with raw manifests
+- **household** stage: third-party household apps — Mealie and Open WebUI on server1, Ollama on server2; agent tool servers next. Multi-cluster. Kept out of the `apps` stage because that one is exclusively our own apps rendered by the in-repo `iot-applications` chart across production + sandbox; these are singletons with raw manifests
 
 Bootstrap is **two manual kubectl applies** on server3:
 
@@ -354,7 +354,7 @@ For custom apps deployed via the `apps` stage, a third layer is used:
 
 Raw Kubernetes manifests live in `gitops/k8s-manifests/<cluster>/<app>/`.
 
-## Version sync rules — MUST follow
+## Version sync rules
 
 When changing any component version:
 1. Update the version in the relevant `iac/clusters/<cluster>/<stage>/main.tf` or Application CRD (`targetRevision`)
@@ -394,9 +394,8 @@ refreshing, know what is sitting unsynced: `git log` since the revision the apps
 
 An updated `talos_version` sitting merged in git is not installed, and only `terraform plan` will
 tell you. The same applies to `cilium_version`, `longhorn_version`, `openbao_version` and
-`gateway_api_version`. This exact drift was found live on 2026-09-05: Terraform claimed Gateway API
-`1.2.1` while all three clusters ran `1.4.0`. (Both figures are that day's state — the fleet is on
-`1.6.2` as of 2026-09-13 and the pin matches.)
+`gateway_api_version`. This exact drift has been found live: Terraform claiming one Gateway API
+version while all three clusters ran a newer one.
 
 **`talos_version` is worse than the others: even `terraform apply` does not install it.** The
 variable feeds exactly one place, `machine.install.image`, which the *installer* reads at install
@@ -414,7 +413,7 @@ and the PKI generation contract can no longer move together; it is additionally 
 `ignore_changes`.
 
 **Machine-config applies never reboot a node.** Both `talos_machine_configuration_apply` resources set
-`apply_mode = "staged_if_needing_reboot"` (it was unset, i.e. `auto`, before 2026-09-17). A change that
+`apply_mode = "staged_if_needing_reboot"`. A change that
 needs a reboot is staged for the next one instead — so after an apply, check the node before believing
 the change is live. On server3 an unplanned reboot reseals OpenBao.
 
@@ -604,7 +603,7 @@ rm -rf / any deletion of credentials
 
 ## Adding a new ArgoCD app
 
-**For apps from `radoslavirha/homelab-apps`** (renamed from `iot-miniservers` 2026-09-14): use its `onboard-to-homelab` skill (`.apm/skills/onboard-to-homelab/`) instead of manually creating files. The skill generates all files below and opens a PR. After merge, seed OpenBao secrets listed in the PR TODO section before first ArgoCD sync. 
+**For apps from `radoslavirha/homelab-apps`**: use its `onboard-to-homelab` skill (`.apm/skills/onboard-to-homelab/`) instead of manually creating files. The skill generates all files below and opens a PR. After merge, seed OpenBao secrets listed in the PR TODO section before first ArgoCD sync. 
 
 For other apps (manual):
 1. Create `gitops/argocd-manifests/apps/<stage>/<Name>.yaml` — copy an existing ApplicationSet as template. The list generator already targets all registered clusters.
@@ -628,8 +627,7 @@ the UI. Edit the matrix only:
    to check it renders before pushing.
 4. Hard Refresh + Sync `authentik-server3` in ArgoCD, then wait. **Authentik applies blueprints on a
    cron — `blueprints_discovery` at `57 * * * *` — and only when the file hash changes**, so the wait
-   is up to an hour, not the "~15 minutes" this used to claim (there is no discovery *timer*; that was
-   wrong). Two further traps: the kubelet takes up to a minute to propagate the ConfigMap into the
+   is up to an hour. Two further traps: the kubelet takes up to a minute to propagate the ConfigMap into the
    worker's volume, so a discovery firing immediately after the sync can hash the OLD file and do
    nothing (seen 2026-09-17); and the import is one transaction, so nothing appears until it commits
    (~4-6 min for this matrix). Force a run with

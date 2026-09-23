@@ -190,8 +190,8 @@ influx query 'from(bucket:"<bucket>") |> range(start:-5m) |> limit(n:5)' \
 
 There is no MQTT client in the probe image, so EMQX delivery cannot be verified from a probe
 pod — only TCP reachability to `:1883`. To check MQTT end to end, use the EMQX dashboard
-(`emqx.<cluster>.home`) or subscribe from the laptop against the Traefik TCP entrypoint
-(`192.168.1.201:1883` on server2).
+(`mqtt.server1.homelab.irha.cz`) or subscribe from the laptop against the Traefik TCP entrypoint
+(`192.168.1.200:1883` on server1).
 
 Credentials live in OpenBao and reach the clusters as ExternalSecrets. Read them from a running
 pod's environment or from OpenBao with `bao` — never hardcode, never echo into run output.

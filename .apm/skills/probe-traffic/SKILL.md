@@ -43,7 +43,7 @@ One sentence, before touching anything. It selects the vantage and the lens. "Do
 
 | | Mechanism | Use when isolating |
 |---|---|---|
-| **V1 laptop** | `curl` to `http://<host>.<cluster>.home/...` | the full path: DNS → Traefik → HTTPRoute → Service → pod |
+| **V1 laptop** | `curl` to `https://<component>.[sandbox.]<cluster>.homelab.irha.cz/...` | the full path: DNS → Traefik → HTTPRoute → Service → pod |
 | **V2 port-forward** | `kubectl port-forward` to Service or pod | the app alone, with Traefik removed from the picture |
 | **V3 in-pod** | `kubectl debug --target` into the app pod | **egress as the app** — DNS, Mongo, EMQX, LAN UDP, internet. The only correct vantage for NetworkPolicy work |
 | **V4 standalone pod** | `kubectl run --rm` with chosen labels | negative tests — what a pod that *should not* reach X can actually reach |
@@ -86,8 +86,8 @@ Report what was observed, per signal, including misses. A miss is a finding, not
 
 ```
 Run:     <RUN_ID>   trace <TRACE_ID>
-Vantage: V1 laptop → api.server2.home
-Target:  GET /iot/interactive-map-feeder/data-sources/list  (production, server2)
+Vantage: V1 laptop → api.server1.homelab.irha.cz
+Target:  GET /iot/interactive-map-feeder/data-sources/list  (production, server1)
 Shape:   single
 
 response    PASS  200 in 37ms

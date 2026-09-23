@@ -6,7 +6,7 @@ argument-hint: "What needs to reach what, e.g. 'qr-manager-api needs redis.iot:6
 
 # network-egress
 
-`production` and `sandbox` on server1 and server2 are default-deny. This skill changes the
+`production` and `sandbox` on server1 are default-deny. This skill changes the
 allowlist without turning a config edit into an outage.
 
 Reference for what is allowed today: [`docs/network-egress.md`](../../../docs/network-egress.md).
@@ -14,11 +14,10 @@ Policies: `gitops/k8s-manifests/<cluster>/network-policies/<namespace>/`.
 
 ## Two facts that decide everything
 
-**1. The clusters' policy sets are byte-identical.** `diff -r` between
-`server1/network-policies` and `server2/network-policies` is empty and must stay empty. Current
-behaviour differs between the clusters only until someone registers a device on server2 — so
-tailoring a rule to what one cluster happens to do today is how the other cluster ends up
-missing it. **Every edit is made twice.**
+**1. Both stages get the same rule.** Only server1 runs app namespaces. A rule written for
+what one stage happens to do today is how the other ends up missing it, so `sandbox` and
+`production` change together. If a second cluster ever runs apps again, its
+`network-policies/` must be a byte-identical copy of server1's.
 
 **2. A green apply proves nothing.** Cilium tracks connections in conntrack, so established
 connections survive a policy change. A broken policy looks completely fine at apply time and
@@ -62,14 +61,9 @@ kubectl --context admin@server1 -n <ns> get pods -l <your-selector> --show-label
 
 An empty result means the rule will silently match nothing.
 
-### 3. Edit, then mirror
+### 3. Edit both stages
 
-Make the change under `server1/`, copy the file to `server2/`, and prove they still match:
-
-```bash
-diff -r gitops/k8s-manifests/server1/network-policies \
-        gitops/k8s-manifests/server2/network-policies && echo IDENTICAL
-```
+Make the change under `server1/network-policies/sandbox/` and `server1/network-policies/production/`.
 
 Say **why** in a comment in the file. These files are read during incidents by someone who did
 not write them; a rule whose reason is not written down gets deleted by the next person.
@@ -94,8 +88,8 @@ kubectl --context admin@server3 -n argocd patch app network-policies-server1-san
   --type merge -p '{"operation":{"sync":{"revision":"HEAD"}}}'
 ```
 
-ArgoCD does not reconcile on its own here. If the Application still shows `Synced` after a
-push, hard-refresh it first:
+Manual sync means a push deploys nothing until this runs. If the Application still shows
+`Synced` after a push, hard-refresh it first:
 
 ```bash
 kubectl --context admin@server3 -n argocd annotate app <app> \
@@ -120,7 +114,7 @@ kubectl --context admin@server1 -n kube-system exec ds/cilium -c cilium-agent --
   hubble observe --namespace sandbox --type policy-verdict --last 4000 | grep <destination>
 ```
 
-Only then repeat for `production`, and for the other cluster.
+Only then repeat for `production`.
 
 For end-to-end proof that a path works rather than merely being permitted, use the
 **`probe-traffic`** skill — V3 (in-pod) is the correct vantage for egress, because it inherits
@@ -139,7 +133,7 @@ For full un-restriction also delete `allow-dns-egress` — `podSelector: {}` mak
 
 ## Do not
 
-- **Do not edit one cluster only.** The next incident will be on the other one.
+- **Do not edit one stage only.** The next incident will be in the other one.
 - **Do not widen `allow-egress-internet` to all ports** to make a single dependency work. The
   port restriction is the remaining value in that rule; add the one port.
 - **Do not use `ipBlock` for in-cluster or node traffic.** Pod IPs churn, and CIDR selectors do
