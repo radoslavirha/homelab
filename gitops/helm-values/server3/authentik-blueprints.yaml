@@ -313,7 +313,7 @@ applications:
     logoutPath: /login?direct=1
     # Confidential, like openbao and unlike grafana/headlamp. Not a preference:
     # Mealie's OIDC_FEATURE property (mealie/core/settings/settings.py, read at the
-    # v3.27.0 tag) requires OIDC_CLIENT_ID, OIDC_CLIENT_SECRET, OIDC_CONFIGURATION_URL
+    # v3.28.0 tag) requires OIDC_CLIENT_ID, OIDC_CLIENT_SECRET, OIDC_CONFIGURATION_URL
     # and OIDC_USER_CLAIM to all be non-None, and disables OIDC with "Missing required
     # values for [...]" otherwise. There is no PKCE-only mode.
     #

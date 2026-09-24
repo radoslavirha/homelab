@@ -590,7 +590,7 @@ Authentik side is the `mealie` entry in the matrix; the Mealie side is env on it
 ([`gitops/k8s-manifests/server1/mealie/Deployment.yaml`](../gitops/k8s-manifests/server1/mealie/Deployment.yaml)).
 
 **Why confidential.** Mealie's `OIDC_FEATURE` property (`mealie/core/settings/settings.py`, read at the
-`v3.27.0` tag) requires `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, `OIDC_CONFIGURATION_URL` and
+`v3.87.0` tag) requires `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, `OIDC_CONFIGURATION_URL` and
 `OIDC_USER_CLAIM` to all be non-`None`, and otherwise disables OIDC with "Missing required values for
 […]". There is no PKCE-only mode, so this is the second `api` entry with `confidential: true`. Unlike
 OpenBao, the secret has a Kubernetes consumer, so it goes KV → ExternalSecret → env.
