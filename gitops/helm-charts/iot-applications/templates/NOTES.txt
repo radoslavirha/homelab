@@ -1,6 +1,0 @@
-{{- range $applicationName, $application := .Values.apps | default dict -}}
-{{- if $application.ingress.enabled }}
-Visit {{ $applicationName }} at the following URL:
-  https://{{ include "iot-applications.hostname" (dict "application" $application "applicationName" $applicationName "root" $) }}/{{ include "iot-applications.pathName" (dict "application" $application "applicationName" $applicationName) }}
-{{ end }}
-{{ end }}
