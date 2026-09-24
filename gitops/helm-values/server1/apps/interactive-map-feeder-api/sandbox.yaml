@@ -1,5 +1,6 @@
 # interactive-map-feeder-api — sandbox overrides
-# VAR_CLUSTER, VAR_PUBLIC_DOMAIN and VAR_SUBDOMAIN come from the ApplicationSet generator; shared VAR_* are in apps/values.yaml
+# Template variables: .vars.* from ../vars/common.yaml + ../vars/sandbox.yaml, chart built-ins
+# .app.* (name, group, component, pathName, containerPort, namespace, host).
 #
 # Probes, lifecycle and strategy live in base.yaml — they were staged here first and
 # promoted once a sandbox rollout had been watched.
@@ -12,11 +13,11 @@ apps:
       config:
         content: |
           {
-              "serviceName": "{{ APPLICATION }}",
+              "serviceName": "{{ .app.name }}",
               "server": {
-                  "httpPort": {{ CONTAINER_PORT }}
+                  "httpPort": {{ .app.containerPort }}
               },
-              "publicURL": "{{ VAR_PROTOCOL }}://{{ COMPONENT }}.{{ VAR_SUBDOMAIN }}.{{ VAR_PUBLIC_DOMAIN }}/{{ PATH_NAME }}",
+              "publicURL": "{{ .vars.protocol }}://{{ .app.host }}/{{ .app.pathName }}",
               "externalApis": {
                   "CHMI_PORTAL": {
                       "baseURL": "https://produkty.chmi.cz",
@@ -61,18 +62,18 @@ apps:
                       "trustedIssuers": [
                           {
                               "name": "idp",
-                              "issuer": "https://auth.irha.cz/application/o/interactive-map-feeder-{{ VAR_CLUSTER }}-{{ NAMESPACE }}/",
-                              "audience": "interactive-map-feeder-{{ VAR_CLUSTER }}-{{ NAMESPACE }}",
+                              "issuer": "https://auth.irha.cz/application/o/interactive-map-feeder-{{ .vars.cluster }}-{{ .app.namespace }}/",
+                              "audience": "interactive-map-feeder-{{ .vars.cluster }}-{{ .app.namespace }}",
                               "subjectKind": "human",
                               "key": {
                                   "source": "jwks",
-                                  "uri": "https://auth.irha.cz/application/o/interactive-map-feeder-{{ VAR_CLUSTER }}-{{ NAMESPACE }}/jwks/"
+                                  "uri": "https://auth.irha.cz/application/o/interactive-map-feeder-{{ .vars.cluster }}-{{ .app.namespace }}/jwks/"
                               }
                           },
                           {
                               "name": "postman",
                               "issuer": "https://auth.irha.cz/application/o/postman/",
-                              "audience": "interactive-map-feeder-{{ VAR_CLUSTER }}-{{ NAMESPACE }}",
+                              "audience": "interactive-map-feeder-{{ .vars.cluster }}-{{ .app.namespace }}",
                               "subjectKind": "human",
                               "key": {
                                   "source": "jwks",

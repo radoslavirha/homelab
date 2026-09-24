@@ -1,4 +1,6 @@
 # qr-manager-ui — sandbox overrides
+# Template variables: .vars.* from ../vars/common.yaml + ../vars/sandbox.yaml, chart built-ins
+# .app.* (name, group, component, pathName, containerPort, namespace, host).
 #
 # Probes, lifecycle, strategy and templates.config.validate live in base.yaml — they were
 # staged here first and promoted once a sandbox rollout had been watched.
@@ -17,23 +19,22 @@ apps:
         #
         # The auth design doc says "spelled out, never derived", and that rule stands:
         # it forbids deriving the redirect URI from window.location IN THE BROWSER,
-        # where it can disagree with what the IdP registered. This is deploy-time Jinja
-        # over the same VAR_* that produce the HTTPRoute hostname, so the redirect URI
-        # cannot drift from the host the app is actually served on. apiBaseURL directly
-        # above already works this way.
+        # where it can disagree with what the IdP registered. This is deploy-time templating:
+        # .app.host is the hostname the chart gives this app's HTTPRoute, so the redirect
+        # URI cannot drift from the host the app is actually served on.
         #
-        # NAMESPACE is the release namespace, which is the stage. VAR_CLUSTER is set by
-        # the ApplicationSet generator (helm.parameters). Renders to:
+        # .app.namespace is the release namespace, which is the stage; .vars.cluster is in
+        # ../vars/sandbox.yaml. Renders to:
         #   qr-manager-server1-sandbox @ apps.sandbox.server1.homelab.irha.cz
         content: |
           {
-              "apiBaseURL": "{{ VAR_PROTOCOL }}://api.{{ VAR_SUBDOMAIN }}.{{ VAR_PUBLIC_DOMAIN }}/iot/qr-manager",
+              "apiBaseURL": "{{ .vars.protocol }}://api.{{ .vars.domain }}/iot/qr-manager",
               "basePath": "/qr-manager",
               "auth": {
-                  "issuer": "https://auth.irha.cz/application/o/qr-manager-{{ VAR_CLUSTER }}-{{ NAMESPACE }}/",
-                  "clientId": "qr-manager-{{ VAR_CLUSTER }}-{{ NAMESPACE }}",
+                  "issuer": "https://auth.irha.cz/application/o/qr-manager-{{ .vars.cluster }}-{{ .app.namespace }}/",
+                  "clientId": "qr-manager-{{ .vars.cluster }}-{{ .app.namespace }}",
                   "scope": "openid profile email roles",
-                  "redirectUri": "{{ VAR_PROTOCOL }}://{{ COMPONENT }}.{{ VAR_SUBDOMAIN }}.{{ VAR_PUBLIC_DOMAIN }}/{{ PATH_NAME }}/callback",
-                  "postLogoutRedirectUri": "{{ VAR_PROTOCOL }}://{{ COMPONENT }}.{{ VAR_SUBDOMAIN }}.{{ VAR_PUBLIC_DOMAIN }}/{{ PATH_NAME }}/"
+                  "redirectUri": "{{ .vars.protocol }}://{{ .app.host }}/{{ .app.pathName }}/callback",
+                  "postLogoutRedirectUri": "{{ .vars.protocol }}://{{ .app.host }}/{{ .app.pathName }}/"
               }
           }

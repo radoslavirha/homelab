@@ -398,7 +398,7 @@ bao kv list secret/otel-gateway   # once, not per cluster
 
 ## Picking up a rotated secret
 
-A running pod never sees a changed Secret: env vars are frozen at container start, and the Jinja2 init container renders its config file once. [Stakater Reloader](https://github.com/stakater/Reloader) closes that gap — it watches ConfigMaps/Secrets and rolls the workloads that reference them.
+A running pod never sees a changed Secret: env vars are frozen at container start, and the apps read their ESO-rendered config file once, at boot. [Stakater Reloader](https://github.com/stakater/Reloader) closes that gap — it watches ConfigMaps/Secrets and rolls the workloads that reference them.
 
 **Opt-in.** Only workloads carrying `reloader.stakater.com/auto: "true"` on their *workload* metadata are restarted:
 

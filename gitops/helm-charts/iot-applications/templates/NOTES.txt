@@ -1,7 +1,6 @@
 {{- range $applicationName, $application := .Values.apps | default dict -}}
 {{- if $application.ingress.enabled }}
-{{- $ctx := dict "application" $application "name" $applicationName "release" $.Release "chart" $.Chart -}}
 Visit {{ $applicationName }} at the following URL:
-  http(s)://{{ $application.labels.component }}.{{ include "iot-applications.subdomain" $.Values.VAR_SUBDOMAIN }}{{ $.Values.VAR_PUBLIC_DOMAIN }}/{{ $application.labels.partOf }}/{{ $applicationName }}
+  https://{{ include "iot-applications.hostname" (dict "application" $application "applicationName" $applicationName "root" $) }}/{{ include "iot-applications.pathName" (dict "application" $application "applicationName" $applicationName) }}
 {{ end }}
 {{ end }}

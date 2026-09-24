@@ -3,8 +3,8 @@
 
 apps:
   qr-manager-api:
-    # Restart on change of the MongoDB ExternalSecret (envFrom) and of the
-    # generated config ConfigMap. Both are read once, at pod start.
+    # Restart when the ESO-rendered config Secret changes — a vars edit or a credential
+    # rotated in OpenBao. The file is read once, at pod start.
     annotations:
       reloader.stakater.com/auto: "true"
     image:
@@ -31,11 +31,10 @@ apps:
     # and kubelet ranks it last among Burstable pods for eviction (usage can never exceed
     # requests — it OOMKills first).
     #
-    # This is NOT the Guaranteed QoS class, and cannot be while the chart renders
-    # initContainers with no resources at all: Guaranteed requires requests == limits for
-    # BOTH cpu and memory on EVERY container, initContainers included. The jinja2 config
-    # renderer has none, and CPU is unequal here by the decision below. Getting Guaranteed
-    # would mean a chart change plus giving up the CPU headroom — measured as not worth it.
+    # This is NOT the Guaranteed QoS class, only because CPU is unequal by the decision
+    # below: Guaranteed requires requests == limits for BOTH cpu and memory on every
+    # container. The config renderer is no longer an initContainer (ESO renders it), so
+    # nothing else stands in the way — measured as not worth giving up the CPU headroom.
     #
     # The 500Mi ceiling
     # stays: measured peak working set over 7 days was 273Mi
@@ -89,12 +88,6 @@ apps:
       enabled: true
       serviceRef: http
       pathName: iot/qr-manager
-    secretRefs:
-      - name: qr-manager-api-mongodb-credentials
-        keys:
-          - SECRET_MONGODB_DATABASE
-          - SECRET_MONGODB_USERNAME
-          - SECRET_MONGODB_PASSWORD
     # Boot budget: 5s × 24 = 120s. Liveness and readiness stay suppressed until this passes,
     # which is the modern replacement for initialDelaySeconds guesswork.
     startupProbe:

@@ -120,7 +120,7 @@ apps:
         path: /usr/share/nginx/html/config.json
         subPath: config.json
         # nginx cannot check the config it serves, so the chart runs the app's own Zod
-        # schema in an initContainer. An empty {{ VAR_* }} substitution is valid JSON and
+        # schema in an initContainer. An empty {{ .vars.* }} value renders as valid JSON and
         # would otherwise boot a Ready pod serving a blank page.
         # Validator image: ghcr.io/radoslavirha/qr-manager-ui-config-validator:<image.tag>
         validate: true

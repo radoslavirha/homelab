@@ -88,7 +88,7 @@
 #         drop: [ALL]
 
 #     labels:
-#       # labels.component is used as the component label and ingress subdomain (required).
+#       # labels.component is used as the component label and the first hostname label (required).
 #       component: api
 #       # labels.partOf is used as the base path for ingress (/partOf/application) (required).
 #       partOf: iot
@@ -120,7 +120,7 @@
 #       # ingress.serviceRef is the key from the services map to use as the HTTPRoute backend.
 #       # Required when ingress.enabled is true.
 #       serviceRef: http
-#       # ingress.hostname overrides the computed hostname ({subdomain}{component}.{domain}).
+#       # ingress.hostname overrides the computed hostname (<component>.<vars.domain>).
 #       # Use for apps that require a custom domain not following the standard pattern.
 #       # Example: dashboard.server3.homelab.irha.cz
 #       hostname: ""
@@ -140,13 +140,14 @@
 #       # Required when udpIngress.enabled is true. Must match ports in Traefik helm values.
 #       entrypoint: udp-miot-bridge
 
-#     # templates is a map of Jinja2 templates to mount into the container via initContainer.
-#     # Config content lives in env-specific values files as multiline strings.
-#     # The rendered file is produced ONCE at pod start, so pods must be restarted to pick
-#     # up a changed ConfigMap or Secret. Set annotations.reloader.stakater.com/auto (below)
-#     # to have Stakater Reloader do it automatically.
+#     # templates is a map of config files rendered by External Secrets Operator (ESO) into a
+#     # Secret each, which the main container mounts. Content lives in env-specific values
+#     # files as multiline strings. ESO re-renders when the content, a vars value or a secret in
+#     # OpenBao changes; set annotations.reloader.stakater.com/auto (below) so Reloader
+#     # restarts the pods — the file is read once, at pod start.
 #     templates:
-#       # Each key is the template name. Generates one ConfigMap + initContainer.
+#       # Each key is the template name. Generates one ExternalSecret -> Secret
+#       # <identifier>-tpl-<name>, plus a UUID generator when the template has no secrets.
 #       config:
 #         # templates.config.file is the destination file name inside the container (required).
 #         file: production.json
@@ -154,15 +155,28 @@
 #         # For directory mounts (APIs): path: /home/app/config  → file lands at path/file
 #         # For single-file mounts (UIs): path: /usr/share/nginx/html/config.json + subPath: config.json
 #         path: /home/app/config
-#         # templates.config.subPath mounts only this file from the emptyDir instead of the whole directory.
+#         # templates.config.subPath mounts only this file from the Secret instead of the whole directory.
 #         # Use for UIs where the app's serving root must not be shadowed by the volume mount.
 #         # subPath: config.json
-#         # templates.config.content is the raw Jinja2 template content (required, defined in env-specific values files).
-#         # Injected variables: APPLICATION, COMPONENT, APPLICATION_GROUP, CONTAINER_PORT,
-#         # CONTAINER_UDP_PORT (when udpIngress is set), NAMESPACE, and any VAR_* / SECRET_* values.
+#         # templates.config.secrets maps a name to an OpenBao entry, read through
+#         # configRender.secretStore. Optional; omit it for a template without credentials.
+#         secrets:
+#           mongodbPassword:
+#             key: <cluster>/<env>/my-app-mongodb
+#             property: mongodb-password
+#         # templates.config.content is an ESO (Go text/template + Sprig) template (required,
+#         # defined in env-specific values files). It reads three maps:
+#         #   .vars.*     the top-level `vars` map, whole
+#         #   .secrets.*  the keys of templates.config.secrets
+#         #   .app.*      built-ins: name, group (labels.partOf), component, namespace,
+#         #               containerPort (ingress.serviceRef's targetPort), pathName, and
+#         #               host — the HTTPRoute hostname, only when ingress is enabled
+#         # A missing key fails the ExternalSecret and leaves the previous Secret — and the
+#         # running pods — untouched. Pipe a secret through toJson when it may contain
+#         # quotes or backslashes: "pass": {{ .secrets.mongodbPassword | toJson }}
 #         content: |
 #           {
-#             "key": "{{ VAR_EXAMPLE }}"
+#             "url": "{{ .vars.protocol }}://{{ .app.host }}/{{ .app.pathName }}"
 #           }
 #         # templates.config.validate generates a second initContainer that checks the RENDERED
 #         # config before the main container starts. Opt-in, and only for apps that cannot
@@ -174,8 +188,8 @@
 #         #
 #         # The image defaults to <image.repository>-config-validator:<image.tag>, so the
 #         # existing deploy.json tag bump moves the app and its validator together.
-#         # The validator reads /config/<file> from the same emptyDir jinja-init wrote to,
-#         # so templates.config.path and .subPath do not affect it.
+#         # The validator mounts the rendered Secret at /config itself, so
+#         # templates.config.path and .subPath do not affect it.
 #         validate: true
 #         # Map form, for when the derived image is not the right one:
 #         # validate:
@@ -198,8 +212,8 @@
 
 #     # annotations is a map of annotations added to the WORKLOAD metadata
 #     # (Deployment / Rollout) — not the pod template. This is where Stakater
-#     # Reloader looks. Set it on every app that mounts a templates ConfigMap or
-#     # consumes secretRefs, otherwise nothing restarts when either one changes.
+#     # Reloader looks. Set it on every app that has templates or consumes
+#     # secretRefs, otherwise nothing restarts when either one changes.
 #     annotations:
 #       reloader.stakater.com/auto: "true"
 
@@ -286,11 +300,9 @@
 #     # affinity is the affinity rules for pod scheduling.
 #     affinity: {}
 
-#     # secretRefs is a list of Kubernetes Secret names whose keys are injected into:
-#     #   - the Jinja2 init container as JINJA_VAR_{key} env vars (for config file rendering)
-#     #   - the main application container directly (for runtime access)
-#     # Secret keys must follow the SECRET_* naming convention (e.g. SECRET_MQTT_MIOT_BRIDGE_USERNAME).
-#     # Use secretRefs[].keys to explicitly declare which keys from the Secret are injected.
+#     # secretRefs is a list of Kubernetes Secrets injected into the main container as env
+#     # vars (envFrom), for an app that reads a credential from its environment at runtime.
+#     # Config files do NOT use this — they take templates.config.secrets.
 #     secretRefs:
 #       - name: miot-bridge-mqtt-credentials
 #         keys:
@@ -335,3 +347,17 @@
 #         prePromotionAnalysis: {}
 #         # blueGreen.postPromotionAnalysis is an optional AnalysisTemplate run after promotion.
 #         postPromotionAnalysis: {}
+# vars is read by config templates as {{ .vars.<name> }}; the chart passes it whole and
+# never lists its keys. vars.domain is the stage's base domain: every HTTPRoute hostname
+# is <labels.component>.<vars.domain> unless ingress.hostname overrides it.
+vars: {}
+
+# configRender configures how ESO renders apps[].templates into Secrets.
+configRender:
+  # secretStore is where a template's `secrets` are read from.
+  secretStore:
+    name: openbao
+    kind: ClusterSecretStore
+  # refreshInterval bounds how long a secret rotated in OpenBao takes to reach the
+  # rendered file (and, through Reloader, the pods). Templates without secrets ignore it.
+  refreshInterval: 1h

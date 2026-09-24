@@ -84,7 +84,7 @@ tests:
           path: spec.template.spec.containers[0].startupProbe.httpGet.path
           value: /health/live
 
-  - it: should render the validator initContainer after the jinja2 one
+  - it: should render the validator as the only initContainer
     set:
       apps.my-app.image.repository: ghcr.io/example/my-app
       apps.my-app.image.tag: "1.2.3"
@@ -100,18 +100,15 @@ tests:
     asserts:
       - lengthEqual:
           path: spec.template.spec.initContainers
-          count: 2
+          count: 1
       - equal:
           path: spec.template.spec.initContainers[0].name
-          value: api-iot-my-app-config-jinja2
-      - equal:
-          path: spec.template.spec.initContainers[1].name
           value: api-iot-my-app-config-validate
       - equal:
-          path: spec.template.spec.initContainers[1].image
+          path: spec.template.spec.initContainers[0].image
           value: ghcr.io/example/my-app-config-validator:1.2.3
       - equal:
-          path: spec.template.spec.initContainers[1].args[0]
+          path: spec.template.spec.initContainers[0].args[0]
           value: /config/config.json
 
   - it: should NOT render a validator initContainer when validate is unset
@@ -126,9 +123,8 @@ tests:
       apps.my-app.templates.config.path: /app/config
       apps.my-app.templates.config.content: '{"key":"value"}'
     asserts:
-      - lengthEqual:
+      - isNull:
           path: spec.template.spec.initContainers
-          count: 1
 
   - it: should render the OTel resource annotations on the pod, workload annotations on the Rollout
     # Nested form: helm-unittest v1.x ignores backslash-escaped dots in `set` keys and sets
@@ -213,10 +209,7 @@ tests:
       - notExists:
           path: spec.template.spec.volumes
 
-  # An empty VAR_ must not become an env var: the apps ApplicationSets pass VAR_SUBDOMAIN=""
-  # for production, and emitting it would change the pod template and restart every
-  # production pod for no effect. A non-empty VAR_ must still come through.
-  - it: should skip empty VAR_ values and keep non-empty ones in the jinja2 initContainer
+  - it: should keep vars out of the pod template
     set:
       apps.my-app.image.repository: ghcr.io/example/my-app
       apps.my-app.labels.component: api
@@ -226,17 +219,8 @@ tests:
       apps.my-app.rollout.strategy: canary
       apps.my-app.templates.config.file: config.json
       apps.my-app.templates.config.path: /app/config
-      apps.my-app.templates.config.content: '{"key":"value"}'
-      VAR_KEEP: kept
-      VAR_EMPTY: ""
+      apps.my-app.templates.config.content: '{"key":"{{ .vars.keep }}"}'
+      vars.keep: kept
     asserts:
-      - contains:
-          path: spec.template.spec.initContainers[0].env
-          content:
-            name: JINJA_VAR_VAR_KEEP
-            value: kept
-      - notContains:
-          path: spec.template.spec.initContainers[0].env
-          content:
-            name: JINJA_VAR_VAR_EMPTY
-            value: ""
+      - notMatchRegexRaw:
+          pattern: vars|kept

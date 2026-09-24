@@ -1,8 +1,28 @@
-{{/* Returns the subdomain with a trailing dot if provided */}}
-{{- define "iot-applications.subdomain" -}}
-{{- if . -}}
-{{- printf "%s." . }}
+{{/* Returns the hostname the app's HTTPRoute serves: ingress.hostname when set, else
+     <component>.<vars.domain>. The one definition behind both the HTTPRoute and the
+     {{ .app.host }} template variable, so a config URL cannot drift from the route.
+     Input is dictionary with application: dictionary, applicationName: string, root: $
+*/}}
+{{- define "iot-applications.hostname" -}}
+{{- $ingress := .application.ingress | default dict -}}
+{{- if $ingress.hostname -}}
+{{- $ingress.hostname -}}
+{{- else -}}
+{{- $domain := (.root.Values.vars | default dict).domain -}}
+{{- if not $domain -}}
+{{- fail (printf "vars.domain is required to compute the hostname; set it or ingress.hostname. [apps.%s.ingress]." .applicationName) -}}
 {{- end -}}
+{{- printf "%s.%s" .application.labels.component $domain -}}
+{{- end -}}
+{{- end -}}
+
+{{/* Returns the HTTPRoute path prefix without its leading slash: ingress.pathName when the
+     key is present — "" included, which serves the app at the root — else the app name.
+     Input is dictionary with application: dictionary, applicationName: string
+*/}}
+{{- define "iot-applications.pathName" -}}
+{{- $ingress := .application.ingress | default dict -}}
+{{- ternary (toString $ingress.pathName) .applicationName (hasKey $ingress "pathName") -}}
 {{- end -}}
 
 {{/* Returns the provided tag or defaults to latest */}}
@@ -120,6 +140,141 @@
 {{- end -}}
 {{- end -}}
 {{- end -}}
+
+{{- /* secrets is optional: a map of name -> OpenBao reference, read in the template as
+       .secrets.<name>. */}}
+{{- if hasKey .template "secrets" -}}
+{{- if not (kindIs "map" .template.secrets) -}}
+{{- fail (printf "Template '%s' has an invalid secrets key. It must be a map of variable name to {key, property}. [apps.%s.templates]." .name .applicationName) -}}
+{{- end -}}
+{{- range $variable, $ref := .template.secrets -}}
+{{- if not (and (kindIs "map" $ref) $ref.key) -}}
+{{- fail (printf "Template '%s' secret '%s' must be a map with a key. [apps.%s.templates.%s.secrets]." $.name $variable $.applicationName $.name) -}}
+{{- end -}}
+{{- range $refKey, $_ := $ref -}}
+{{- if not (has $refKey (list "key" "property")) -}}
+{{- fail (printf "Template '%s' secret '%s' has an unknown key '%s'. Allowed keys are: key, property. [apps.%s.templates.%s.secrets]." $.name $variable $refKey $.applicationName $.name) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/* Returns, as JSON, everything a config template can read apart from its secrets:
+       .vars  the top-level `vars` map, whole — the chart never lists what is in it
+       .app   built-ins derived from the application definition, so a config cannot
+              drift from the Service and HTTPRoute the chart renders from the same fields
+     Input is dictionary with root: $, application: dictionary, applicationName: string
+*/}}
+{{- define "iot-applications.template.context" -}}
+{{- $application := .application -}}
+{{- $ingress := $application.ingress | default dict -}}
+{{- $mainService := get ($application.services | default dict) ($ingress.serviceRef | default "") | default dict -}}
+{{- $app := dict
+      "name" .applicationName
+      "group" $application.labels.partOf
+      "component" $application.labels.component
+      "namespace" .root.Release.Namespace
+      "containerPort" ($mainService.targetPort | default 80)
+      "pathName" (include "iot-applications.pathName" .) -}}
+{{- /* Only an app with a route has a host; a template reading .app.host without one
+       fails in ESO rather than rendering a URL nothing serves. */}}
+{{- if $ingress.enabled -}}
+{{- $_ := set $app "host" (include "iot-applications.hostname" .) -}}
+{{- end -}}
+{{- toJson (dict "vars" (.root.Values.vars | default dict) "app" $app) -}}
+{{- end -}}
+
+{{/* Returns the ExternalSecret template body for a config template: a prelude that
+     rebuilds .vars and .app from JSON and gathers the fetched secrets under .secrets,
+     then the content verbatim inside `with`.
+
+     ESO renders with missingkey=error: a typo fails the ExternalSecret and leaves the
+     previous Secret — and so the running pods — untouched.
+
+     The JSON is embedded as a double-quoted Go string (toJson twice), not a raw
+     backtick string, so a value containing a backtick cannot end it early.
+     Input is dictionary with root: $, application: dictionary, applicationName: string, template: dictionary
+*/}}
+{{- define "iot-applications.template.body" -}}
+{{- $context := include "iot-applications.template.context" . -}}
+{{- printf "{{- $context := %s | fromJson -}}\n" (toJson $context) -}}
+{{- print "{{- $secrets := dict }}{{ range $name, $value := . }}{{ $_ := set $secrets $name $value }}{{ end -}}\n" -}}
+{{- print "{{- $_ := set $context \"secrets\" $secrets -}}\n" -}}
+{{- print "{{- with $context -}}\n" -}}
+{{- .template.content -}}
+{{- print "\n{{- end }}" -}}
+{{- end -}}
+
+{{/* initContainers for config templates: one validator per template that asks for it.
+     Rendering happens in ESO, not in the pod, so a template without validate adds none.
+     Input is dictionary with ctx: dictionary, application: dictionary, applicationName: string
+*/}}
+{{- define "iot-applications.template.initContainers" -}}
+{{- $ctx := .ctx -}}
+{{- $application := .application -}}
+{{- range $templateName, $template := $application.templates | default dict }}
+{{- include "iot-applications.validators.template" (dict "name" $templateName "template" $template "applicationName" $.applicationName) }}
+{{- if $template.validate }}
+- name: {{ include "iot-applications.identifier" $ctx }}-{{ $templateName }}-validate
+  image: {{ include "iot-applications.template.validatorImage" (dict "application" $application "template" $template) }}
+  imagePullPolicy: {{ $application.image.pullPolicy | default "IfNotPresent" }}
+  args:
+    {{- /* Where this container mounts the rendered Secret. Not $template.path — that
+           is where the main container mounts it, which the validator never sees. */}}
+    - "/config/{{ $template.file }}"
+    {{- with (ternary dict $template.validate (kindIs "bool" $template.validate)).args }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  securityContext:
+    runAsNonRoot: true
+    {{- /* Defensive default, not a requirement. Both validator images declare
+           `USER 1000` since qr-manager-ui@0.7.1 / homelab-dashboard-ui@0.4.1 and
+           satisfy runAsNonRoot unaided — verified in-cluster with this securityContext
+           and no runAsUser. It is kept because the chart cannot know what an arbitrary
+           validate.repository override contains, and an image whose USER is a NAME
+           fails with CreateContainerConfigError "non-numeric user". Supplying a
+           known-good UID costs nothing; override via validate.runAsUser. */}}
+    runAsUser: {{ (ternary dict $template.validate (kindIs "bool" $template.validate)).runAsUser | default 1000 }}
+    readOnlyRootFilesystem: true
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: [ALL]
+    seccompProfile:
+      type: RuntimeDefault
+  volumeMounts:
+    - name: {{ include "iot-applications.identifier" $ctx }}-tpl-{{ $templateName }}
+      mountPath: /config
+      readOnly: true
+{{- end }}
+{{- end }}
+{{- end -}}
+
+{{/* Main-container volumeMounts for config templates.
+     Input is dictionary with ctx: dictionary, application: dictionary
+*/}}
+{{- define "iot-applications.template.volumeMounts" -}}
+{{- $ctx := .ctx -}}
+{{- range $templateName, $template := .application.templates | default dict }}
+- name: {{ include "iot-applications.identifier" $ctx }}-tpl-{{ $templateName }}
+  mountPath: {{ $template.path }}
+  {{- if $template.subPath }}
+  subPath: {{ $template.subPath }}
+  {{- end }}
+  readOnly: true
+{{- end }}
+{{- end -}}
+
+{{/* Pod volumes for config templates: the Secret ESO rendered each template into.
+     Input is dictionary with ctx: dictionary, application: dictionary
+*/}}
+{{- define "iot-applications.template.volumes" -}}
+{{- $ctx := .ctx -}}
+{{- range $templateName, $template := .application.templates | default dict }}
+- name: {{ include "iot-applications.identifier" $ctx }}-tpl-{{ $templateName }}
+  secret:
+    secretName: {{ include "iot-applications.identifier" $ctx }}-tpl-{{ $templateName }}
+{{- end }}
 {{- end -}}
 
 {{/* Returns the config validator image reference for a template.

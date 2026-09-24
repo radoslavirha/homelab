@@ -79,7 +79,9 @@ gitops/
                             bad model path, a rejected field, or an !Find that does not resolve.
     provisioner/            reusable PostSync provisioner Jobs chart (InfluxDB2, EMQX, MongoDB)
     iot-applications/       reusable chart for custom apps (Deployment/Rollout, Services, HTTPRoute,
-                            Jinja2 config ConfigMap). Per-app `annotations` land on the WORKLOAD
+                            config files rendered by ESO into a Secret — templates.<name>.content
+                            is Go template syntax reading .vars.*, .secrets.* (templates.<name>.secrets) and .app.* built-ins).
+                            Per-app `annotations` land on the WORKLOAD
                             metadata — set reloader.stakater.com/auto there; there is no
                             checksum/config, Reloader is the only restart mechanism.
                             `podAnnotations` land on the POD template — anything Alloy reads
@@ -119,8 +121,10 @@ gitops/
                             metadata — BOTH stage.json and stage.structured_metadata must live
                             there; the chart renders its own structuredMetadata: key earlier
     apps/
-      common/               values.yaml only — VAR_PROTOCOL, VAR_MQTT_URL, VAR_MONGODB_URL. Per-cluster/per-stage
-                            VARs (VAR_CLUSTER, VAR_PUBLIC_DOMAIN, VAR_SUBDOMAIN) are helm.parameters in the apps AppSets
+      vars/                 the `vars:` map config templates read as .vars.*: common.yaml (protocol,
+                            mqtt.url, mongodb.url) + production.yaml / sandbox.yaml (cluster, domain —
+                            the stage's base domain, which also builds every HTTPRoute hostname).
+                            Nothing comes from ApplicationSet parameters
       miot-bridge-api/  base.yaml, production.yaml, sandbox.yaml
       interactive-map-feeder-api/ base.yaml, production.yaml, sandbox.yaml
       qr-manager-api/   base.yaml, production.yaml, sandbox.yaml
@@ -349,8 +353,7 @@ Helm values use a two-layer approach:
 
 For custom apps deployed via the `apps` stage, a third layer is used:
 - **App-level values**: `gitops/helm-values/server1/apps/<app>/` — shared + env-specific (base.yaml, production.yaml, sandbox.yaml)
-- **Shared VARs**: `gitops/helm-values/server1/apps/values.yaml` — VAR_* identical for every app, cluster and stage
-- **Cluster/stage VARs**: `VAR_CLUSTER`, `VAR_PUBLIC_DOMAIN`, `VAR_SUBDOMAIN` are **not in any values file** — each apps ApplicationSet sets them as `helm.parameters` from the generator (`{{cluster}}`, `{{subdomain}}`). Production passes `VAR_SUBDOMAIN=""`; the chart skips empty VARs so that renders as unset. Adding a cluster needs a generator element, no new values files
+- **Template variables**: `gitops/helm-values/server1/apps/vars/` — `common.yaml` (identical for every app and stage) + `<env>.yaml` (`cluster`, `domain`), loaded after the app files and deep-merged into `vars:`. Deliberately files, not ApplicationSet `helm.parameters`: whoever edits a config template must be able to find every variable it uses. `vars.domain` carries the stage (`sandbox.server1.homelab.irha.cz`; production is the bare cluster domain) and builds every HTTPRoute hostname as `<component>.<domain>`
 
 Raw Kubernetes manifests live in `gitops/k8s-manifests/<cluster>/<app>/`.
 

@@ -438,12 +438,8 @@ tests:
       apps.my-app.templates.config.path: /app/config
       apps.my-app.templates.config.content: '{"key":"value"}'
     asserts:
-      - lengthEqual:
+      - isNull:
           path: spec.template.spec.initContainers
-          count: 1
-      - equal:
-          path: spec.template.spec.initContainers[0].name
-          value: api-iot-my-app-config-jinja2
 
   - it: should NOT render a validator initContainer when validate is false
     set:
@@ -456,11 +452,10 @@ tests:
       apps.my-app.templates.config.content: '{"key":"value"}'
       apps.my-app.templates.config.validate: false
     asserts:
-      - lengthEqual:
+      - isNull:
           path: spec.template.spec.initContainers
-          count: 1
 
-  - it: should render the validator initContainer after the jinja2 one
+  - it: should render the validator as the only initContainer
     set:
       apps.my-app.image.repository: ghcr.io/example/my-app
       apps.my-app.image.tag: "1.2.3"
@@ -474,12 +469,9 @@ tests:
     asserts:
       - lengthEqual:
           path: spec.template.spec.initContainers
-          count: 2
+          count: 1
       - equal:
           path: spec.template.spec.initContainers[0].name
-          value: api-iot-my-app-config-jinja2
-      - equal:
-          path: spec.template.spec.initContainers[1].name
           value: api-iot-my-app-config-validate
 
   - it: should derive the validator image from the app image and tag
@@ -495,7 +487,7 @@ tests:
       apps.my-app.templates.config.validate: true
     asserts:
       - equal:
-          path: spec.template.spec.initContainers[1].image
+          path: spec.template.spec.initContainers[0].image
           value: ghcr.io/example/my-app-config-validator:1.2.3
 
   - it: should default the validator tag to latest when the app image has no tag
@@ -510,7 +502,7 @@ tests:
       apps.my-app.templates.config.validate: true
     asserts:
       - equal:
-          path: spec.template.spec.initContainers[1].image
+          path: spec.template.spec.initContainers[0].image
           value: ghcr.io/example/my-app-config-validator:latest
 
   - it: should allow the validate map form to override image and append args
@@ -529,10 +521,10 @@ tests:
         - --strict
     asserts:
       - equal:
-          path: spec.template.spec.initContainers[1].image
+          path: spec.template.spec.initContainers[0].image
           value: ghcr.io/example/other-validator:9.9.9
       - equal:
-          path: spec.template.spec.initContainers[1].args
+          path: spec.template.spec.initContainers[0].args
           value:
             - /config/config.json
             - --strict
@@ -549,10 +541,10 @@ tests:
       apps.my-app.templates.config.validate: true
     asserts:
       - equal:
-          path: spec.template.spec.initContainers[1].args[0]
+          path: spec.template.spec.initContainers[0].args[0]
           value: /config/production.json
 
-  - it: should mount the rendered output emptyDir into the validator
+  - it: should mount the rendered Secret into the validator
     set:
       apps.my-app.image.repository: ghcr.io/example/my-app
       apps.my-app.labels.component: api
@@ -565,13 +557,13 @@ tests:
       apps.my-app.templates.config.validate: true
     asserts:
       - equal:
-          path: spec.template.spec.initContainers[1].volumeMounts[0].name
-          value: api-iot-my-app-tpl-out-config
+          path: spec.template.spec.initContainers[0].volumeMounts[0].name
+          value: api-iot-my-app-tpl-config
       - equal:
-          path: spec.template.spec.initContainers[1].volumeMounts[0].mountPath
+          path: spec.template.spec.initContainers[0].volumeMounts[0].mountPath
           value: /config
       - lengthEqual:
-          path: spec.template.spec.initContainers[1].volumeMounts
+          path: spec.template.spec.initContainers[0].volumeMounts
           count: 1
 
   - it: should lock down the validator security context
@@ -586,26 +578,26 @@ tests:
       apps.my-app.templates.config.validate: true
     asserts:
       - equal:
-          path: spec.template.spec.initContainers[1].securityContext.runAsNonRoot
+          path: spec.template.spec.initContainers[0].securityContext.runAsNonRoot
           value: true
       # runAsUser is required, not optional: the validator images declare `USER node`,
       # a name the kubelet cannot resolve, so runAsNonRoot alone gives
       # CreateContainerConfigError. Observed in sandbox before this was added.
       - equal:
-          path: spec.template.spec.initContainers[1].securityContext.runAsUser
+          path: spec.template.spec.initContainers[0].securityContext.runAsUser
           value: 1000
       - equal:
-          path: spec.template.spec.initContainers[1].securityContext.readOnlyRootFilesystem
+          path: spec.template.spec.initContainers[0].securityContext.readOnlyRootFilesystem
           value: true
       - equal:
-          path: spec.template.spec.initContainers[1].securityContext.allowPrivilegeEscalation
+          path: spec.template.spec.initContainers[0].securityContext.allowPrivilegeEscalation
           value: false
       - equal:
-          path: spec.template.spec.initContainers[1].securityContext.capabilities.drop
+          path: spec.template.spec.initContainers[0].securityContext.capabilities.drop
           value:
             - ALL
       - equal:
-          path: spec.template.spec.initContainers[1].securityContext.seccompProfile.type
+          path: spec.template.spec.initContainers[0].securityContext.seccompProfile.type
           value: RuntimeDefault
 
   - it: should generate one validator per validated template only
@@ -624,13 +616,10 @@ tests:
     asserts:
       - lengthEqual:
           path: spec.template.spec.initContainers
-          count: 3
+          count: 1
       - equal:
-          path: spec.template.spec.initContainers[1].name
+          path: spec.template.spec.initContainers[0].name
           value: api-iot-my-app-config-validate
-      - equal:
-          path: spec.template.spec.initContainers[2].name
-          value: api-iot-my-app-other-jinja2
 
   - it: should allow the validate map form to override runAsUser
     set:
@@ -644,7 +633,7 @@ tests:
       apps.my-app.templates.config.validate.runAsUser: 65532
     asserts:
       - equal:
-          path: spec.template.spec.initContainers[1].securityContext.runAsUser
+          path: spec.template.spec.initContainers[0].securityContext.runAsUser
           value: 65532
 
   # ── projected ServiceAccount token + CA bundle ─────────────────────────────
@@ -743,9 +732,12 @@ tests:
     asserts:
       - lengthEqual:
           path: spec.template.spec.volumes
-          count: 3
+          count: 2
       - equal:
-          path: spec.template.spec.volumes[2].name
+          path: spec.template.spec.volumes[0].secret.secretName
+          value: api-iot-my-app-tpl-config
+      - equal:
+          path: spec.template.spec.volumes[1].name
           value: kube-api-access
       - equal:
           path: spec.template.spec.containers[0].volumeMounts[1].name
@@ -819,10 +811,7 @@ tests:
       - notExists:
           path: spec.template.spec.containers[0].securityContext
 
-  # An empty VAR_ must not become an env var: the apps ApplicationSets pass VAR_SUBDOMAIN=""
-  # for production, and emitting it would change the pod template and restart every
-  # production pod for no effect. A non-empty VAR_ must still come through.
-  - it: should skip empty VAR_ values and keep non-empty ones in the jinja2 initContainer
+  - it: should keep vars out of the pod template
     set:
       apps.my-app.image.repository: ghcr.io/example/my-app
       apps.my-app.labels.component: api
@@ -830,17 +819,8 @@ tests:
       apps.my-app.ingress.enabled: false
       apps.my-app.templates.config.file: config.json
       apps.my-app.templates.config.path: /app/config
-      apps.my-app.templates.config.content: '{"key":"value"}'
-      VAR_KEEP: kept
-      VAR_EMPTY: ""
+      apps.my-app.templates.config.content: '{"key":"{{ .vars.keep }}"}'
+      vars.keep: kept
     asserts:
-      - contains:
-          path: spec.template.spec.initContainers[0].env
-          content:
-            name: JINJA_VAR_VAR_KEEP
-            value: kept
-      - notContains:
-          path: spec.template.spec.initContainers[0].env
-          content:
-            name: JINJA_VAR_VAR_EMPTY
-            value: ""
+      - notMatchRegexRaw:
+          pattern: vars|kept

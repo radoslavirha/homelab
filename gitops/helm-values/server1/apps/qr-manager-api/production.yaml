@@ -1,4 +1,6 @@
 # qr-manager-api — production overrides
+# Template variables: .vars.* from ../vars/common.yaml + ../vars/production.yaml, chart built-ins
+# .app.* (name, group, component, pathName, containerPort, namespace, host), and .secrets.* from secrets: below.
 #
 # redirect.baseURL has no path and must keep none. The app serves the redirect at /r/:slug,
 # and the /r is supplied by the addPrefix middleware on the qr.irha.cz HTTPRoute
@@ -12,21 +14,32 @@ apps:
       tag: "0.9.0"
     templates:
       config:
+        # Read from OpenBao by the chart's ExternalSecret; the template reads .secrets.<name>.
+        secrets:
+          mongodbDatabase:
+            key: server1/production/qr-manager-api-mongodb
+            property: mongodb-database
+          mongodbUsername:
+            key: server1/production/qr-manager-api-mongodb
+            property: mongodb-username
+          mongodbPassword:
+            key: server1/production/qr-manager-api-mongodb
+            property: mongodb-password
         content: |
           {
-              "serviceName": "{{ APPLICATION }}",
+              "serviceName": "{{ .app.name }}",
               "server": {
-                  "httpPort": {{ CONTAINER_PORT }}
+                  "httpPort": {{ .app.containerPort }}
               },
               "redirect": {
                   "baseURL": "https://qr.irha.cz"
               },
               "mongodb": {
                   "enabled": true,
-                  "url": "{{ VAR_MONGODB_URL }}/{{ SECRET_MONGODB_DATABASE }}",
+                  "url": "{{ .vars.mongodb.url }}/{{ .secrets.mongodbDatabase }}",
                   "connectionOptions": {
-                      "user": "{{ SECRET_MONGODB_USERNAME }}",
-                      "pass": "{{ SECRET_MONGODB_PASSWORD }}"
+                      "user": "{{ .secrets.mongodbUsername }}",
+                      "pass": "{{ .secrets.mongodbPassword }}"
                   }
               },
               "auth": {
@@ -35,18 +48,18 @@ apps:
                       "trustedIssuers": [
                           {
                               "name": "idp",
-                              "issuer": "https://auth.irha.cz/application/o/qr-manager-{{ VAR_CLUSTER }}-{{ NAMESPACE }}/",
-                              "audience": "qr-manager-{{ VAR_CLUSTER }}-{{ NAMESPACE }}",
+                              "issuer": "https://auth.irha.cz/application/o/qr-manager-{{ .vars.cluster }}-{{ .app.namespace }}/",
+                              "audience": "qr-manager-{{ .vars.cluster }}-{{ .app.namespace }}",
                               "subjectKind": "human",
                               "key": {
                                   "source": "jwks",
-                                  "uri": "https://auth.irha.cz/application/o/qr-manager-{{ VAR_CLUSTER }}-{{ NAMESPACE }}/jwks/"
+                                  "uri": "https://auth.irha.cz/application/o/qr-manager-{{ .vars.cluster }}-{{ .app.namespace }}/jwks/"
                               }
                           },
                           {
                               "name": "postman",
                               "issuer": "https://auth.irha.cz/application/o/postman/",
-                              "audience": "qr-manager-{{ VAR_CLUSTER }}-{{ NAMESPACE }}",
+                              "audience": "qr-manager-{{ .vars.cluster }}-{{ .app.namespace }}",
                               "subjectKind": "human",
                               "key": {
                                   "source": "jwks",

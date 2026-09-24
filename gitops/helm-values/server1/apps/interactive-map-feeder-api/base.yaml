@@ -1,5 +1,5 @@
 # interactive-map-feeder-api — shared base values
-# Env-specific: replicas, templates.config.content, VAR_* → production.yaml / sandbox.yaml
+# Env-specific: replicas, templates.config.content → production.yaml / sandbox.yaml
 # No secretRefs (no secrets needed), no udpIngress, no cluster overrides.
 
 apps:
@@ -32,11 +32,10 @@ apps:
     # and kubelet ranks it last among Burstable pods for eviction (usage can never exceed
     # requests — it OOMKills first).
     #
-    # This is NOT the Guaranteed QoS class, and cannot be while the chart renders
-    # initContainers with no resources at all: Guaranteed requires requests == limits for
-    # BOTH cpu and memory on EVERY container, initContainers included. The jinja2 config
-    # renderer has none, and CPU is unequal here by the decision below. Getting Guaranteed
-    # would mean a chart change plus giving up the CPU headroom — measured as not worth it.
+    # This is NOT the Guaranteed QoS class, only because CPU is unequal by the decision
+    # below: Guaranteed requires requests == limits for BOTH cpu and memory on every
+    # container. The config renderer is no longer an initContainer (ESO renders it), so
+    # nothing else stands in the way — measured as not worth giving up the CPU headroom.
     #
     # The 500Mi ceiling
     # stays: measured peak working set over 7 days was 273Mi

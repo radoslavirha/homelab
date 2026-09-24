@@ -6,12 +6,14 @@ All values (image tags, replicas, config content, variables) are in `helm-values
 ## Values structure
 
 ```
-helm-values/
-  {app}.yaml                    ← shared: image, resources, labels, services, ingress, templates.file/path
-helm-values/{env}/
-    {app}.yaml                  ← env-specific: replicas, templates.content (jinja2 config body)
-    variables.yaml              ← VAR_* values injected into jinja2 at runtime
+helm-values/server1/apps/
+  vars/common.yaml              ← `vars:` shared by every app and stage (protocol, mqtt.url, mongodb.url)
+  vars/{env}.yaml               ← `vars:` per stage (cluster, domain); Helm deep-merges both
+  {app}/base.yaml               ← shared: image, resources, labels, services, ingress, templates.file/path
+  {app}/{env}.yaml              ← env-specific: image.tag, templates.<name>.content + .secrets
 ```
+
+Every `vars` value lives in `vars/` — none come from ApplicationSet parameters — so a template's variables can always be found next to it.
 
 ## Applications configuration
 
@@ -39,46 +41,64 @@ apps:
       serviceRef: http
 ```
 
-deploys to: `{{ component }}.{{ SUBDOMAIN if defined }}.{{ VAR_PUBLIC_DOMAIN }}/{{ partOf }}/{{ app-name }}`
+deploys to: `https://<labels.component>.<vars.domain>/<ingress.pathName or app name>` — or `ingress.hostname` when set. The stage is part of `vars.domain` (`sandbox.server1...`), so it sits left of the component.
 
 Services are named: `{component}-{partOf}-{app}-{serviceName}` (e.g. `api-iot-my-app-http`).
 
-## Jinja2 config templates
+## Config templates
 
-Containers can have files mounted at startup via a jinja2 init container. Config template content is defined as a multiline string in env-specific values files — **no files inside the chart**.
-
-The file is rendered once, at pod start. Set `annotations.reloader.stakater.com/auto: "true"` on the app so [Stakater Reloader](https://github.com/stakater/Reloader) restarts the pod whenever the generated ConfigMap — or any Secret in `secretRefs` — changes. Without it, a changed config or a rotated credential is picked up only on the next manual restart.
+A config file is written as a template in the env-specific values file — **no files inside the chart** — and rendered by [External Secrets Operator](https://external-secrets.io/) (ESO), not by the pod. For each template the chart emits an `ExternalSecret`; ESO fetches the template's secrets from OpenBao, renders the file into the Secret `<identifier>-tpl-<name>`, and the main container mounts it at `path`.
 
 ```yaml
-# helm-values/iot/production/my-app.yaml
+# helm-values/server1/apps/my-app/production.yaml
 apps:
   my-app:
     templates:
       config:
+        secrets:                         # optional; name → OpenBao entry
+          mongodbPassword:
+            key: <cluster>/<env>/my-app-mongodb
+            property: mongodb-password
         content: |
           {
-            "url": "{{ VAR_PROTOCOL }}://{{ COMPONENT }}.{{ VAR_PUBLIC_DOMAIN }}/..."
+            "url": "{{ .vars.protocol }}://{{ .app.host }}/{{ .app.pathName }}",
+            "pass": {{ .secrets.mongodbPassword | toJson }}
           }
 ```
 
-### Injected variables
+The syntax is Go `text/template` with Sprig — the same as Helm — so `if`, `default`, `printf` and `toJson` are available. Pipe a secret through `toJson` whenever it may contain a quote or a backslash; `toJson` also adds the surrounding quotes.
 
-All `VAR_*` and `SECRET_*` keys from values files are passed as env vars to the jinja2 init container.
+**A typo cannot reach a pod.** ESO renders with `missingkey=error`: an unknown `{{ .NAME }}` or a missing OpenBao property fails the ExternalSecret (`SecretSyncedError`, the missing key named in its events) and leaves the previous Secret — and the running pods — untouched. On a first install the pod waits in `ContainerCreating` until the Secret exists; under ArgoCD the ExternalSecret's sync-wave `-1` stops the sync there first.
 
-#### Automatically injected
+**Changes reach the pods through Reloader.** ESO re-renders when the content or a `vars` value changes, and — for a template with secrets — on every `configRender.refreshInterval` (default `1h`), which is how a credential rotated in OpenBao arrives. The file is read once, at pod start, so set `annotations.reloader.stakater.com/auto: "true"` on the app; [Stakater Reloader](https://github.com/stakater/Reloader) then rolls the workload whenever the rendered Secret changes. A refresh that renders the same bytes does not restart anything.
 
-| Variable | Source |
+A template **without** `secrets` is anchored on a UUID generator (ESO rejects an ExternalSecret with nothing to fetch) and rendered `OnChange`, so it is never rewritten on a timer.
+
+### Variables
+
+A template reads three maps. The prefix says where a value comes from:
+
+| Map | Source |
 |---|---|
-| `APPLICATION` | `apps[name]` |
-| `CONTAINER_PORT` | `apps[name].ingress.serviceRef` → `services[ref].targetPort` |
-| `CONTAINER_UDP_PORT` | `apps[name].udpIngress.serviceRef` → `services[ref].targetPort` (only when `udpIngress` is configured) |
-| `COMPONENT` | `apps[name].labels.component` |
-| `APPLICATION_GROUP` | `apps[name].labels.partOf` |
-| `NAMESPACE` | Helm `$.Release.Namespace` |
+| `.vars.*` | the top-level `vars` map, whole — a new key needs no chart change |
+| `.secrets.*` | the keys of `templates.<name>.secrets`, from OpenBao via `configRender.secretStore` |
+| `.app.*` | built-ins derived from the app definition, below |
+
+| Built-in | Source |
+|---|---|
+| `.app.name` | `apps[name]` |
+| `.app.group` | `labels.partOf` |
+| `.app.component` | `labels.component` |
+| `.app.namespace` | Helm `$.Release.Namespace` — the stage |
+| `.app.containerPort` | `ingress.serviceRef` → `services[ref].targetPort` (default 80) |
+| `.app.pathName` | `ingress.pathName` when the key is set (`""` included), else `apps[name]` |
+| `.app.host` | the HTTPRoute hostname: `ingress.hostname`, else `<labels.component>.<vars.domain>`. Only when `ingress.enabled` |
+
+The built-ins exist so a config cannot drift from what the chart deploys: `.app.host`, `.app.pathName` and `.app.containerPort` come from the same fields as the HTTPRoute and the Service.
 
 ### Validating the rendered config (`validate`)
 
-The rendered file is never checked. An app that parses its own config at boot catches a bad one itself — the Ts.ED APIs do, so a broken config fails the process and the pod CrashLoops. nginx cannot: it has no JSON parser, so a UI whose `config.json` is missing a value starts fine, answers `/healthz`, goes Ready, and serves a blank page while ArgoCD reports `Healthy`.
+ESO guarantees every variable exists, not that the result is a config the app accepts. An app that parses its own config at boot catches a bad one itself — the Ts.ED APIs do, so a broken config fails the process and the pod CrashLoops. nginx cannot: it has no JSON parser, so a UI whose `config.json` is missing a value starts fine, answers `/healthz`, goes Ready, and serves a blank page while ArgoCD reports `Healthy`.
 
 Set `validate: true` on the template for apps in the second group:
 
@@ -93,7 +113,7 @@ apps:
         validate: true
 ```
 
-This generates a second initContainer, immediately after the Jinja2 one for that template, which runs the app's own schema against the rendered output. A rejected config gives `Init:CrashLoopBackOff` — and with `maxUnavailable: 0`, the previous pod keeps serving. The reason is in the container log:
+This generates an initContainer that runs the app's own schema against the rendered file. A rejected config gives `Init:CrashLoopBackOff` — and with `maxUnavailable: 0`, the previous pod keeps serving. The reason is in the container log:
 
 ```bash
 kubectl logs <pod> -c <identifier>-<template>-validate
@@ -101,52 +121,22 @@ kubectl logs <pod> -c <identifier>-<template>-validate
 
 The image defaults to `<image.repository>-config-validator:<image.tag>`, so the app and its validator are bumped by the same `deploy.json` change and cannot come from different commits. Override with the map form (`repository`, `tag`, `args`) when that convention does not fit.
 
-The validator reads `/config/<file>` from the same emptyDir the Jinja2 container wrote to, so `path` and `subPath` — which describe the *main* container's mount — do not affect it.
+The validator mounts the rendered Secret at `/config` itself, so `path` and `subPath` — which describe the *main* container's mount — do not affect it.
 
-## Secrets injection (`secretRefs`)
+## Runtime environment secrets (`secretRefs`)
 
-Kubernetes Secrets can be injected into both the Jinja2 init container (for config file rendering) and the main application container (for runtime access) via `secretRefs`.
+For an app that reads a credential from its **environment** at runtime — not from its config file — `secretRefs` injects existing Kubernetes Secrets into the main container with `envFrom`. homelab-dashboard-ui uses it: nginx attaches `SECRET_UNIFI_API_KEY` in `proxy_set_header`, and the key must never enter the `config.json` it serves to the browser.
 
 ```yaml
-# helm-values/iot/my-app.yaml
 apps:
   my-app:
     secretRefs:
-      - name: my-app-mqtt-credentials   # K8s Secret name (same in every namespace)
+      - name: my-app-credentials        # K8s Secret, e.g. from an ExternalSecret in k8s-manifests
         keys:
-          - SECRET_MQTT_MY_APP_USERNAME
-          - SECRET_MQTT_MY_APP_PASSWORD
+          - SECRET_MY_APP_API_KEY
 ```
 
-### Key naming convention
-
-Secret keys must follow the `SECRET_<SERVICE>_<APP>_<FIELD>` pattern (e.g. `SECRET_MQTT_MIOT_BRIDGE_USERNAME`). This scopes keys per-app, avoiding collisions when multiple apps share a namespace.
-
-### How keys are injected
-
-| Target | Mechanism | Resulting env var |
-|---|---|---|
-| Jinja2 init container | `env.valueFrom.secretKeyRef` | `JINJA_VAR_SECRET_MQTT_MY_APP_USERNAME` |
-| Main app container | `envFrom.secretRef` | `SECRET_MQTT_MY_APP_USERNAME` |
-
-The init container receives the `JINJA_VAR_` prefix automatically — the template uses the bare key name:
-
-```json
-"username": "{{ SECRET_MQTT_MY_APP_USERNAME }}"
-```
-
-### Creating secrets
-
-Create a SealedSecret in `k8s-manifests/iot/{env}/` with keys matching the `keys` list. The SealedSecret controller decrypts it into a K8s Secret of the same name in the target namespace.
-
-```bash
-# Example: seal a secret for the sandbox namespace
-kubectl create secret generic my-app-mqtt-credentials \
-  --from-literal=SECRET_MQTT_MY_APP_USERNAME=myuser \
-  --from-literal=SECRET_MQTT_MY_APP_PASSWORD=mypass \
-  --namespace sandbox --dry-run=client -o yaml \
-  | kubeseal -o yaml > k8s-manifests/iot/sandbox/SealedSecret.my-app-mqtt-credentials.yaml
-```
+Config files do not use `secretRefs`; they take `templates.<name>.secrets`.
 
 ## Argo Rollouts
 

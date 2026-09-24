@@ -1,5 +1,6 @@
 # miot-bridge-api — production overrides
-# VAR_CLUSTER, VAR_PUBLIC_DOMAIN and VAR_SUBDOMAIN come from the ApplicationSet generator; shared VAR_* are in apps/values.yaml
+# Template variables: .vars.* from ../vars/common.yaml + ../vars/production.yaml, chart built-ins
+# .app.* (name, group, component, pathName, containerPort, namespace, host), and .secrets.* from secrets: below.
 
 apps:
   miot-bridge-api:
@@ -7,21 +8,38 @@ apps:
       tag: "0.26.0"
     templates:
       config:
+        # Read from OpenBao by the chart's ExternalSecret; the template reads .secrets.<name>.
+        secrets:
+          mqttUsername:
+            key: server1/production/miot-bridge-api-emqx
+            property: mqtt-username
+          mqttPassword:
+            key: server1/production/miot-bridge-api-emqx
+            property: mqtt-password
+          mongodbDatabase:
+            key: server1/production/miot-bridge-api-mongodb
+            property: mongodb-database
+          mongodbUsername:
+            key: server1/production/miot-bridge-api-mongodb
+            property: mongodb-username
+          mongodbPassword:
+            key: server1/production/miot-bridge-api-mongodb
+            property: mongodb-password
         content: |
           {
-              "serviceName": "{{ APPLICATION }}",
+              "serviceName": "{{ .app.name }}",
               "server": {
-                  "httpPort": {{ CONTAINER_PORT }}
+                  "httpPort": {{ .app.containerPort }}
               },
-              "publicURL": "{{ VAR_PROTOCOL }}://{{ COMPONENT }}.{{ VAR_PUBLIC_DOMAIN }}/{{ PATH_NAME }}",
+              "publicURL": "{{ .vars.protocol }}://{{ .app.host }}/{{ .app.pathName }}",
               "cachePath": "./cache",
               "mqtt": {
                   "enabled": true,
-                  "url": "{{ VAR_MQTT_URL }}",
+                  "url": "{{ .vars.mqtt.url }}",
                   "clientId": "miot-bridge-api-production",
-                  "username": "{{ SECRET_MQTT_MIOT_BRIDGE_USERNAME }}",
-                  "password": "{{ SECRET_MQTT_MIOT_BRIDGE_PASSWORD }}",
-                  "topicPrefix": "{{ APPLICATION_GROUP }}/",
+                  "username": "{{ .secrets.mqttUsername }}",
+                  "password": "{{ .secrets.mqttPassword }}",
+                  "topicPrefix": "{{ .app.group }}/",
                   "notifications": {
                       "enabled": true
                   }
@@ -35,10 +53,10 @@ apps:
               },
               "mongodb": {
                   "enabled": true,
-                  "url": "{{ VAR_MONGODB_URL }}/{{ SECRET_MONGODB_DATABASE }}",
+                  "url": "{{ .vars.mongodb.url }}/{{ .secrets.mongodbDatabase }}",
                   "connectionOptions": {
-                      "user": "{{ SECRET_MONGODB_USERNAME }}",
-                      "pass": "{{ SECRET_MONGODB_PASSWORD }}"
+                      "user": "{{ .secrets.mongodbUsername }}",
+                      "pass": "{{ .secrets.mongodbPassword }}"
                   }
               },
               "externalApis": {
@@ -67,18 +85,18 @@ apps:
                       "trustedIssuers": [
                           {
                               "name": "idp",
-                              "issuer": "https://auth.irha.cz/application/o/miot-bridge-{{ VAR_CLUSTER }}-{{ NAMESPACE }}/",
-                              "audience": "miot-bridge-{{ VAR_CLUSTER }}-{{ NAMESPACE }}",
+                              "issuer": "https://auth.irha.cz/application/o/miot-bridge-{{ .vars.cluster }}-{{ .app.namespace }}/",
+                              "audience": "miot-bridge-{{ .vars.cluster }}-{{ .app.namespace }}",
                               "subjectKind": "human",
                               "key": {
                                   "source": "jwks",
-                                  "uri": "https://auth.irha.cz/application/o/miot-bridge-{{ VAR_CLUSTER }}-{{ NAMESPACE }}/jwks/"
+                                  "uri": "https://auth.irha.cz/application/o/miot-bridge-{{ .vars.cluster }}-{{ .app.namespace }}/jwks/"
                               }
                           },
                           {
                               "name": "postman",
                               "issuer": "https://auth.irha.cz/application/o/postman/",
-                              "audience": "miot-bridge-{{ VAR_CLUSTER }}-{{ NAMESPACE }}",
+                              "audience": "miot-bridge-{{ .vars.cluster }}-{{ .app.namespace }}",
                               "subjectKind": "human",
                               "key": {
                                   "source": "jwks",

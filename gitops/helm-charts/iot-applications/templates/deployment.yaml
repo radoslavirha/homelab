@@ -6,12 +6,6 @@
 {{- $resources := $application.resources | default (dict) -}}
 {{- $requests := $resources.requests | default (dict) -}}
 {{- $limits := $resources.limits | default (dict) -}}
-{{/* Resolve main service for CONTAINER_PORT via ingress.serviceRef */}}
-{{- $mainServiceRef := $application.ingress.serviceRef | default "" -}}
-{{- $mainService := get ($application.services | default dict) $mainServiceRef | default dict -}}
-{{/* Resolve UDP service for CONTAINER_UDP_PORT via udpIngress.serviceRef */}}
-{{- $udpServiceRef := (($application.udpIngress | default dict).serviceRef | default "") -}}
-{{- $udpService := get ($application.services | default dict) $udpServiceRef | default dict -}}
 {{- $serviceAccount := $application.serviceAccount | default dict -}}
 {{- $projectedToken := include "iot-applications.projectedToken.enabled" $application -}}
 {{- if not (($application.rollout | default dict).enabled) }}
@@ -77,100 +71,10 @@ spec:
       {{- /* SIGTERM → SIGKILL budget. Must exceed the preStop sleep plus the app's drain time. */}}
       terminationGracePeriodSeconds: {{ . }}
       {{- end }}
-      {{- if $application.templates | default dict | len }}
+      {{- $templateInit := include "iot-applications.template.initContainers" (dict "ctx" $ctx "application" $application "applicationName" $applicationName) }}
+      {{- if $templateInit }}
       initContainers:
-        {{- /* Loop all the Jinja2 templates, container can process only one template */}}
-        {{- range $templateName, $template := $application.templates | default dict }}
-        {{- include "iot-applications.validators.template" (dict "name" $templateName "template" $template "applicationName" $applicationName) }}
-        - name: {{ include "iot-applications.identifier" $ctx }}-{{ $templateName }}-jinja2
-          image: objectiflibre/jinja-init
-          env:
-            - name: VERBOSE
-              value: "1"
-            - name: JINJA_SRC_FILE
-              value: "/config_src/{{ $template.file }}"
-            - name: JINJA_DEST_FILE
-              value: "/config/{{ $template.file }}"
-            {{- /* Prepare VARS for substitution. */}}
-            {{- range $key, $value := $.Values | default dict }}
-            {{- /* An empty VAR_ is the same as an absent one: the subdomain helper already treats it so,
-                   and emitting it would change the pod template (and restart the pods) for no effect.
-                   Lets the ApplicationSet pass VAR_SUBDOMAIN="" for production. */}}
-            {{- if and (hasPrefix "VAR_" $key) (ne (toString $value) "") }}
-            - name: JINJA_VAR_{{ $key }}
-              value: {{ $value | quote }}
-            {{- end }}
-            {{- end }}
-            {{- /* Prepare selected VARS from configuration. */}}
-            - name: JINJA_VAR_APPLICATION
-              value: {{ $applicationName | quote }}
-            - name: JINJA_VAR_PATH_NAME
-              value: {{ ($application.ingress.pathName | default $applicationName) | quote }}
-            - name: JINJA_VAR_COMPONENT
-              value: {{ $application.labels.component | quote }}
-            - name: JINJA_VAR_APPLICATION_GROUP
-              value: {{ $application.labels.partOf | quote }}
-            - name: JINJA_VAR_CONTAINER_PORT
-              value: {{ $mainService.targetPort | default 80 | toString | quote }}
-            {{- if $udpService.targetPort }}
-            - name: JINJA_VAR_CONTAINER_UDP_PORT
-              value: {{ $udpService.targetPort | toString | quote }}
-            {{- end }}
-            - name: JINJA_VAR_NAMESPACE
-              value: {{ $.Release.Namespace | quote }}
-            {{- /* Inject values from secretRefs as JINJA_VAR_ prefixed env vars for Jinja2 substitution. */}}
-            {{- range $secretRef := $application.secretRefs | default list }}
-            {{- range $key := $secretRef.keys | default list }}
-            - name: JINJA_VAR_{{ $key }}
-              valueFrom:
-                secretKeyRef:
-                  name: {{ $secretRef.name }}
-                  key: {{ $key }}
-            {{- end }}
-            {{- end }}
-          volumeMounts:
-            {{- /* Volume with config template. */}}
-            - name: {{ include "iot-applications.identifier" $ctx }}-tpl-in-{{ $templateName }}
-              mountPath: /config_src
-            {{- /* Volume with substituted config file. */}}
-            - name: {{ include "iot-applications.identifier" $ctx }}-tpl-out-{{ $templateName }}
-              mountPath: /config
-        {{- if $template.validate }}
-        {{- /* Validates the rendered config before the main container starts. Emitted inside
-               the same range and directly after the Jinja2 container, so initContainer order
-               guarantees it never reads unrendered template source. */}}
-        - name: {{ include "iot-applications.identifier" $ctx }}-{{ $templateName }}-validate
-          image: {{ include "iot-applications.template.validatorImage" (dict "application" $application "template" $template) }}
-          imagePullPolicy: {{ $application.image.pullPolicy | default "IfNotPresent" }}
-          args:
-            {{- /* The rendered file, where JINJA_DEST_FILE put it. Not $template.path — that
-                   is where the main container mounts it, which the validator never sees. */}}
-            - "/config/{{ $template.file }}"
-            {{- with (ternary dict $template.validate (kindIs "bool" $template.validate)).args }}
-            {{- toYaml . | nindent 12 }}
-            {{- end }}
-          securityContext:
-            runAsNonRoot: true
-            {{- /* Defensive default, not a requirement. Both validator images declare
-                   `USER 1000` since qr-manager-ui@0.7.1 / homelab-dashboard-ui@0.4.1 and
-                   satisfy runAsNonRoot unaided — verified in-cluster with this securityContext
-                   and no runAsUser. It is kept because the chart cannot know what an arbitrary
-                   validate.repository override contains, and an image whose USER is a NAME
-                   fails with CreateContainerConfigError "non-numeric user". Supplying a
-                   known-good UID costs nothing; override via validate.runAsUser. */}}
-            runAsUser: {{ (ternary dict $template.validate (kindIs "bool" $template.validate)).runAsUser | default 1000 }}
-            readOnlyRootFilesystem: true
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop: [ALL]
-            seccompProfile:
-              type: RuntimeDefault
-          volumeMounts:
-            {{- /* Same emptyDir jinja-init wrote to — validate the rendered output. */}}
-            - name: {{ include "iot-applications.identifier" $ctx }}-tpl-out-{{ $templateName }}
-              mountPath: /config
-        {{- end }}
-        {{- end }}
+        {{- $templateInit | nindent 8 }}
       {{- end }}
       containers:
         - name: {{ include "iot-applications.identifier" $ctx }}
@@ -227,19 +131,11 @@ spec:
           lifecycle:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- /* Emitted when EITHER Jinja2 templates or a projected token is wanted —
+          {{- /* Emitted when EITHER config templates or a projected token is wanted —
                  an app with neither must still render a valid pod spec. */}}
           {{- if or ($application.templates | default dict | len) $projectedToken }}
           volumeMounts:
-            {{- /* Add volumes with substituted config files from Jinja2 container. */}}
-            {{- range $templateName, $template := $application.templates | default dict }}
-            {{- include "iot-applications.validators.template" (dict "name" $templateName "template" $template "applicationName" $applicationName) }}
-            - name: {{ include "iot-applications.identifier" $ctx }}-tpl-out-{{ $templateName }}
-              mountPath: {{ $template.path }}
-              {{- if $template.subPath }}
-              subPath: {{ $template.subPath }}
-              {{- end }}
-            {{- end }}
+            {{- include "iot-applications.template.volumeMounts" (dict "ctx" $ctx "application" $application) | nindent 12 }}
             {{- if $projectedToken }}
             {{- include "iot-applications.projectedToken.volumeMount" $ctx | nindent 12 }}
             {{- end }}
@@ -258,16 +154,7 @@ spec:
       {{- end }}
       {{- if or ($application.templates | default dict | len) $projectedToken }}
       volumes:
-        {{- range $templateName, $template := $application.templates | default dict }}
-        {{- include "iot-applications.validators.template" (dict "name" $templateName "template" $template "applicationName" $applicationName) }}
-        {{- /* ConfigMap with Jinja2 template source. */}}
-        - name: {{ include "iot-applications.identifier" $ctx }}-tpl-in-{{ $templateName }}
-          configMap:
-            name: {{ include "iot-applications.identifier" $ctx }}-tpl-{{ $templateName }}
-        {{- /* EmptyDir for Jinja2 rendered output. */}}
-        - name: {{ include "iot-applications.identifier" $ctx }}-tpl-out-{{ $templateName }}
-          emptyDir: {}
-        {{- end }}
+        {{- include "iot-applications.template.volumes" (dict "ctx" $ctx "application" $application) | nindent 8 }}
         {{- if $projectedToken }}
         {{- include "iot-applications.projectedToken.volume" $ctx | nindent 8 }}
         {{- end }}

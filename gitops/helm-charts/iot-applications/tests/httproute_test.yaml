@@ -4,7 +4,7 @@ templates:
 tests:
   - it: should create HTTPRoute when ingress is enabled
     set:
-      VAR_PUBLIC_DOMAIN: example.com
+      vars.domain: example.com
       apps.my-app.image.repository: ghcr.io/example/my-app
       apps.my-app.labels.component: api
       apps.my-app.labels.partOf: iot
@@ -29,7 +29,7 @@ tests:
 
   - it: should use component as hostname subdomain
     set:
-      VAR_PUBLIC_DOMAIN: example.com
+      vars.domain: example.com
       apps.my-app.image.repository: ghcr.io/example/my-app
       apps.my-app.labels.component: api
       apps.my-app.labels.partOf: iot
@@ -43,10 +43,9 @@ tests:
           path: spec.hostnames[0]
           value: api.example.com
 
-  - it: should place the stage subdomain left of the component when VAR_SUBDOMAIN set
+  - it: should place the stage left of the component when vars.domain carries it
     set:
-      VAR_PUBLIC_DOMAIN: example.com
-      VAR_SUBDOMAIN: staging
+      vars.domain: staging.example.com
       apps.my-app.image.repository: ghcr.io/example/my-app
       apps.my-app.labels.component: api
       apps.my-app.labels.partOf: iot
@@ -62,7 +61,7 @@ tests:
 
   - it: should add stripPrefix filter by default
     set:
-      VAR_PUBLIC_DOMAIN: example.com
+      vars.domain: example.com
       apps.my-app.image.repository: ghcr.io/example/my-app
       apps.my-app.labels.component: api
       apps.my-app.labels.partOf: iot
@@ -78,7 +77,7 @@ tests:
 
   - it: should NOT add stripPrefix filter when disabled
     set:
-      VAR_PUBLIC_DOMAIN: example.com
+      vars.domain: example.com
       apps.my-app.image.repository: ghcr.io/example/my-app
       apps.my-app.labels.component: api
       apps.my-app.labels.partOf: iot
@@ -94,7 +93,7 @@ tests:
 
   - it: should use custom hostname when ingress.hostname is set
     set:
-      VAR_PUBLIC_DOMAIN: example.com
+      vars.domain: example.com
       apps.my-app.image.repository: ghcr.io/example/my-app
       apps.my-app.labels.component: api
       apps.my-app.labels.partOf: iot
@@ -109,10 +108,9 @@ tests:
           path: spec.hostnames[0]
           value: dashboard.home
 
-  - it: should ignore VAR_SUBDOMAIN and VAR_PUBLIC_DOMAIN when ingress.hostname is set
+  - it: should ignore vars.domain when ingress.hostname is set
     set:
-      VAR_PUBLIC_DOMAIN: example.com
-      VAR_SUBDOMAIN: staging
+      vars.domain: staging.example.com
       apps.my-app.image.repository: ghcr.io/example/my-app
       apps.my-app.labels.component: api
       apps.my-app.labels.partOf: iot
@@ -129,7 +127,7 @@ tests:
 
   - it: should use application name as path prefix by default
     set:
-      VAR_PUBLIC_DOMAIN: example.com
+      vars.domain: example.com
       apps.my-app.image.repository: ghcr.io/example/my-app
       apps.my-app.labels.component: api
       apps.my-app.labels.partOf: iot
@@ -145,7 +143,7 @@ tests:
 
   - it: should use root path when pathName is empty string
     set:
-      VAR_PUBLIC_DOMAIN: example.com
+      vars.domain: example.com
       apps.my-app.image.repository: ghcr.io/example/my-app
       apps.my-app.labels.component: api
       apps.my-app.labels.partOf: iot
@@ -160,3 +158,15 @@ tests:
       - equal:
           path: spec.rules[0].matches[0].path.value
           value: /
+
+  - it: should fail when neither vars.domain nor ingress.hostname is set
+    set:
+      apps.my-app.image.repository: ghcr.io/example/my-app
+      apps.my-app.labels.component: api
+      apps.my-app.labels.partOf: iot
+      apps.my-app.ingress.enabled: true
+      apps.my-app.ingress.serviceRef: http
+      apps.my-app.services.http.enabled: true
+    asserts:
+      - failedTemplate:
+          errorMessage: "vars.domain is required to compute the hostname; set it or ingress.hostname. [apps.my-app.ingress]."
