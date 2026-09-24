@@ -38,9 +38,6 @@ spec:
         - repoURL: https://github.com/radoslavirha/homelab
           targetRevision: HEAD
           ref: values
-        - repoURL: https://github.com/radoslavirha/homelab
-          targetRevision: HEAD
-          path: gitops/k8s-manifests/{{cluster}}/miot-bridge-api/{{env}}
       destination:
         server: '{{clusterServer}}'
         namespace: '{{env}}'

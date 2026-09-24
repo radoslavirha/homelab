@@ -238,8 +238,9 @@ gitops/
                    pgvector (fsGroup 999 — Debian, not Alpine), PVC (20Gi /app/backend/data),
                    Deployment (image tag = the pinned version), Service, HTTPRoute
                    assistant.irha.cz (apex tier). Namespace `open-webui`
-      miot-bridge-api/ production/ and sandbox/ — ExternalSecret.mqtt.yaml, ExternalSecret.mongodb.yaml
-      qr-manager-api/ production/ and sandbox/ — ExternalSecret.mongodb.yaml, HTTPRoute.qr.yaml, Middleware.addprefix-qr.yaml
+      qr-manager-api/ production/ — HTTPRoute.qr.yaml, Middleware.addprefix-qr.yaml (qr.irha.cz shortcut);
+                      sandbox/ intentionally empty (README). App credentials are never here —
+                      the app chart's ExternalSecret renders them into the config file
       network-policies/ production/ and sandbox/ — default-deny + the egress allow-list (manual-sync)
       k8s-monitoring/ ExternalSecret.otel-auth-token.yaml (shared OTLP bearer token pulled from secret/otel-gateway/auth-token)
       traefik/     Certificate.server1-tls.yaml → Secret server1-tls for the websecure listener; the Authentik proxy outpost (Deployment/Service/ExternalSecret/ReferenceGrant) + Middleware.authentik.yaml and HTTPRoute.authentik-outpost.yaml guarding the dashboard

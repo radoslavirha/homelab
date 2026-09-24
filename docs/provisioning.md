@@ -302,7 +302,7 @@ This is the cleanest solution for MongoDB: zero manual intervention after initia
 
 ## miot-bridge-api
 
-`miot-bridge-api` needs scoped credentials in both EMQX (MQTT) and MongoDB. Both are provisioned by PostSync Jobs and written to OpenBao. ExternalSecrets in the `production` and `sandbox` namespaces then pull them.
+`miot-bridge-api` needs scoped credentials in both EMQX (MQTT) and MongoDB. Both are provisioned by PostSync Jobs and written to OpenBao. The app chart's ExternalSecret then reads them straight into the rendered config file (`templates.config.secrets`).
 
 OpenBao KV layout:
 
@@ -341,7 +341,7 @@ Unlike InfluxDB2/EMQX/MongoDB root credentials, `miot-bridge-api` credentials ar
 
 ## qr-manager-api
 
-`qr-manager-api` needs scoped MongoDB credentials. Provisioned by a PostSync Job and written to OpenBao. ExternalSecret in the `production` and `sandbox` namespaces then pulls them.
+`qr-manager-api` needs scoped MongoDB credentials. Provisioned by a PostSync Job and written to OpenBao. The app chart's ExternalSecret then reads them straight into the rendered config file (`templates.config.secrets`).
 
 OpenBao KV layout:
 
