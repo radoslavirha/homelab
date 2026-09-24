@@ -37,6 +37,9 @@ spec:
               - $values/gitops/helm-values/server1/apps/qr-manager-ui/base.yaml
               - $values/gitops/helm-values/server1/apps/qr-manager-ui/{{env}}.yaml
               - $values/gitops/helm-values/server1/apps/values.yaml
+              # vars: map for the ESO-rendered config (next commit); the Jinja2 chart ignores it.
+              - $values/gitops/helm-values/server1/apps/vars/common.yaml
+              - $values/gitops/helm-values/server1/apps/vars/{{env}}.yaml
             # The VAR_ that differ per cluster or per stage come from the generator, not from
             # values files: they are all derivable from {{cluster}} and {{env}}, so adding a
             # cluster needs a generator element and no new files. Parameters override every

@@ -1,0 +1,9 @@
+# Variables for the sandbox stage on server1, read as {{ .vars.<name> }}.
+# Loaded after vars/common.yaml. The chart built-ins ({{ .app.* }}) are listed in
+# gitops/helm-charts/iot-applications/Readme.md.
+vars:
+  cluster: server1
+  # The stage's base domain. The chart builds every app's HTTPRoute hostname as
+  # <component>.<domain>, so the stage sits left of the component
+  # (api.sandbox.server1...) — see docs/architecture.md -> "Hostnames and TLS".
+  domain: sandbox.server1.homelab.irha.cz

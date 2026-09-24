@@ -1,0 +1,14 @@
+# Variables shared by every custom app in every stage on server1, read in a config
+# template as {{ .vars.<name> }}. Stage-specific ones (cluster, domain) are in
+# vars/production.yaml and vars/sandbox.yaml, loaded after this file; Helm deep-merges
+# the three into one `vars` map.
+vars:
+  # https everywhere. Traefik terminates on the websecure listener against the
+  # per-cluster certificate; the app Services behind it still speak plain HTTP.
+  # This feeds every rendered app config (publicURL, apiBaseURL, redirect baseURL),
+  # so it is the single line that makes generated URLs https.
+  protocol: https
+  mqtt:
+    url: "mqtt://emqx.iot.svc.cluster.local:1883"
+  mongodb:
+    url: "mongodb://mongodb.mongodb.svc.cluster.local:27017"
