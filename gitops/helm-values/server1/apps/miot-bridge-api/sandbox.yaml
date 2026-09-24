@@ -1,5 +1,8 @@
-# miot-bridge-api — production overrides
-# VAR_CLUSTER, VAR_PUBLIC_DOMAIN and VAR_SUBDOMAIN come from the ApplicationSet generator; shared VAR_* are in apps/common/values.yaml
+# miot-bridge-api — sandbox overrides
+# VAR_CLUSTER, VAR_PUBLIC_DOMAIN and VAR_SUBDOMAIN come from the ApplicationSet generator; shared VAR_* are in apps/values.yaml
+#
+# Probes, lifecycle and strategy live in base.yaml — they were staged here first and
+# promoted once a sandbox rollout had been watched.
 
 apps:
   miot-bridge-api:
@@ -13,15 +16,15 @@ apps:
               "server": {
                   "httpPort": {{ CONTAINER_PORT }}
               },
-              "publicURL": "{{ VAR_PROTOCOL }}://{{ COMPONENT }}.{{ VAR_PUBLIC_DOMAIN }}/{{ PATH_NAME }}",
+              "publicURL": "{{ VAR_PROTOCOL }}://{{ COMPONENT }}.{{ VAR_SUBDOMAIN }}.{{ VAR_PUBLIC_DOMAIN }}/{{ PATH_NAME }}",
               "cachePath": "./cache",
               "mqtt": {
                   "enabled": true,
                   "url": "{{ VAR_MQTT_URL }}",
-                  "clientId": "miot-bridge-api-production",
+                  "clientId": "miot-bridge-api-sandbox",
                   "username": "{{ SECRET_MQTT_MIOT_BRIDGE_USERNAME }}",
                   "password": "{{ SECRET_MQTT_MIOT_BRIDGE_PASSWORD }}",
-                  "topicPrefix": "{{ APPLICATION_GROUP }}/",
+                  "topicPrefix": "{{ APPLICATION_GROUP }}/{{ NAMESPACE }}/",
                   "notifications": {
                       "enabled": true
                   }
@@ -93,6 +96,7 @@ apps:
                   "level": "info"
               },
               "otel": {
+                  "debug": false,
                   "metrics": {
                       "enabled": true,
                       "exporter": {

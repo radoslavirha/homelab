@@ -345,11 +345,11 @@ Helm values use a two-layer approach:
 - **Shared base**: `gitops/helm-values/<name>.yaml` — common across all clusters
 - **Cluster overrides**: `gitops/helm-values/<cluster>/<name>.yaml` — cluster-specific values (merged last, wins)
 
-> The `homelab-apps` deploy action rewrites the app values files with `yq` to bump `image.tag`. That **strips blank lines** from the whole file — comments survive, formatting does not. Don't spend effort on blank-line layout in `gitops/helm-values/apps/**` or `gitops/helm-values/server3/homelab-dashboard-ui.yaml`; the next release flattens it.
+> The `homelab-apps` deploy action rewrites the app values files with `yq` to bump `image.tag`. That **strips blank lines** from the whole file — comments survive, formatting does not. Don't spend effort on blank-line layout in `gitops/helm-values/server1/apps/**` or `gitops/helm-values/server3/homelab-dashboard-ui.yaml`; the next release flattens it.
 
 For custom apps deployed via the `apps` stage, a third layer is used:
-- **App-level values**: `gitops/helm-values/apps/<app>/` — shared + env-specific (base.yaml, production.yaml, sandbox.yaml)
-- **Shared VARs**: `gitops/helm-values/apps/common/values.yaml` — VAR_* identical for every app, cluster and stage
+- **App-level values**: `gitops/helm-values/server1/apps/<app>/` — shared + env-specific (base.yaml, production.yaml, sandbox.yaml)
+- **Shared VARs**: `gitops/helm-values/server1/apps/values.yaml` — VAR_* identical for every app, cluster and stage
 - **Cluster/stage VARs**: `VAR_CLUSTER`, `VAR_PUBLIC_DOMAIN`, `VAR_SUBDOMAIN` are **not in any values file** — each apps ApplicationSet sets them as `helm.parameters` from the generator (`{{cluster}}`, `{{subdomain}}`). Production passes `VAR_SUBDOMAIN=""`; the chart skips empty VARs so that renders as unset. Adding a cluster needs a generator element, no new values files
 
 Raw Kubernetes manifests live in `gitops/k8s-manifests/<cluster>/<app>/`.

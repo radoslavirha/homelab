@@ -33,9 +33,9 @@ spec:
           helm:
             releaseName: qr-manager-api
             valueFiles:
-              - $values/gitops/helm-values/apps/qr-manager-api/base.yaml
-              - $values/gitops/helm-values/apps/qr-manager-api/{{env}}.yaml
-              - $values/gitops/helm-values/apps/common/values.yaml
+              - $values/gitops/helm-values/server1/apps/qr-manager-api/base.yaml
+              - $values/gitops/helm-values/server1/apps/qr-manager-api/{{env}}.yaml
+              - $values/gitops/helm-values/server1/apps/values.yaml
             # The VAR_ that differ per cluster or per stage come from the generator, not from
             # values files: they are all derivable from {{cluster}} and {{env}}, so adding a
             # cluster needs a generator element and no new files. Parameters override every

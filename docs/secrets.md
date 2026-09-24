@@ -404,7 +404,7 @@ A running pod never sees a changed Secret: env vars are frozen at container star
 
 | Workload | Where the annotation lives |
 | --- | --- |
-| miot-bridge-api · qr-manager-api · qr-manager-ui · interactive-map-feeder-api | `gitops/helm-values/apps/<app>/base.yaml` → `annotations` |
+| miot-bridge-api · qr-manager-api · qr-manager-ui · interactive-map-feeder-api | `gitops/helm-values/server1/apps/<app>/base.yaml` → `annotations` |
 | homelab-dashboard-ui | `gitops/helm-values/server3/homelab-dashboard-ui.yaml` → `annotations` |
 | grafana | `gitops/helm-values/grafana.yaml` → `annotations` |
 | external-dns | `gitops/helm-values/external-dns.yaml` → `deploymentAnnotations` |

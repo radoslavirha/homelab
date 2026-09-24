@@ -36,7 +36,7 @@ Source: `gitops/helm-values/server2/traefik.yaml` (`ports.mongodb.exposedPort`, 
 
 For each app in `gitops/argocd-manifests/apps/apps/`:
 
-Source: `gitops/helm-values/apps/<app>/base.yaml` (image, component label, pathName), `gitops/helm-values/server2/apps/common/values.yaml` (`VAR_PUBLIC_DOMAIN`)
+Source: `gitops/helm-values/apps/<app>/base.yaml` (image, component label, pathName), `gitops/helm-values/server2/apps/values.yaml` (`VAR_PUBLIC_DOMAIN`)
 
 URL pattern:
 - Production: `http://<component>.<VAR_PUBLIC_DOMAIN>/<partOf>/<pathName>` (when partOf non-empty, e.g. `iot`)

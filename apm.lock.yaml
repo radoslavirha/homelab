@@ -317,7 +317,7 @@ deployments:
   owners:
   - .
   active_owner: .
-  content_hash: sha256:9573d8d295e1c3f44ce49c0f324432af7d073754701d4275c574d9b993579ea4
+  content_hash: sha256:c1aef485e948c20cf8c23154cbea88abb19a68df6059bebcd688e4cfc92460e1
 - kind: project-relative
   target: agents
   value: .agents/skills/probe-traffic/references/vantages.md
@@ -371,7 +371,7 @@ deployments:
   owners:
   - .
   active_owner: .
-  content_hash: sha256:965cd646024a84a7e766de9918a9e66e526c344f1fbf5e7f78eaf900831a5e39
+  content_hash: sha256:c655aa1d306933889daf5e39d657564c42689be95302338467269125c57e08e8
 - kind: project-relative
   target: agents
   value: .agents/skills/sync-obsidian/references/note-template.md
@@ -380,7 +380,7 @@ deployments:
   owners:
   - .
   active_owner: .
-  content_hash: sha256:e93abbacd8a882bbd52864cc83109cc251c2aab8fdc88f65737d9d77a1df8848
+  content_hash: sha256:11c4159d4646f4acc6ff1b835d19643c85a4e361fb38bdc20056a7f872ed1510
 - kind: project-relative
   target: agents
   value: .agents/skills/sync-obsidian/references/source-map.md
@@ -389,7 +389,7 @@ deployments:
   owners:
   - .
   active_owner: .
-  content_hash: sha256:2080c1861bc50daa1593851f8c2aa674350966b2e885e045cd8ef817944b63e8
+  content_hash: sha256:c32184df9603c2a5b0471958354bb89e2140f291d049a7b6ac05d2a33115782c
 - kind: project-relative
   target: claude
   value: .claude/hooks/superpowers/hooks/run-hook.cmd
@@ -605,7 +605,7 @@ deployments:
   owners:
   - .
   active_owner: .
-  content_hash: sha256:9573d8d295e1c3f44ce49c0f324432af7d073754701d4275c574d9b993579ea4
+  content_hash: sha256:c1aef485e948c20cf8c23154cbea88abb19a68df6059bebcd688e4cfc92460e1
 - kind: project-relative
   target: claude
   value: .claude/skills/probe-traffic/references/vantages.md
@@ -776,7 +776,7 @@ deployments:
   owners:
   - .
   active_owner: .
-  content_hash: sha256:965cd646024a84a7e766de9918a9e66e526c344f1fbf5e7f78eaf900831a5e39
+  content_hash: sha256:c655aa1d306933889daf5e39d657564c42689be95302338467269125c57e08e8
 - kind: project-relative
   target: claude
   value: .claude/skills/sync-obsidian/references/note-template.md
@@ -785,7 +785,7 @@ deployments:
   owners:
   - .
   active_owner: .
-  content_hash: sha256:e93abbacd8a882bbd52864cc83109cc251c2aab8fdc88f65737d9d77a1df8848
+  content_hash: sha256:11c4159d4646f4acc6ff1b835d19643c85a4e361fb38bdc20056a7f872ed1510
 - kind: project-relative
   target: claude
   value: .claude/skills/sync-obsidian/references/source-map.md
@@ -794,7 +794,7 @@ deployments:
   owners:
   - .
   active_owner: .
-  content_hash: sha256:2080c1861bc50daa1593851f8c2aa674350966b2e885e045cd8ef817944b63e8
+  content_hash: sha256:c32184df9603c2a5b0471958354bb89e2140f291d049a7b6ac05d2a33115782c
 - kind: project-relative
   target: claude
   value: .claude/skills/systematic-debugging
@@ -1796,21 +1796,21 @@ local_deployed_file_hashes:
   .agents/skills/probe-traffic/SKILL.md: sha256:d7ab38513a54d3b8e08eb256589f3c23aab3184e2e21998b6d208fef2d5f007e
   .agents/skills/probe-traffic/references/gotchas.md: sha256:06a97db562fc75600f436435c6e1cf70e4d6981217d347a8c894e83a6a0ea9c2
   .agents/skills/probe-traffic/references/lenses.md: sha256:1da93d1d5599d415929bb0f0ef1703e498207e1b131280bec82a1f81e47e645e
-  .agents/skills/probe-traffic/references/targets.md: sha256:9573d8d295e1c3f44ce49c0f324432af7d073754701d4275c574d9b993579ea4
+  .agents/skills/probe-traffic/references/targets.md: sha256:c1aef485e948c20cf8c23154cbea88abb19a68df6059bebcd688e4cfc92460e1
   .agents/skills/probe-traffic/references/vantages.md: sha256:044a100f97ae008985be4399fbe3fd561f5f650dcaca5ac82125862cedd42c0a
   .agents/skills/sync-docs/SKILL.md: sha256:bbdbd56127405e11d896b3d8382ddb16a4682c4a3d92a3bbfcd6f4c377bf505d
   .agents/skills/sync-docs/references/doc-map.md: sha256:4ad83558822de790cdc61e79b51cb35d67dd8c349105a6466ecd901e175cc948
-  .agents/skills/sync-obsidian/SKILL.md: sha256:965cd646024a84a7e766de9918a9e66e526c344f1fbf5e7f78eaf900831a5e39
-  .agents/skills/sync-obsidian/references/note-template.md: sha256:e93abbacd8a882bbd52864cc83109cc251c2aab8fdc88f65737d9d77a1df8848
-  .agents/skills/sync-obsidian/references/source-map.md: sha256:2080c1861bc50daa1593851f8c2aa674350966b2e885e045cd8ef817944b63e8
+  .agents/skills/sync-obsidian/SKILL.md: sha256:c655aa1d306933889daf5e39d657564c42689be95302338467269125c57e08e8
+  .agents/skills/sync-obsidian/references/note-template.md: sha256:11c4159d4646f4acc6ff1b835d19643c85a4e361fb38bdc20056a7f872ed1510
+  .agents/skills/sync-obsidian/references/source-map.md: sha256:c32184df9603c2a5b0471958354bb89e2140f291d049a7b6ac05d2a33115782c
   .claude/skills/network-egress/SKILL.md: sha256:1c3178c6368a4e5aba8e7156928e3847a0653a71a49eaf9c8c6cf4c87c105cef
   .claude/skills/probe-traffic/SKILL.md: sha256:d7ab38513a54d3b8e08eb256589f3c23aab3184e2e21998b6d208fef2d5f007e
   .claude/skills/probe-traffic/references/gotchas.md: sha256:06a97db562fc75600f436435c6e1cf70e4d6981217d347a8c894e83a6a0ea9c2
   .claude/skills/probe-traffic/references/lenses.md: sha256:1da93d1d5599d415929bb0f0ef1703e498207e1b131280bec82a1f81e47e645e
-  .claude/skills/probe-traffic/references/targets.md: sha256:9573d8d295e1c3f44ce49c0f324432af7d073754701d4275c574d9b993579ea4
+  .claude/skills/probe-traffic/references/targets.md: sha256:c1aef485e948c20cf8c23154cbea88abb19a68df6059bebcd688e4cfc92460e1
   .claude/skills/probe-traffic/references/vantages.md: sha256:044a100f97ae008985be4399fbe3fd561f5f650dcaca5ac82125862cedd42c0a
   .claude/skills/sync-docs/SKILL.md: sha256:bbdbd56127405e11d896b3d8382ddb16a4682c4a3d92a3bbfcd6f4c377bf505d
   .claude/skills/sync-docs/references/doc-map.md: sha256:4ad83558822de790cdc61e79b51cb35d67dd8c349105a6466ecd901e175cc948
-  .claude/skills/sync-obsidian/SKILL.md: sha256:965cd646024a84a7e766de9918a9e66e526c344f1fbf5e7f78eaf900831a5e39
-  .claude/skills/sync-obsidian/references/note-template.md: sha256:e93abbacd8a882bbd52864cc83109cc251c2aab8fdc88f65737d9d77a1df8848
-  .claude/skills/sync-obsidian/references/source-map.md: sha256:2080c1861bc50daa1593851f8c2aa674350966b2e885e045cd8ef817944b63e8
+  .claude/skills/sync-obsidian/SKILL.md: sha256:c655aa1d306933889daf5e39d657564c42689be95302338467269125c57e08e8
+  .claude/skills/sync-obsidian/references/note-template.md: sha256:11c4159d4646f4acc6ff1b835d19643c85a4e361fb38bdc20056a7f872ed1510
+  .claude/skills/sync-obsidian/references/source-map.md: sha256:c32184df9603c2a5b0471958354bb89e2140f291d049a7b6ac05d2a33115782c

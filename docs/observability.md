@@ -507,7 +507,7 @@ All three signal types (metrics, logs, traces) are accepted on both endpoints.
 
 ### Custom apps log to stdout; Alloy scrapes it
 
-The Node.js APIs set `otel.logs.enabled: false` in their config templates — one `"logs"` block per app per environment, in `gitops/helm-values/apps/<app>/{production,sandbox}.yaml`. Metrics and traces still go over OTLP; logs do not. Winston writes JSON to stdout and `podLogsViaLoki` collects it, the same path as every other workload in the cluster.
+The Node.js APIs set `otel.logs.enabled: false` in their config templates — one `"logs"` block per app per environment, in `gitops/helm-values/server1/apps/<app>/{production,sandbox}.yaml`. Metrics and traces still go over OTLP; logs do not. Winston writes JSON to stdout and `podLogsViaLoki` collects it, the same path as every other workload in the cluster.
 
 This was reconsidered twice, so the reasoning is worth recording.
 

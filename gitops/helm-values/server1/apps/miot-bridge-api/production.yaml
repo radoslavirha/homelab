@@ -1,10 +1,10 @@
-# interactive-map-feeder-api — production overrides
-# VAR_CLUSTER, VAR_PUBLIC_DOMAIN and VAR_SUBDOMAIN come from the ApplicationSet generator; shared VAR_* are in apps/common/values.yaml
+# miot-bridge-api — production overrides
+# VAR_CLUSTER, VAR_PUBLIC_DOMAIN and VAR_SUBDOMAIN come from the ApplicationSet generator; shared VAR_* are in apps/values.yaml
 
 apps:
-  interactive-map-feeder-api:
+  miot-bridge-api:
     image:
-      tag: "0.15.0"
+      tag: "0.26.0"
     templates:
       config:
         content: |
@@ -14,27 +14,36 @@ apps:
                   "httpPort": {{ CONTAINER_PORT }}
               },
               "publicURL": "{{ VAR_PROTOCOL }}://{{ COMPONENT }}.{{ VAR_PUBLIC_DOMAIN }}/{{ PATH_NAME }}",
+              "cachePath": "./cache",
+              "mqtt": {
+                  "enabled": true,
+                  "url": "{{ VAR_MQTT_URL }}",
+                  "clientId": "miot-bridge-api-production",
+                  "username": "{{ SECRET_MQTT_MIOT_BRIDGE_USERNAME }}",
+                  "password": "{{ SECRET_MQTT_MIOT_BRIDGE_PASSWORD }}",
+                  "topicPrefix": "{{ APPLICATION_GROUP }}/",
+                  "notifications": {
+                      "enabled": true
+                  }
+              },
+              "polling": {
+                  "enabled": true,
+                  "intervalMs": 5000,
+                  "dispatchOnChange": true,
+                  "maxErrorCount": 3,
+                  "errorSkipCycles": 20
+              },
+              "mongodb": {
+                  "enabled": true,
+                  "url": "{{ VAR_MONGODB_URL }}/{{ SECRET_MONGODB_DATABASE }}",
+                  "connectionOptions": {
+                      "user": "{{ SECRET_MONGODB_USERNAME }}",
+                      "pass": "{{ SECRET_MONGODB_PASSWORD }}"
+                  }
+              },
               "externalApis": {
-                  "CHMI_PORTAL": {
-                      "baseURL": "https://produkty.chmi.cz",
-                      "resilience": {
-                          "timeout": {
-                              "ms": 10000
-                          },
-                          "retry": {
-                              "count": 2,
-                              "backoffMs": 500
-                          },
-                          "circuitBreaker": {}
-                      },
-                      "logging": {
-                          "enabled": true,
-                          "stack": false
-                      },
-                      "retriableStatusCodes": [500, 502, 503, 504, 429, 408]
-                  },
-                  "CHMI_OPENDATA": {
-                      "baseURL": "https://opendata.chmi.cz",
+                  "MIOT_SPEC": {
+                      "baseURL": "https://miot-spec.org/miot-spec-v2",
                       "resilience": {
                           "timeout": {
                               "ms": 10000
@@ -58,28 +67,18 @@ apps:
                       "trustedIssuers": [
                           {
                               "name": "idp",
-                              "issuer": "https://auth.irha.cz/application/o/interactive-map-feeder-{{ VAR_CLUSTER }}-{{ NAMESPACE }}/",
-                              "audience": "interactive-map-feeder-{{ VAR_CLUSTER }}-{{ NAMESPACE }}",
+                              "issuer": "https://auth.irha.cz/application/o/miot-bridge-{{ VAR_CLUSTER }}-{{ NAMESPACE }}/",
+                              "audience": "miot-bridge-{{ VAR_CLUSTER }}-{{ NAMESPACE }}",
                               "subjectKind": "human",
                               "key": {
                                   "source": "jwks",
-                                  "uri": "https://auth.irha.cz/application/o/interactive-map-feeder-{{ VAR_CLUSTER }}-{{ NAMESPACE }}/jwks/"
-                              }
-                          },
-                          {
-                              "name": "interactive-map",
-                              "issuer": "https://auth.irha.cz/application/o/interactive-map/",
-                              "audience": "interactive-map-feeder-{{ VAR_CLUSTER }}-{{ NAMESPACE }}",
-                              "subjectKind": "device",
-                              "key": {
-                                  "source": "jwks",
-                                  "uri": "https://auth.irha.cz/application/o/interactive-map/jwks/"
+                                  "uri": "https://auth.irha.cz/application/o/miot-bridge-{{ VAR_CLUSTER }}-{{ NAMESPACE }}/jwks/"
                               }
                           },
                           {
                               "name": "postman",
                               "issuer": "https://auth.irha.cz/application/o/postman/",
-                              "audience": "interactive-map-feeder-{{ VAR_CLUSTER }}-{{ NAMESPACE }}",
+                              "audience": "miot-bridge-{{ VAR_CLUSTER }}-{{ NAMESPACE }}",
                               "subjectKind": "human",
                               "key": {
                                   "source": "jwks",

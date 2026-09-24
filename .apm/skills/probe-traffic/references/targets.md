@@ -62,7 +62,7 @@ https://<component>.[<VAR_SUBDOMAIN>.]<VAR_PUBLIC_DOMAIN>/<pathName>/<app path>
 | Piece | Where it comes from | Values today |
 |---|---|---|
 | `VAR_SUBDOMAIN` | `helm.parameters` in `gitops/argocd-manifests/apps/apps/<App>.yaml`, from the env generator element | production: `""` (skipped by the chart) · sandbox: `sandbox` |
-| `component` | `labels.component` in `gitops/helm-values/apps/<app>/base.yaml` | `api` for the three APIs · `apps` for qr-manager-ui |
+| `component` | `labels.component` in `gitops/helm-values/server1/apps/<app>/base.yaml` | `api` for the three APIs · `apps` for qr-manager-ui |
 | `VAR_PUBLIC_DOMAIN` | `helm.parameters` in the same ApplicationSet — `{{cluster}}.homelab.irha.cz` | `server1.homelab.irha.cz` (server1 is the only cluster running apps) |
 | `pathName` | `ingress.pathName` in the app's `base.yaml` | see table |
 

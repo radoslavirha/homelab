@@ -1,8 +1,5 @@
-# interactive-map-feeder-api — sandbox overrides
-# VAR_CLUSTER, VAR_PUBLIC_DOMAIN and VAR_SUBDOMAIN come from the ApplicationSet generator; shared VAR_* are in apps/common/values.yaml
-#
-# Probes, lifecycle and strategy live in base.yaml — they were staged here first and
-# promoted once a sandbox rollout had been watched.
+# interactive-map-feeder-api — production overrides
+# VAR_CLUSTER, VAR_PUBLIC_DOMAIN and VAR_SUBDOMAIN come from the ApplicationSet generator; shared VAR_* are in apps/values.yaml
 
 apps:
   interactive-map-feeder-api:
@@ -16,7 +13,7 @@ apps:
               "server": {
                   "httpPort": {{ CONTAINER_PORT }}
               },
-              "publicURL": "{{ VAR_PROTOCOL }}://{{ COMPONENT }}.{{ VAR_SUBDOMAIN }}.{{ VAR_PUBLIC_DOMAIN }}/{{ PATH_NAME }}",
+              "publicURL": "{{ VAR_PROTOCOL }}://{{ COMPONENT }}.{{ VAR_PUBLIC_DOMAIN }}/{{ PATH_NAME }}",
               "externalApis": {
                   "CHMI_PORTAL": {
                       "baseURL": "https://produkty.chmi.cz",
@@ -70,6 +67,16 @@ apps:
                               }
                           },
                           {
+                              "name": "interactive-map",
+                              "issuer": "https://auth.irha.cz/application/o/interactive-map/",
+                              "audience": "interactive-map-feeder-{{ VAR_CLUSTER }}-{{ NAMESPACE }}",
+                              "subjectKind": "device",
+                              "key": {
+                                  "source": "jwks",
+                                  "uri": "https://auth.irha.cz/application/o/interactive-map/jwks/"
+                              }
+                          },
+                          {
                               "name": "postman",
                               "issuer": "https://auth.irha.cz/application/o/postman/",
                               "audience": "interactive-map-feeder-{{ VAR_CLUSTER }}-{{ NAMESPACE }}",
@@ -87,7 +94,6 @@ apps:
                   "level": "info"
               },
               "otel": {
-                  "debug": false,
                   "metrics": {
                       "enabled": true,
                       "exporter": {

@@ -23,7 +23,7 @@ For each app in `gitops/argocd-manifests/apps/apps/`:
 - Image repo + tag: `gitops/helm-values/apps/<app>/base.yaml` → `apps.<key>.image.repository` + `.tag`
 - Component (subdomain): `gitops/helm-values/apps/<app>/base.yaml` → `apps.<key>.labels.component`
 - HTTP path: `gitops/helm-values/apps/<app>/base.yaml` → `apps.<key>.ingress.pathName`
-- Public domain: `gitops/helm-values/server2/apps/common/values.yaml` → `VAR_PUBLIC_DOMAIN`
+- Public domain: `gitops/helm-values/server2/apps/values.yaml` → `VAR_PUBLIC_DOMAIN`
 - UDP prod port: `gitops/helm-values/server2/traefik.yaml` → `ports.udp-miot-prod.port` (if `udpIngress` present)
 - UDP sandbox port: `gitops/helm-values/server2/traefik.yaml` → `ports.udp-miot-sbx.port`
 - External IP: `gitops/helm-values/server2/traefik.yaml` → `service.externalIPs[0]`

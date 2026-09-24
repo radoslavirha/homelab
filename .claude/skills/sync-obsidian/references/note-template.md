@@ -75,7 +75,7 @@ tags: [homelab, iot]
 
 ## Notes on Populating
 
-- `<tag>` — read from `image.tag` in `gitops/helm-values/apps/<app>/base.yaml`
+- `<tag>` — read from `image.tag` in `gitops/helm-values/server1/apps/<app>/base.yaml`
 - URL path: `/<partOf>/<pathName>` when `partOf` non-empty; `/<pathName>` when `partOf` is empty
 - If new API added: add section under "Custom APIs", same table format
 - If hostname/IP changed: update the affected row
