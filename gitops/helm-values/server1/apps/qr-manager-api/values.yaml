@@ -1,0 +1,137 @@
+# qr-manager-api — shared base values
+# Env-specific: image.tag, templates.config.content → production.yaml / sandbox.yaml
+
+# Restart when the ESO-rendered config Secret changes — a vars edit or a credential
+# rotated in OpenBao. The file is read once, at pod start.
+annotations:
+  reloader.stakater.com/auto: "true"
+image:
+  repository: ghcr.io/radoslavirha/qr-manager-api
+  tag: "0.6.0"
+  pullPolicy: Always
+replicas: 1
+serviceAccount:
+  create: true
+  # No ambient token: automount would give every pod a long-lived,
+  # full-audience one. projectedToken below is the explicit, scoped,
+  # short-lived replacement.
+  automountServiceAccountToken: false
+  # Mounts a default-audience token + the cluster CA at
+  # /var/run/secrets/kubernetes.io/serviceaccount, which is what lets this
+  # service verify cluster-issued ServiceAccount tokens (JWKS fetch from
+  # kubernetes.default.svc). Both files are needed: without ca.crt the TLS
+  # handshake fails, without the token the apiserver returns 401.
+  # Per-callee audiences get added here when the first real
+  # service-to-service call exists, not speculatively.
+  projectedToken:
+    enabled: true
+# Memory requests == limits so the scheduler reserves what this pod can actually use,
+# and kubelet ranks it last among Burstable pods for eviction (usage can never exceed
+# requests — it OOMKills first).
+#
+# This is NOT the Guaranteed QoS class, only because CPU is unequal by the decision
+# below: Guaranteed requires requests == limits for BOTH cpu and memory on every
+# container. The config renderer is no longer an initContainer (ESO renders it), so
+# nothing else stands in the way — measured as not worth giving up the CPU headroom.
+#
+# The 500Mi ceiling
+# stays: measured peak working set over 7 days was 273Mi
+# (interactive-map-feeder-api), so this is ~1.8x headroom. The slim 2026-09 images run
+# lower still (115-155Mi at startup); revisit the ceiling once they have a week of
+# history, not before.
+#
+# CPU is deliberately unchanged. Measured peak CFS throttling over 3 days was 9% /
+# 4% / 2% (feeder / miot / qr) — not enough to justify removing limits on a node
+# shared with EMQX, InfluxDB and Longhorn. Revisit above 25% sustained.
+resources:
+  requests:
+    cpu: 250m
+    memory: 500Mi
+  limits:
+    cpu: 500m
+    memory: 500Mi
+# V8 sizes its heap from what it detects, which is not the cgroup limit, and the
+# failure mode is an OOMKill with no Node-level error. 384Mi is ~75% of the container
+# limit; the remaining quarter is buffers, native modules, the code cache and thread
+# stacks, which all live outside the old space.
+env:
+  - name: NODE_OPTIONS
+    value: "--max-old-space-size=384"
+# The distroless base (gcr.io/distroless/nodejs24-debian12:nonroot) declares USER
+# 65532; runAsUser repeats it numerically because kubelet verifies runAsNonRoot
+# against the image's configured user and cannot resolve a username — a named user
+# fails closed with CreateContainerConfigError.
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: [ALL]
+labels:
+  component: api
+  partOf: iot
+services:
+  http:
+    enabled: true
+    protocol: TCP
+    port: 80
+    targetPort: 4000
+ingress:
+  enabled: true
+  serviceRef: http
+  pathName: iot/qr-manager
+# Boot budget: 5s × 24 = 120s. Liveness and readiness stay suppressed until this passes,
+# which is the modern replacement for initialDelaySeconds guesswork.
+startupProbe:
+  httpGet:
+    path: /health/live
+    port: http
+  periodSeconds: 5
+  failureThreshold: 24
+  timeoutSeconds: 2
+# Shallow by design — /health/live never touches the check registry. A MongoDB outage
+# must degrade readiness, never restart pods.
+livenessProbe:
+  httpGet:
+    path: /health/live
+    port: http
+  periodSeconds: 10
+  failureThreshold: 3
+  timeoutSeconds: 2
+# Checks MongoDB (critical: true). Failing here only removes the pod from Endpoints.
+# timeoutSeconds is above the app's own per-check deadline (2s) so a slow dependency
+# reports a failed check with detail rather than being cut off as a probe timeout.
+readinessProbe:
+  httpGet:
+    path: /health/ready
+    port: http
+  periodSeconds: 5
+  failureThreshold: 3
+  successThreshold: 1
+  timeoutSeconds: 3
+# preStop covers Endpoints removal → Traefik; the app's own SIGTERM drain (readiness
+# flips to 503, in-flight requests finish) covers the window after it. Budget:
+# preStop 10s + drain 5s + teardown, well inside 30s.
+terminationGracePeriodSeconds: 30
+lifecycle:
+  preStop:
+    sleep:
+      seconds: 10
+# At replicas: 1 this is what makes a rollout gapless — the new pod must pass readiness
+# before the old one is torn down.
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 1
+    maxUnavailable: 0
+templates:
+  config:
+    file: production.json
+    path: /home/app/config
+    # content defined per-env

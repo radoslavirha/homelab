@@ -1,5 +1,5 @@
 # interactive-map-feeder-api — ApplicationSet (server1 × production + sandbox)
-# Chart: gitops/helm-charts/iot-applications/ (path-based, no publishing)
+# Chart: gitops/helm-charts/app/ (path-based, no publishing)
 # No ExternalSecrets (no secretRefs), no cluster-specific overrides.
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
@@ -26,12 +26,12 @@ spec:
       sources:
         - repoURL: https://github.com/radoslavirha/homelab
           targetRevision: HEAD
-          path: gitops/helm-charts/iot-applications
+          path: gitops/helm-charts/app
           helm:
             releaseName: interactive-map-feeder-api
             valueFiles:
-              - $values/gitops/helm-values/server1/apps/interactive-map-feeder-api/base.yaml
-              - $values/gitops/helm-values/server1/apps/interactive-map-feeder-api/{{env}}.yaml
+              - $values/gitops/helm-values/server1/apps/interactive-map-feeder-api/values.yaml
+              - $values/gitops/helm-values/server1/apps/interactive-map-feeder-api/values-{{env}}.yaml
               # Every template variable (vars:) is in a file, so whoever edits a config can find it.
               # Loaded last: an app file cannot shadow a variable by accident.
               - $values/gitops/helm-values/server1/apps/vars/common.yaml

@@ -17,7 +17,7 @@ jobs:
     strategy:
       matrix:
         chart:
-          - iot-applications
+          - app
           - provisioner
           # authentik-blueprints was missing from this matrix and had never been linted.
           # It has no tests; the unittest step below skips charts without a tests/ directory.
@@ -38,7 +38,14 @@ jobs:
             --version v1.1.2 --verify=false
 
       - name: Lint ${{ matrix.chart }}
-        run: helm lint gitops/helm-charts/${{ matrix.chart }}
+        # A chart whose defaults render nothing valid (app) ships ci/lint-values.yaml.
+        run: |
+          chart=gitops/helm-charts/${{ matrix.chart }}
+          if [ -f "$chart/ci/lint-values.yaml" ]; then
+            helm lint "$chart" --values "$chart/ci/lint-values.yaml"
+          else
+            helm lint "$chart"
+          fi
 
       - name: Unit test ${{ matrix.chart }}
         run: |

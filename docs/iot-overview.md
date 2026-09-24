@@ -34,9 +34,9 @@ Loxone is the only physical IoT controller. MiOT Bridge supports UDP transport b
 The three API pods (`qr-manager-api`, `miot-bridge-api`, `interactive-map-feeder-api`) run
 **non-root and enforced**: `runAsNonRoot: true` with the numeric UID 1000 their images
 declare, all capabilities dropped, no privilege escalation, `RuntimeDefault` seccomp and a
-**read-only root filesystem**. Set in `gitops/helm-values/server1/apps/<app>/base.yaml`; the chart
+**read-only root filesystem**. Set in `gitops/helm-values/server1/apps/<app>/values.yaml`; the chart
 keys are `podSecurityContext` / `containerSecurityContext`, covered by
-`gitops/helm-charts/iot-applications/tests/deployment_test.yaml`.
+`gitops/helm-charts/app/tests/deployment_test.yaml`.
 
 Two things this couples to, worth knowing before changing either:
 

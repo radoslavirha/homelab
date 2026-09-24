@@ -1,0 +1,131 @@
+# miot-bridge-api — production overrides
+# Template variables: .vars.* from ../vars/common.yaml + ../vars/production.yaml, chart built-ins
+# .app.* (name, group, component, pathName, containerPort, namespace, host), and .secrets.* from secrets: below.
+
+image:
+  tag: "0.26.0"
+templates:
+  config:
+    # Read from OpenBao by the chart's ExternalSecret; the template reads .secrets.<name>.
+    secrets:
+      mqttUsername:
+        key: server1/production/miot-bridge-api-emqx
+        property: mqtt-username
+      mqttPassword:
+        key: server1/production/miot-bridge-api-emqx
+        property: mqtt-password
+      mongodbDatabase:
+        key: server1/production/miot-bridge-api-mongodb
+        property: mongodb-database
+      mongodbUsername:
+        key: server1/production/miot-bridge-api-mongodb
+        property: mongodb-username
+      mongodbPassword:
+        key: server1/production/miot-bridge-api-mongodb
+        property: mongodb-password
+    content: |
+      {
+          "serviceName": "{{ .app.name }}",
+          "server": {
+              "httpPort": {{ .app.containerPort }}
+          },
+          "publicURL": "{{ .vars.protocol }}://{{ .app.host }}/{{ .app.pathName }}",
+          "cachePath": "./cache",
+          "mqtt": {
+              "enabled": true,
+              "url": "{{ .vars.mqtt.url }}",
+              "clientId": "miot-bridge-api-production",
+              "username": "{{ .secrets.mqttUsername }}",
+              "password": "{{ .secrets.mqttPassword }}",
+              "topicPrefix": "{{ .app.group }}/",
+              "notifications": {
+                  "enabled": true
+              }
+          },
+          "polling": {
+              "enabled": true,
+              "intervalMs": 5000,
+              "dispatchOnChange": true,
+              "maxErrorCount": 3,
+              "errorSkipCycles": 20
+          },
+          "mongodb": {
+              "enabled": true,
+              "url": "{{ .vars.mongodb.url }}/{{ .secrets.mongodbDatabase }}",
+              "connectionOptions": {
+                  "user": "{{ .secrets.mongodbUsername }}",
+                  "pass": "{{ .secrets.mongodbPassword }}"
+              }
+          },
+          "externalApis": {
+              "MIOT_SPEC": {
+                  "baseURL": "https://miot-spec.org/miot-spec-v2",
+                  "resilience": {
+                      "timeout": {
+                          "ms": 10000
+                      },
+                      "retry": {
+                          "count": 2,
+                          "backoffMs": 500
+                      },
+                      "circuitBreaker": {}
+                  },
+                  "logging": {
+                      "enabled": true,
+                      "stack": false
+                  },
+                  "retriableStatusCodes": [500, 502, 503, 504, 429, 408]
+              }
+          },
+          "auth": {
+              "IDP": {
+                  "type": "bearer-jwt",
+                  "trustedIssuers": [
+                      {
+                          "name": "idp",
+                          "issuer": "https://auth.irha.cz/application/o/miot-bridge-{{ .vars.cluster }}-{{ .app.namespace }}/",
+                          "audience": "miot-bridge-{{ .vars.cluster }}-{{ .app.namespace }}",
+                          "subjectKind": "human",
+                          "key": {
+                              "source": "jwks",
+                              "uri": "https://auth.irha.cz/application/o/miot-bridge-{{ .vars.cluster }}-{{ .app.namespace }}/jwks/"
+                          }
+                      },
+                      {
+                          "name": "postman",
+                          "issuer": "https://auth.irha.cz/application/o/postman/",
+                          "audience": "miot-bridge-{{ .vars.cluster }}-{{ .app.namespace }}",
+                          "subjectKind": "human",
+                          "key": {
+                              "source": "jwks",
+                              "uri": "https://auth.irha.cz/application/o/postman/jwks/"
+                          }
+                      }
+                  ]
+              }
+          },
+          "logger": {
+              "enabled": true,
+              "level": "info"
+          },
+          "otel": {
+              "metrics": {
+                  "enabled": true,
+                  "exporter": {
+                      "url": "http://k8s-monitoring-alloy-receiver.monitoring.svc.cluster.local:4318/v1/metrics"
+                  }
+              },
+              "traces": {
+                  "enabled": true,
+                  "exporter": {
+                      "url": "http://k8s-monitoring-alloy-receiver.monitoring.svc.cluster.local:4318/v1/traces"
+                  }
+              },
+              "logs": {
+                  "enabled": false,
+                  "exporter": {
+                      "url": "http://k8s-monitoring-alloy-receiver.monitoring.svc.cluster.local:4318/v1/logs"
+                  }
+              }
+          }
+      }

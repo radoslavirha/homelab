@@ -1,6 +1,6 @@
 # Variables for the production stage on server1, read as {{ .vars.<name> }}.
 # Loaded after vars/common.yaml. The chart built-ins ({{ .app.* }}) are listed in
-# gitops/helm-charts/iot-applications/Readme.md.
+# gitops/helm-charts/app/Readme.md.
 vars:
   cluster: server1
   # The stage's base domain. The chart builds every app's HTTPRoute hostname as

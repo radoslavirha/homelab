@@ -78,10 +78,11 @@ gitops/
                             through Importer.validate() before pushing -- helm unittest cannot see a
                             bad model path, a rejected field, or an !Find that does not resolve.
     provisioner/            reusable PostSync provisioner Jobs chart (InfluxDB2, EMQX, MongoDB)
-    iot-applications/       reusable chart for custom apps (Deployment/Rollout, Services, HTTPRoute,
+    app/                    reusable chart for ONE custom app per release (release name = app name,
+                            every value top-level): Deployment/Rollout, Services, HTTPRoute,
                             config files rendered by ESO into a Secret — templates.<name>.content
                             is Go template syntax reading .vars.*, .secrets.* (templates.<name>.secrets) and .app.* built-ins).
-                            Per-app `annotations` land on the WORKLOAD
+                            `annotations` land on the WORKLOAD
                             metadata — set reloader.stakater.com/auto there; there is no
                             checksum/config, Reloader is the only restart mechanism.
                             `podAnnotations` land on the POD template — anything Alloy reads
@@ -125,10 +126,10 @@ gitops/
                             mqtt.url, mongodb.url) + production.yaml / sandbox.yaml (cluster, domain —
                             the stage's base domain, which also builds every HTTPRoute hostname).
                             Nothing comes from ApplicationSet parameters
-      miot-bridge-api/  base.yaml, production.yaml, sandbox.yaml
-      interactive-map-feeder-api/ base.yaml, production.yaml, sandbox.yaml
-      qr-manager-api/   base.yaml, production.yaml, sandbox.yaml
-      qr-manager-ui/    base.yaml, production.yaml, sandbox.yaml
+      miot-bridge-api/  values.yaml, values-production.yaml, values-sandbox.yaml
+      interactive-map-feeder-api/ values.yaml, values-production.yaml, values-sandbox.yaml
+      qr-manager-api/   values.yaml, values-production.yaml, values-sandbox.yaml
+      qr-manager-ui/    values.yaml, values-production.yaml, values-sandbox.yaml
     server1/              the only cluster running datastores and custom apps
       provisioner/          influxdb2.yaml, emqx.yaml, mongodb.yaml — provisioner chart values per datastore
       cert-manager.yaml     cluster-specific overrides
@@ -189,7 +190,7 @@ gitops/
                               household apps: Mealie, Open WebUI (server1) and Ollama
                               (server2); the agent tool servers next. Separate from apps/apps/
                               because that stage is only for OUR apps rendered by the
-                              iot-applications chart)
+                              app chart)
       RootNetworkPolicies.yaml sync-wave: "5" — App-of-Apps → apps/network-policies/
       server3/
         RootDashboards.yaml    sync-wave: "2" — App-of-Apps → server3/apps/dashboards/ (OpenBao HTTPRoute, homelab-dashboard-ui)
@@ -211,7 +212,7 @@ gitops/
     server3/
       apps/
         dashboards/ OpenBao.yaml   App: vault.server3.homelab.irha.cz HTTPRoute
-                    HomeLab.yaml   App: homelab-dashboard-ui (iot-applications chart, ns homelab)
+                    HomeLab.yaml   App: homelab-dashboard-ui (app chart, ns homelab)
         identity/   Authentik.yaml App: Authentik + authentik-blueprints chart
         observability/ Prometheus.yaml, Grafana.yaml, Loki.yaml, Tempo.yaml
   k8s-manifests/
@@ -317,7 +318,7 @@ All other apps use the **app-of-apps + ApplicationSet** pattern: **nine stages u
 - **dashboards** stage: Headlamp, Hubble UI, Longhorn UI (all clusters); `server3/apps/dashboards/` adds the OpenBao HTTPRoute and homelab-dashboard-ui
 - **identity** stage: Authentik + the authentik-blueprints chart — `server3/apps/identity/`, **server3 only**
 - **apps** stage: custom apps — miot-bridge-api, interactive-map-feeder-api, qr-manager-api, qr-manager-ui, per-namespace OTel collectors — **server1 only**
-- **household** stage: third-party household apps — Mealie and Open WebUI on server1, Ollama on server2; agent tool servers next. Multi-cluster. Kept out of the `apps` stage because that one is exclusively our own apps rendered by the in-repo `iot-applications` chart across production + sandbox; these are singletons with raw manifests
+- **household** stage: third-party household apps — Mealie and Open WebUI on server1, Ollama on server2; agent tool servers next. Multi-cluster. Kept out of the `apps` stage because that one is exclusively our own apps rendered by the in-repo `app` chart across production + sandbox; these are singletons with raw manifests
 
 Bootstrap is **two manual kubectl applies** on server3:
 
@@ -349,10 +350,10 @@ Helm values use a two-layer approach:
 - **Shared base**: `gitops/helm-values/<name>.yaml` — common across all clusters
 - **Cluster overrides**: `gitops/helm-values/<cluster>/<name>.yaml` — cluster-specific values (merged last, wins)
 
-> The `homelab-apps` deploy action rewrites the app values files with `yq` to bump `image.tag`. That **strips blank lines** from the whole file — comments survive, formatting does not. Don't spend effort on blank-line layout in `gitops/helm-values/server1/apps/**` or `gitops/helm-values/server3/homelab-dashboard-ui.yaml`; the next release flattens it.
+> The `homelab-apps` deploy action rewrites the app values files with `yq` to bump `image.tag`. That **strips blank lines** from the whole file — comments survive, formatting does not. Don't spend effort on blank-line layout in `gitops/helm-values/server1/apps/**` or `gitops/helm-values/server3/homelab-dashboard-ui/`; the next release flattens it.
 
 For custom apps deployed via the `apps` stage, a third layer is used:
-- **App-level values**: `gitops/helm-values/server1/apps/<app>/` — shared + env-specific (base.yaml, production.yaml, sandbox.yaml)
+- **App-level values**: `gitops/helm-values/server1/apps/<app>/` — shared + env-specific (`values.yaml`, `values-production.yaml`, `values-sandbox.yaml`), flat: one app per release, no `apps:` wrapper. The homelab-apps `deploy.json` of each app points at `values-<env>.yaml` → `.image.tag`
 - **Template variables**: `gitops/helm-values/server1/apps/vars/` — `common.yaml` (identical for every app and stage) + `<env>.yaml` (`cluster`, `domain`), loaded after the app files and deep-merged into `vars:`. Deliberately files, not ApplicationSet `helm.parameters`: whoever edits a config template must be able to find every variable it uses. `vars.domain` carries the stage (`sandbox.server1.homelab.irha.cz`; production is the bare cluster domain) and builds every HTTPRoute hostname as `<component>.<domain>`
 
 Raw Kubernetes manifests live in `gitops/k8s-manifests/<cluster>/<app>/`.

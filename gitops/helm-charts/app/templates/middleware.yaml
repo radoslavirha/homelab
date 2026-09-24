@@ -1,0 +1,20 @@
+{{- $applicationName := .Release.Name -}}
+{{- $application := .Values -}}
+{{- include "app.validators.ingress" (dict "ingress" $application.ingress "applicationName" $applicationName) }}
+{{- if $application.ingress.enabled }}
+{{- $ctx := dict "application" $application "name" $applicationName "release" $.Release "chart" $.Chart -}}
+{{- $pathName := $application.ingress.pathName | default $applicationName -}}
+{{- $stripPrefix := dig "stripPrefix" true ($application.ingress | default dict) -}}
+{{- if $stripPrefix }}
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: {{ include "app.identifier" $ctx }}-middleware-stripprefix
+  labels: {{ include "app.meta.labels" $ctx | nindent 4 }}
+spec:
+  stripPrefix:
+    prefixes:
+      - /{{ $pathName }}
+{{- end }}
+{{ end }}

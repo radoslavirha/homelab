@@ -1,0 +1,27 @@
+# Minimal app for `helm lint` in CI. The chart has no defaults that render — an app
+# needs at least an image and labels — so a bare lint would only exercise the failure path.
+image:
+  repository: ghcr.io/example/lint-app
+  tag: "1.0.0"
+labels:
+  component: api
+  partOf: iot
+services:
+  http:
+    enabled: true
+    targetPort: 4000
+ingress:
+  enabled: true
+  serviceRef: http
+vars:
+  domain: example.com
+templates:
+  config:
+    file: config.json
+    path: /app/config
+    secrets:
+      password:
+        key: lint/app
+        property: password
+    content: |
+      {"url": "https://{{ .app.host }}/{{ .app.pathName }}", "password": {{ .secrets.password | toJson }}}

@@ -532,7 +532,7 @@ Running both was considered — the duplicate costs only ~2% of total ingest —
 
 #### Resource attributes come from the chart
 
-`iot-applications` injects these onto every pod template, in `deployment.yaml` and `rollout.yaml`:
+The `app` chart injects these onto every pod template, in `deployment.yaml` and `rollout.yaml`:
 
 ```yaml
 resource.opentelemetry.io/service.name: <application name>

@@ -1,0 +1,6 @@
+{{- $applicationName := .Release.Name -}}
+{{- $application := .Values -}}
+{{- if $application.ingress.enabled }}
+Visit {{ $applicationName }} at the following URL:
+  https://{{ include "app.hostname" (dict "application" $application "applicationName" $applicationName "root" $) }}/{{ include "app.pathName" (dict "application" $application "applicationName" $applicationName) }}
+{{ end }}

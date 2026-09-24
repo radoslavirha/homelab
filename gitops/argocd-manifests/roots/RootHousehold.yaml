@@ -3,7 +3,7 @@
 #
 # ── Why a new stage rather than apps/apps/ ──────────────────────────────────
 # `apps/apps/` is reserved for OUR apps, every one of them rendered by the
-# in-repo `iot-applications` chart across production + sandbox. Mealie is
+# in-repo `app` chart across production + sandbox. Mealie is
 # third-party, a singleton, and carries raw manifests instead of that chart —
 # dropping it into `apps/apps/` would make the one thing that stage guarantees
 # (same chart, two environments) no longer true.

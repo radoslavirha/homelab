@@ -10,11 +10,11 @@ spec:
   sources:
     - repoURL: https://github.com/radoslavirha/homelab
       targetRevision: HEAD
-      path: gitops/helm-charts/iot-applications
+      path: gitops/helm-charts/app
       helm:
         releaseName: homelab-dashboard-ui
         valueFiles:
-          - $values/gitops/helm-values/server3/homelab-dashboard-ui.yaml
+          - $values/gitops/helm-values/server3/homelab-dashboard-ui/values.yaml
     - repoURL: https://github.com/radoslavirha/homelab
       targetRevision: HEAD
       ref: values

@@ -1,0 +1,9 @@
+apiVersion: v2
+name: app
+description: One custom application — Deployment or Rollout, Services, HTTPRoute, and config files rendered by ESO
+type: application
+version: 0.0.1
+# appVersion: 0.0.1
+maintainers:
+  - name: Radoslav Irha
+    email: radoslav.irha@gmail.com

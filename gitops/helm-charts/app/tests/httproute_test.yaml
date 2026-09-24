@@ -1,0 +1,174 @@
+suite: httproute tests
+templates:
+  - templates/httproute.yaml
+release:
+  name: my-app
+tests:
+  - it: should create HTTPRoute when ingress is enabled
+    set:
+      vars.domain: example.com
+      image.repository: ghcr.io/example/my-app
+      labels.component: api
+      labels.partOf: iot
+      ingress.enabled: true
+      ingress.serviceRef: http
+      services.http.enabled: true
+      services.http.port: 80
+      services.http.targetPort: 4000
+    asserts:
+      - isKind:
+          of: HTTPRoute
+
+  - it: should NOT create HTTPRoute when ingress is disabled
+    set:
+      image.repository: ghcr.io/example/my-app
+      labels.component: api
+      labels.partOf: iot
+      ingress.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should use component as hostname subdomain
+    set:
+      vars.domain: example.com
+      image.repository: ghcr.io/example/my-app
+      labels.component: api
+      labels.partOf: iot
+      ingress.enabled: true
+      ingress.serviceRef: http
+      services.http.enabled: true
+      services.http.port: 80
+      services.http.targetPort: 4000
+    asserts:
+      - equal:
+          path: spec.hostnames[0]
+          value: api.example.com
+
+  - it: should place the stage left of the component when vars.domain carries it
+    set:
+      vars.domain: staging.example.com
+      image.repository: ghcr.io/example/my-app
+      labels.component: api
+      labels.partOf: iot
+      ingress.enabled: true
+      ingress.serviceRef: http
+      services.http.enabled: true
+      services.http.port: 80
+      services.http.targetPort: 4000
+    asserts:
+      - equal:
+          path: spec.hostnames[0]
+          value: api.staging.example.com
+
+  - it: should add stripPrefix filter by default
+    set:
+      vars.domain: example.com
+      image.repository: ghcr.io/example/my-app
+      labels.component: api
+      labels.partOf: iot
+      ingress.enabled: true
+      ingress.serviceRef: http
+      services.http.enabled: true
+      services.http.port: 80
+      services.http.targetPort: 4000
+    asserts:
+      - equal:
+          path: spec.rules[0].filters[0].type
+          value: ExtensionRef
+
+  - it: should NOT add stripPrefix filter when disabled
+    set:
+      vars.domain: example.com
+      image.repository: ghcr.io/example/my-app
+      labels.component: api
+      labels.partOf: iot
+      ingress.enabled: true
+      ingress.serviceRef: http
+      ingress.stripPrefix: false
+      services.http.enabled: true
+      services.http.port: 80
+      services.http.targetPort: 4000
+    asserts:
+      - isNull:
+          path: spec.rules[0].filters
+
+  - it: should use custom hostname when ingress.hostname is set
+    set:
+      vars.domain: example.com
+      image.repository: ghcr.io/example/my-app
+      labels.component: api
+      labels.partOf: iot
+      ingress.enabled: true
+      ingress.serviceRef: http
+      ingress.hostname: dashboard.home
+      services.http.enabled: true
+      services.http.port: 80
+      services.http.targetPort: 4000
+    asserts:
+      - equal:
+          path: spec.hostnames[0]
+          value: dashboard.home
+
+  - it: should ignore vars.domain when ingress.hostname is set
+    set:
+      vars.domain: staging.example.com
+      image.repository: ghcr.io/example/my-app
+      labels.component: api
+      labels.partOf: iot
+      ingress.enabled: true
+      ingress.serviceRef: http
+      ingress.hostname: dashboard.home
+      services.http.enabled: true
+      services.http.port: 80
+      services.http.targetPort: 4000
+    asserts:
+      - equal:
+          path: spec.hostnames[0]
+          value: dashboard.home
+
+  - it: should use application name as path prefix by default
+    set:
+      vars.domain: example.com
+      image.repository: ghcr.io/example/my-app
+      labels.component: api
+      labels.partOf: iot
+      ingress.enabled: true
+      ingress.serviceRef: http
+      services.http.enabled: true
+      services.http.port: 80
+      services.http.targetPort: 4000
+    asserts:
+      - equal:
+          path: spec.rules[0].matches[0].path.value
+          value: /my-app
+
+  - it: should use root path when pathName is empty string
+    set:
+      vars.domain: example.com
+      image.repository: ghcr.io/example/my-app
+      labels.component: api
+      labels.partOf: iot
+      ingress.enabled: true
+      ingress.serviceRef: http
+      ingress.pathName: ""
+      ingress.stripPrefix: false
+      services.http.enabled: true
+      services.http.port: 80
+      services.http.targetPort: 4000
+    asserts:
+      - equal:
+          path: spec.rules[0].matches[0].path.value
+          value: /
+
+  - it: should fail when neither vars.domain nor ingress.hostname is set
+    set:
+      image.repository: ghcr.io/example/my-app
+      labels.component: api
+      labels.partOf: iot
+      ingress.enabled: true
+      ingress.serviceRef: http
+      services.http.enabled: true
+    asserts:
+      - failedTemplate:
+          errorMessage: "vars.domain is required to compute the hostname; set it or ingress.hostname. [ingress]."

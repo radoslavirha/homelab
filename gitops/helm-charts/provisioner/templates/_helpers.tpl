@@ -13,7 +13,7 @@ Common pod-spec fields for every provisioner Job.
 stays: an ambient, full-audience, pod-lifetime token is exactly what this chart must not
 carry. The projected volume below is the deliberate opposite — one short-lived token, minted
 for this pod, used once at startup to log in to OpenBao. Same reasoning, and same shape, as
-`iot-applications.projectedToken.volume`, minus its `ca.crt` source and audience list: a
+`app.projectedToken.volume` (gitops/helm-charts/app), minus its `ca.crt` source and audience list: a
 provisioner Job never calls the apiserver, so it needs no trust root and no RBAC. OpenBao
 verifies the token itself via TokenReview, using the reviewer JWT on its own auth mount.
 

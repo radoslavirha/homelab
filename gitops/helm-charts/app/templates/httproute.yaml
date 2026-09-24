@@ -1,0 +1,43 @@
+{{- $applicationName := .Release.Name -}}
+{{- $application := .Values -}}
+{{- include "app.validators.ingress" (dict "ingress" $application.ingress "applicationName" $applicationName) }}
+{{- if $application.ingress.enabled }}
+{{- $ctx := dict "application" $application "name" $applicationName "release" $.Release "chart" $.Chart -}}
+{{- $refSvcName := $application.ingress.serviceRef | default "" -}}
+{{- $refSvc := get ($application.services | default dict) $refSvcName | default dict -}}
+{{- $pathName := include "app.pathName" (dict "application" $application "applicationName" $applicationName) -}}
+{{/* Stage sits LEFT of the component: api.sandbox.<domain>, not sandbox.api.<domain> —
+     vars.domain carries the stage (sandbox.server1...). Reasons in docs/architecture.md
+     -> "Hostnames and TLS": no cookie inheritance from production, one wildcard per stage,
+     and a stage is a namespace of many components, not a property of one. */}}
+{{- $hostname := include "app.hostname" (dict "application" $application "applicationName" $applicationName "root" $) -}}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ include "app.identifier" $ctx }}
+  labels: {{ include "app.meta.labels" $ctx | nindent 4 }}
+spec:
+  parentRefs:
+    - name: traefik-gateway
+      namespace: traefik
+  hostnames:
+    - {{ $hostname }}
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /{{ $pathName }}
+      backendRefs:
+        - name: {{ include "app.identifier" $ctx }}-{{ $refSvcName }}
+          port: {{ $refSvc.port | default 80 }}
+      {{- $stripPrefix := dig "stripPrefix" true ($application.ingress | default dict) -}}
+      {{- if $stripPrefix }}
+      filters:
+        - type: ExtensionRef
+          extensionRef:
+            group: traefik.io
+            kind: Middleware
+            name: {{ include "app.identifier" $ctx }}-middleware-stripprefix
+      {{- end }}
+{{ end }}

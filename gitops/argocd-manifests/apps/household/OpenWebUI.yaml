@@ -51,7 +51,7 @@ spec:
         syncOptions:
           # Nothing else creates the `open-webui` namespace -- it is this app's
           # own, like mealie's and mongodb's, and not the shared `production`
-          # namespace the iot-applications chart deploys into.
+          # namespace the app chart deploys into.
           - CreateNamespace=true
         automated:
           selfHeal: true

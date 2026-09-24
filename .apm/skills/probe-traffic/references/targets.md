@@ -61,9 +61,9 @@ https://<component>.<vars.domain>/<pathName>/<app path>
 
 | Piece | Where it comes from | Values today |
 |---|---|---|
-| `component` | `labels.component` in `gitops/helm-values/server1/apps/<app>/base.yaml` | `api` for the three APIs · `apps` for qr-manager-ui |
+| `component` | `labels.component` in `gitops/helm-values/server1/apps/<app>/values.yaml` | `api` for the three APIs · `apps` for qr-manager-ui |
 | `vars.domain` | `gitops/helm-values/server1/apps/vars/<env>.yaml` — carries the stage | production: `server1.homelab.irha.cz` · sandbox: `sandbox.server1.homelab.irha.cz` (server1 is the only cluster running apps) |
-| `pathName` | `ingress.pathName` in the app's `base.yaml` | see table |
+| `pathName` | `ingress.pathName` in the app's `values.yaml` | see table |
 
 | App | pathName | stripPrefix |
 |---|---|---|

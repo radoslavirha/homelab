@@ -1,0 +1,30 @@
+# qr-manager-ui — production overrides
+# Template variables: .vars.* from ../vars/common.yaml + ../vars/production.yaml, chart built-ins
+# .app.* (name, group, component, pathName, containerPort, namespace, host).
+
+image:
+  tag: "0.13.1"
+templates:
+  config:
+    # Production carries the auth block BEFORE it runs an image that requires it.
+    # Safe in this direction, unsafe in the other: RuntimeConfigSchema is a z.object,
+    # which strips unknown keys, so the 0.7.2 validator deployed today accepts this
+    # block and ignores it. Leaving it out is the risk — auth is required from the
+    # next release onward, so the next production image bump, on any cluster and
+    # for whatever reason, would CrashLoop the initContainer with nothing to connect
+    # it to the change that caused it.
+    #
+    # Templated for the same reason as sandbox.yaml — see the note there. Renders to:
+    #   qr-manager-server1-production @ apps.server1.homelab.irha.cz
+    content: |
+      {
+          "apiBaseURL": "{{ .vars.protocol }}://api.{{ .vars.domain }}/iot/qr-manager",
+          "basePath": "/qr-manager",
+          "auth": {
+              "issuer": "https://auth.irha.cz/application/o/qr-manager-{{ .vars.cluster }}-{{ .app.namespace }}/",
+              "clientId": "qr-manager-{{ .vars.cluster }}-{{ .app.namespace }}",
+              "scope": "openid profile email roles",
+              "redirectUri": "{{ .vars.protocol }}://{{ .app.host }}/{{ .app.pathName }}/callback",
+              "postLogoutRedirectUri": "{{ .vars.protocol }}://{{ .app.host }}/{{ .app.pathName }}/"
+          }
+      }

@@ -1,0 +1,184 @@
+{{- $applicationName := .Release.Name -}}
+{{- $application := .Values -}}
+{{- include "app.validators.image" (dict "image" $application.image "applicationName" $applicationName) }}
+{{- include "app.validators.services" (dict "services" ($application.services | default dict) "applicationName" $applicationName) }}
+{{- $ctx := dict "application" $application "name" $applicationName "release" $.Release "chart" $.Chart -}}
+{{/* Prepare resource requests and limits in case they are not set */}}
+{{- $resources := $application.resources | default (dict) -}}
+{{- $requests := $resources.requests | default (dict) -}}
+{{- $limits := $resources.limits | default (dict) -}}
+{{- $rollout := $application.rollout | default dict -}}
+{{- $serviceAccount := $application.serviceAccount | default dict -}}
+{{- $projectedToken := include "app.projectedToken.enabled" $application -}}
+{{- if $rollout.enabled }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: {{ include "app.identifier" $ctx }}
+  labels: {{ include "app.meta.labels" $ctx | nindent 4 }}
+  {{- with $application.annotations }}
+  {{- /* Workload-level annotations. Stakater Reloader reads reloader.stakater.com/auto here — NOT on the pod template. */}}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  replicas: {{ $application.replicas | default 1 }}
+  selector:
+    matchLabels: {{ include "app.labels.selector" $ctx | nindent 6 }}
+  template:
+    metadata:
+      labels: {{ include "app.labels.selector" $ctx | nindent 8 }}
+      {{- /* OTel Resource attributes for SCRAPED pod logs — see deployment.yaml for the
+             full rationale. Kept identical in both workload templates on purpose. */}}
+      {{- $otelResource := dict "resource.opentelemetry.io/service.name" $applicationName }}
+      {{- with $application.image.tag }}
+      {{- $_ := set $otelResource "resource.opentelemetry.io/service.version" (. | toString) }}
+      {{- end }}
+      {{- with merge (deepCopy ($application.podAnnotations | default dict)) $otelResource }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- if or $serviceAccount.create $serviceAccount.name }}
+      serviceAccountName: {{ include "app.serviceAccountName" $ctx }}
+      {{- end }}
+      {{- with $application.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $application.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $application.terminationGracePeriodSeconds }}
+      {{- /* SIGTERM → SIGKILL budget. Must exceed the preStop sleep plus the app's drain time. */}}
+      terminationGracePeriodSeconds: {{ . }}
+      {{- end }}
+      {{- $templateInit := include "app.template.initContainers" (dict "ctx" $ctx "application" $application "applicationName" $applicationName) }}
+      {{- if $templateInit }}
+      initContainers:
+        {{- $templateInit | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ include "app.identifier" $ctx }}
+          image: {{ $application.image.repository }}:{{ include "app.defaults.tag" $application.image.tag }}
+          imagePullPolicy: {{ $application.image.pullPolicy | default "IfNotPresent" }}
+          {{- with $application.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- if $application.services | default dict | len }}
+          ports:
+            {{- range $serviceName, $svc := $application.services | default dict }}
+            {{- if $svc.enabled }}
+            - name: {{ $serviceName }}
+              containerPort: {{ $svc.targetPort | default 80 }}
+              protocol: {{ $svc.protocol | default "TCP" }}
+            {{- end }}
+            {{- end }}
+          {{- end }}
+          resources:
+            requests:
+              cpu: {{ $requests.cpu | default "250m" | quote }}
+              memory: {{ $requests.memory | default "250Mi" | quote }}
+            limits:
+              cpu: {{ $limits.cpu | default "500m" | quote }}
+              memory: {{ $limits.memory | default "500Mi" | quote }}
+          {{- if $application.secretRefs | default list | len }}
+          envFrom:
+            {{- range $secretRef := $application.secretRefs | default list }}
+            - secretRef:
+                name: {{ $secretRef.name }}
+            {{- end }}
+          {{- end }}
+          {{- if $application.env | default list | len }}
+          env:
+            {{- toYaml $application.env | nindent 12 }}
+          {{- end }}
+          {{- with $application.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with $application.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with $application.startupProbe }}
+          startupProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with $application.lifecycle }}
+          {{- /* preStop.sleep keeps the pod serving while its Endpoints removal propagates
+                 to Traefik — without it a rolling update drops requests despite the probes. */}}
+          lifecycle:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- /* Emitted when EITHER config templates or a projected token is wanted —
+                 an app with neither must still render a valid pod spec. */}}
+          {{- if or ($application.templates | default dict | len) $projectedToken }}
+          volumeMounts:
+            {{- include "app.template.volumeMounts" (dict "ctx" $ctx "application" $application) | nindent 12 }}
+            {{- if $projectedToken }}
+            {{- include "app.projectedToken.volumeMount" $ctx | nindent 12 }}
+            {{- end }}
+          {{- end }}
+      {{- with $application.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $application.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $application.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if or ($application.templates | default dict | len) $projectedToken }}
+      volumes:
+        {{- include "app.template.volumes" (dict "ctx" $ctx "application" $application) | nindent 8 }}
+        {{- if $projectedToken }}
+        {{- include "app.projectedToken.volume" $ctx | nindent 8 }}
+        {{- end }}
+      {{- end }}
+  strategy:
+    {{- if eq $rollout.strategy "canary" }}
+    {{- $canary := $rollout.canary | default dict }}
+    canary:
+      stableService: {{ include "app.identifier" $ctx }}-{{ $canary.stableServiceRef }}
+      canaryService: {{ include "app.identifier" $ctx }}-{{ $canary.canaryServiceRef }}
+      {{- with $canary.steps }}
+      steps:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if ($canary.trafficRouting | default dict).enabled }}
+      trafficRouting:
+        plugins:
+          argoproj-labs/gatewayAPI:
+            httpRoute: {{ include "app.identifier" $ctx }}
+            namespace: {{ $.Release.Namespace }}
+      {{- end }}
+      {{- with $canary.analysis }}
+      analysis:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    {{- else if eq $rollout.strategy "blueGreen" }}
+    {{- $blueGreen := $rollout.blueGreen | default dict }}
+    blueGreen:
+      activeService: {{ include "app.identifier" $ctx }}-{{ $blueGreen.activeServiceRef }}
+      previewService: {{ include "app.identifier" $ctx }}-{{ $blueGreen.previewServiceRef }}
+      autoPromotionEnabled: {{ $blueGreen.autoPromotionEnabled | default false }}
+      {{- with $blueGreen.scaleDownDelaySeconds }}
+      scaleDownDelaySeconds: {{ . }}
+      {{- end }}
+      {{- with $blueGreen.prePromotionAnalysis }}
+      prePromotionAnalysis:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $blueGreen.postPromotionAnalysis }}
+      postPromotionAnalysis:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    {{- end }}
+{{- end }}

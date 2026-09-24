@@ -1,0 +1,21 @@
+# Patterns to ignore when building packages.
+.DS_Store
+# VCS dirs
+.git/
+.gitignore
+.bzr/
+.bzrignore
+.hg/
+.svn/
+# Backup / temp files
+*.swp
+*.bak
+*.tmp
+*.orig
+*~
+# IDEs
+.idea/
+.vscode/
+*.tmproj
+# Tests (not shipped in the chart package)
+tests/
