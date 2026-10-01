@@ -10,6 +10,10 @@
 # looks exactly like being up to date. Bump it by hand, or add a `kubernetes`
 # manager pattern for gitops/k8s-manifests/ to renovate.json5.
 #
+# On every bump, also re-diff ConfigMap.prompts.yaml against the new tag's
+# upstream prompt — it is a verbatim copy plus local rules, and a stale or
+# renamed one fails silently.
+#
 # ── Trial status ────────────────────────────────────────────────────────────
 # docs/superpowers/specs/2026-09-17-mealie-trial-install.md. LAN only, local
 # accounts; Authentik OIDC needs a confidential client and the blueprints matrix
@@ -229,6 +233,15 @@ spec:
             # unaffected by OIDC, which is also how the agent layer will connect.
             - name: ALLOW_PASSWORD_LOGIN
               value: "false"
+            #
+            # ── AI prompt overrides ─────────────────────────────────────────
+            # Files here REPLACE the matching built-in prompt (no merging);
+            # missing ones fall back to upstream. See ConfigMap.prompts.yaml.
+            # Mounted outside /app on purpose: docker/entry.sh runs
+            # `chown -R /app` as root before dropping privileges, and a
+            # read-only ConfigMap mount under it would only produce errors.
+            - name: OPENAI_CUSTOM_PROMPT_DIR
+              value: /custom-prompts
           envFrom:
             # OIDC_CLIENT_SECRET, and only that. `optional: true` is what makes
             # the ordering work: the blueprint creates the provider, Authentik
@@ -245,6 +258,12 @@ spec:
             # Mealie generates for itself. Wiping this logs every user out.
             - name: data
               mountPath: /app/data
+            # No subPath: a subPath mount never sees ConfigMap updates, and
+            # Mealie re-reads prompt files on every call, so a plain mount
+            # lets a prompt edit apply without anything restarting.
+            - name: prompts
+              mountPath: /custom-prompts
+              readOnly: true
           # /api/app/about is the endpoint the image's own Docker HEALTHCHECK
           # curls (docker/healthcheck.sh), and it needs no authentication.
           startupProbe:
@@ -284,3 +303,15 @@ spec:
         - name: data
           persistentVolumeClaim:
             claimName: mealie-data
+        # Mealie looks prompts up as <dir>/recipes/<name>.txt, and ConfigMap
+        # keys cannot contain "/", so `items` places each key in the subfolder.
+        - name: prompts
+          configMap:
+            name: mealie-prompts
+            items:
+              - key: compile-source.txt
+                path: recipes/compile-source.txt
+              - key: build-recipe.txt
+                path: recipes/build-recipe.txt
+              - key: parse-recipe-ingredients.txt
+                path: recipes/parse-recipe-ingredients.txt
