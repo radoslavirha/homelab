@@ -315,3 +315,5 @@ spec:
                 path: recipes/build-recipe.txt
               - key: parse-recipe-ingredients.txt
                 path: recipes/parse-recipe-ingredients.txt
+              - key: resolve-organizers.txt
+                path: recipes/resolve-organizers.txt
