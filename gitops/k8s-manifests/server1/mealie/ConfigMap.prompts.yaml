@@ -5,7 +5,7 @@
 # INSTEAD of its built-in prompt when that file exists and is non-empty; there
 # is no merging. So each file here is the upstream prompt copied verbatim at the
 # pinned image tag, with local rules appended after it — in each file, everything
-# from the first local heading down ("Text casing:" / "Combined ingredients:" / "Page reference:" /
+# from the first local heading down ("Text casing:" / "Combined ingredients:" / "Yield:" / "Page reference:" /
 # "Counted items:") is local. Prompts not listed here keep using the built-in
 # versions.
 #
@@ -113,6 +113,10 @@ data:
     - Split only when no quantity has to be divided between the foods: "1 lžička soli a pepř" becomes "1 lžička soli" and "pepř", but "2 lžíce soli a cukru" stays one line, because the source does not say how much of each.
     - Alternatives are not separate foods: "máslo nebo olej" stays one line.
     - This is an exception to keeping each ingredient as a single line of text exactly as written.
+
+    Yield:
+    - Cookbooks often print the yield as a line of its own above the ingredients, e.g. "Na 4 porce", "NA 4 VELKÉ PORCE:", or "Pro 4 osoby". That line is the recipe's yield: put it in recipe_yield whenever the source states one, and never use it as an ingredient section title.
+    - Start recipe_yield with the number. When it counts portions or people, follow the number with "porce", keeping a size word if there is one: "Na 4 porce" and "Pro 4 osoby" become "4 porce", "NA 4 VELKÉ PORCE:" becomes "4 velké porce". Write any other yield as the count and the item, e.g. "12 kusů" or "1 plech".
 
     Page reference:
     - If the source records a page number, add a note citing it so the cook can find the recipe in the book again. Leave the note's title blank and write it in the recipe's language: in Czech, "Strana 135", or "<book title> strana 135" when the source names the book. For a recipe that spans pages, cite the range, e.g. "Strana 134–135".
