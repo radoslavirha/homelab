@@ -4,9 +4,7 @@ description: APM project for homelab
 author: Radoslav Irha
 targets:
   - claude
-  - copilot
 dependencies:
   apm:
-    - obra/superpowers
   mcp:
 scripts: {}
