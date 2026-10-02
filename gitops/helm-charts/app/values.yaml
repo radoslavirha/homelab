@@ -122,6 +122,22 @@
 #   # ingress.stripPrefix controls whether a Traefik stripPrefix Middleware is created and attached.
 #   # Defaults to true. Set to false for UI apps that handle their own base path.
 #   stripPrefix: false
+#   # ingress.cors renders a Traefik headers Middleware and attaches it to the HTTPRoute.
+#   # CORS is the gateway's job, not the app's: omit it unless a browser on another origin
+#   # calls this app. Traefik answers preflight itself (the app never sees OPTIONS) and
+#   # strips any CORS headers the app sets, so this list is the whole policy.
+#   cors:
+#     # Exact origins (scheme://host[:port], no path, no trailing slash). Required, non-empty.
+#     allowOrigins:
+#       - https://apps.example.com
+#     allowMethods: [GET, POST, PUT, PATCH, DELETE, OPTIONS]
+#     allowHeaders: [Authorization, Content-Type]
+#     # Response headers the browser may read beyond the CORS-safelisted ones.
+#     exposeHeaders: []
+#     # Seconds a browser may cache the preflight answer.
+#     maxAge: 600
+#     # Defaults to false. Cannot be combined with "*" in allowOrigins.
+#     allowCredentials: false
 
 # # templates is a map of config files rendered by External Secrets Operator (ESO) into a
 # # Secret each, which the main container mounts. Content lives in env-specific values

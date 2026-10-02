@@ -92,6 +92,18 @@
 {{- if not (hasKey .ingress "enabled") -}}
 {{- fail (printf "Ingress configuration must have an 'enabled' key with boolean value.. [ingress].") -}}
 {{- end -}}
+
+{{- with .ingress.cors -}}
+{{- $origins := .allowOrigins | default list -}}
+{{- if or (not (kindIs "slice" $origins)) (eq (len $origins) 0) -}}
+{{- fail (printf "ingress.cors.allowOrigins must be a non-empty list of origins. [ingress].") -}}
+{{- end -}}
+{{- /* Traefik answers "*" plus credentials by reflecting the request Origin, which is
+       exactly the any-origin-with-credentials hole the gateway is taking over to close. */}}
+{{- if and .allowCredentials (has "*" $origins) -}}
+{{- fail (printf "ingress.cors.allowCredentials cannot be combined with '*' in allowOrigins. [ingress].") -}}
+{{- end -}}
+{{- end -}}
 {{- end -}}
 
 {{/* Validates template.

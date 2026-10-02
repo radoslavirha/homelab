@@ -17,4 +17,39 @@ spec:
     prefixes:
       - /{{ $pathName }}
 {{- end }}
+{{- with $application.ingress.cors }}
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: {{ include "app.identifier" $ctx }}-middleware-cors
+  labels: {{ include "app.meta.labels" $ctx | nindent 4 }}
+spec:
+  headers:
+    accessControlAllowOriginList: {{ toYaml .allowOrigins | nindent 6 }}
+    {{- with .allowMethods }}
+    accessControlAllowMethods: {{ toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with .allowHeaders }}
+    accessControlAllowHeaders: {{ toYaml . | nindent 6 }}
+    {{- end }}
+    {{- with .exposeHeaders }}
+    accessControlExposeHeaders: {{ toYaml . | nindent 6 }}
+    {{- end }}
+    {{- if hasKey . "maxAge" }}
+    accessControlMaxAge: {{ .maxAge }}
+    {{- end }}
+    accessControlAllowCredentials: {{ .allowCredentials | default false }}
+    addVaryHeader: true
+    {{- /* Traefik only sets Access-Control-Allow-Origin for an origin on the list; for any
+           other origin it leaves the backend's header untouched, so an app that still
+           reflects every origin (tsed-platform < 6) would keep doing so through this
+           middleware. Empty values delete the backend's headers before Traefik sets its
+           own (pkg/middlewares/headers, v3.7), so the list above is the only CORS policy
+           a browser ever sees. */}}
+    customResponseHeaders:
+      Access-Control-Allow-Origin: ""
+      Access-Control-Allow-Credentials: ""
+      Access-Control-Expose-Headers: ""
+{{- end }}
 {{ end }}

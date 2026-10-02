@@ -32,12 +32,22 @@ spec:
         - name: {{ include "app.identifier" $ctx }}-{{ $refSvcName }}
           port: {{ $refSvc.port | default 80 }}
       {{- $stripPrefix := dig "stripPrefix" true ($application.ingress | default dict) -}}
-      {{- if $stripPrefix }}
+      {{- $cors := $application.ingress.cors -}}
+      {{- if or $stripPrefix $cors }}
       filters:
+        {{- if $stripPrefix }}
         - type: ExtensionRef
           extensionRef:
             group: traefik.io
             kind: Middleware
             name: {{ include "app.identifier" $ctx }}-middleware-stripprefix
+        {{- end }}
+        {{- if $cors }}
+        - type: ExtensionRef
+          extensionRef:
+            group: traefik.io
+            kind: Middleware
+            name: {{ include "app.identifier" $ctx }}-middleware-cors
+        {{- end }}
       {{- end }}
 {{ end }}

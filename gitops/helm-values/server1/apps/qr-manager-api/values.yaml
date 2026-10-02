@@ -1,5 +1,5 @@
 # qr-manager-api — shared base values
-# Env-specific: image.tag, templates.config.content → production.yaml / sandbox.yaml
+# Env-specific: image.tag, templates.config.content, ingress.cors.allowOrigins → production.yaml / sandbox.yaml
 
 # Restart when the ESO-rendered config Secret changes — a vars edit or a credential
 # rotated in OpenBao. The file is read once, at pod start.
@@ -86,6 +86,15 @@ ingress:
   enabled: true
   serviceRef: http
   pathName: iot/qr-manager
+  # qr-manager-ui is served from apps.<domain> and calls this API on api.<domain>, so every
+  # call is cross-origin. Traefik owns CORS; the allowed origin is per stage, in
+  # values-<env>.yaml. Credentials stay off: the UI sends a Bearer header, never cookies.
+  # The qr.irha.cz redirect route (k8s-manifests) has no CORS — it serves QR scans, not XHR.
+  cors:
+    allowMethods: [GET, POST, PUT, PATCH, DELETE, OPTIONS]
+    allowHeaders: [Authorization, Content-Type]
+    maxAge: 600
+    allowCredentials: false
 # Boot budget: 5s × 24 = 120s. Liveness and readiness stay suppressed until this passes,
 # which is the modern replacement for initialDelaySeconds guesswork.
 startupProbe:

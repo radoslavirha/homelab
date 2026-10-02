@@ -1,0 +1,196 @@
+suite: middleware tests
+templates:
+  - templates/middleware.yaml
+release:
+  name: my-app
+tests:
+  - it: should render only the stripPrefix Middleware when cors is not set
+    set:
+      image.repository: ghcr.io/example/my-app
+      labels.component: api
+      labels.partOf: iot
+      ingress.enabled: true
+      ingress.serviceRef: http
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: metadata.name
+          value: api-iot-my-app-middleware-stripprefix
+
+  - it: should render only the cors Middleware when stripPrefix is off
+    set:
+      image.repository: ghcr.io/example/my-app
+      labels.component: api
+      labels.partOf: iot
+      ingress.enabled: true
+      ingress.serviceRef: http
+      ingress.stripPrefix: false
+      ingress.cors.allowOrigins:
+        - https://apps.example.com
+    asserts:
+      - hasDocuments:
+          count: 1
+      - equal:
+          path: metadata.name
+          value: api-iot-my-app-middleware-cors
+      - equal:
+          path: spec.headers.accessControlAllowOriginList
+          value:
+            - https://apps.example.com
+      - equal:
+          path: spec.headers.accessControlAllowCredentials
+          value: false
+      - equal:
+          path: spec.headers.addVaryHeader
+          value: true
+      - isNull:
+          path: spec.headers.accessControlAllowMethods
+      - isNull:
+          path: spec.headers.accessControlMaxAge
+
+  - it: should strip backend CORS headers so the gateway policy is the only one
+    set:
+      image.repository: ghcr.io/example/my-app
+      labels.component: api
+      labels.partOf: iot
+      ingress.enabled: true
+      ingress.serviceRef: http
+      ingress.stripPrefix: false
+      ingress.cors.allowOrigins:
+        - https://apps.example.com
+    asserts:
+      - equal:
+          path: spec.headers.customResponseHeaders
+          value:
+            Access-Control-Allow-Origin: ""
+            Access-Control-Allow-Credentials: ""
+            Access-Control-Expose-Headers: ""
+
+  - it: should render every configured cors key
+    set:
+      image.repository: ghcr.io/example/my-app
+      labels.component: api
+      labels.partOf: iot
+      ingress.enabled: true
+      ingress.serviceRef: http
+      ingress.stripPrefix: false
+      ingress.cors:
+        allowOrigins: [https://apps.example.com, https://apps.staging.example.com]
+        allowMethods: [GET, POST]
+        allowHeaders: [Authorization, Content-Type]
+        exposeHeaders: [X-Request-Id]
+        maxAge: 600
+        allowCredentials: true
+    asserts:
+      - equal:
+          path: spec.headers.accessControlAllowOriginList
+          value: [https://apps.example.com, https://apps.staging.example.com]
+      - equal:
+          path: spec.headers.accessControlAllowMethods
+          value: [GET, POST]
+      - equal:
+          path: spec.headers.accessControlAllowHeaders
+          value: [Authorization, Content-Type]
+      - equal:
+          path: spec.headers.accessControlExposeHeaders
+          value: [X-Request-Id]
+      - equal:
+          path: spec.headers.accessControlMaxAge
+          value: 600
+      - equal:
+          path: spec.headers.accessControlAllowCredentials
+          value: true
+
+  - it: should render both Middlewares when cors and stripPrefix are on
+    set:
+      image.repository: ghcr.io/example/my-app
+      labels.component: api
+      labels.partOf: iot
+      ingress.enabled: true
+      ingress.serviceRef: http
+      ingress.cors.allowOrigins:
+        - https://apps.example.com
+    asserts:
+      - hasDocuments:
+          count: 2
+      - equal:
+          path: metadata.name
+          value: api-iot-my-app-middleware-stripprefix
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: api-iot-my-app-middleware-cors
+        documentIndex: 1
+
+  - it: should render no Middleware when ingress is disabled, even with cors set
+    set:
+      image.repository: ghcr.io/example/my-app
+      labels.component: api
+      labels.partOf: iot
+      ingress.enabled: false
+      ingress.cors.allowOrigins:
+        - https://apps.example.com
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: should fail when cors is set without allowOrigins
+    set:
+      image.repository: ghcr.io/example/my-app
+      labels.component: api
+      labels.partOf: iot
+      ingress.enabled: true
+      ingress.serviceRef: http
+      ingress.cors.allowMethods: [GET]
+    asserts:
+      - failedTemplate:
+          errorMessage: "ingress.cors.allowOrigins must be a non-empty list of origins. [ingress]."
+
+  - it: should fail when allowOrigins is an empty list
+    set:
+      image.repository: ghcr.io/example/my-app
+      labels.component: api
+      labels.partOf: iot
+      ingress.enabled: true
+      ingress.serviceRef: http
+      ingress.cors.allowOrigins: []
+    asserts:
+      - failedTemplate:
+          errorMessage: "ingress.cors.allowOrigins must be a non-empty list of origins. [ingress]."
+
+  - it: should fail when allowOrigins is a string instead of a list
+    set:
+      image.repository: ghcr.io/example/my-app
+      labels.component: api
+      labels.partOf: iot
+      ingress.enabled: true
+      ingress.serviceRef: http
+      ingress.cors.allowOrigins: https://apps.example.com
+    asserts:
+      - failedTemplate:
+          errorMessage: "ingress.cors.allowOrigins must be a non-empty list of origins. [ingress]."
+
+  - it: should fail when allowCredentials is combined with a wildcard origin
+    set:
+      image.repository: ghcr.io/example/my-app
+      labels.component: api
+      labels.partOf: iot
+      ingress.enabled: true
+      ingress.serviceRef: http
+      ingress.cors.allowOrigins: ["*"]
+      ingress.cors.allowCredentials: true
+    asserts:
+      - failedTemplate:
+          errorMessage: "ingress.cors.allowCredentials cannot be combined with '*' in allowOrigins. [ingress]."
+
+  - it: should accept a wildcard origin without credentials
+    set:
+      image.repository: ghcr.io/example/my-app
+      labels.component: api
+      labels.partOf: iot
+      ingress.enabled: true
+      ingress.serviceRef: http
+      ingress.cors.allowOrigins: ["*"]
+    asserts:
+      - notFailedTemplate: {}

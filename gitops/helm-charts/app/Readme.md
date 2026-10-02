@@ -46,6 +46,18 @@ deploys to: `https://<labels.component>.<vars.domain>/<ingress.pathName or relea
 
 Services are named: `{component}-{partOf}-{release}-{serviceName}` (e.g. `api-iot-my-app-http`).
 
+### CORS
+
+CORS is configured at the gateway, never in the app. Set `ingress.cors` only when a browser on another origin calls the app. The chart then renders a Traefik `headers` Middleware `<identifier>-middleware-cors` and attaches it to the HTTPRoute next to `stripprefix`. Traefik answers preflight itself and deletes any `Access-Control-Allow-*` headers the app returns, so the values below are the only policy a browser sees. Keys are documented in [values.yaml](values.yaml). The chart rejects an empty `allowOrigins` and `allowCredentials: true` combined with `*`.
+
+```yaml
+ingress:
+  cors:
+    allowOrigins: [https://apps.server1.homelab.irha.cz]
+    allowMethods: [GET, POST, PUT, PATCH, DELETE, OPTIONS]
+    allowHeaders: [Authorization, Content-Type]
+```
+
 ## Config templates
 
 A config file is written as a template in the env-specific values file — **no files inside the chart** — and rendered by [External Secrets Operator](https://external-secrets.io/) (ESO), not by the pod. For each template the chart emits an `ExternalSecret`; ESO fetches the template's secrets from OpenBao, renders the file into the Secret `<identifier>-tpl-<name>`, and the main container mounts it at `path`.

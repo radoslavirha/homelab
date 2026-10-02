@@ -172,3 +172,73 @@ tests:
     asserts:
       - failedTemplate:
           errorMessage: "vars.domain is required to compute the hostname; set it or ingress.hostname. [ingress]."
+
+  - it: should attach only the cors filter when stripPrefix is off
+    set:
+      vars.domain: example.com
+      image.repository: ghcr.io/example/my-app
+      labels.component: api
+      labels.partOf: iot
+      ingress.enabled: true
+      ingress.serviceRef: http
+      ingress.stripPrefix: false
+      ingress.cors.allowOrigins:
+        - https://apps.example.com
+      services.http.enabled: true
+      services.http.port: 80
+      services.http.targetPort: 4000
+    asserts:
+      - lengthEqual:
+          path: spec.rules[0].filters
+          count: 1
+      - equal:
+          path: spec.rules[0].filters[0]
+          value:
+            type: ExtensionRef
+            extensionRef:
+              group: traefik.io
+              kind: Middleware
+              name: api-iot-my-app-middleware-cors
+
+  - it: should attach stripPrefix then cors when both are on
+    set:
+      vars.domain: example.com
+      image.repository: ghcr.io/example/my-app
+      labels.component: api
+      labels.partOf: iot
+      ingress.enabled: true
+      ingress.serviceRef: http
+      ingress.cors.allowOrigins:
+        - https://apps.example.com
+      services.http.enabled: true
+      services.http.port: 80
+      services.http.targetPort: 4000
+    asserts:
+      - lengthEqual:
+          path: spec.rules[0].filters
+          count: 2
+      - equal:
+          path: spec.rules[0].filters[0].extensionRef.name
+          value: api-iot-my-app-middleware-stripprefix
+      - equal:
+          path: spec.rules[0].filters[1].extensionRef.name
+          value: api-iot-my-app-middleware-cors
+
+  - it: should attach only the stripPrefix filter when cors is not set
+    set:
+      vars.domain: example.com
+      image.repository: ghcr.io/example/my-app
+      labels.component: api
+      labels.partOf: iot
+      ingress.enabled: true
+      ingress.serviceRef: http
+      services.http.enabled: true
+      services.http.port: 80
+      services.http.targetPort: 4000
+    asserts:
+      - lengthEqual:
+          path: spec.rules[0].filters
+          count: 1
+      - equal:
+          path: spec.rules[0].filters[0].extensionRef.name
+          value: api-iot-my-app-middleware-stripprefix
