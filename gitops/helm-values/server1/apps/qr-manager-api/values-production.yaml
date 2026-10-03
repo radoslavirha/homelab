@@ -9,7 +9,7 @@
 # printed label.
 
 image:
-  tag: "0.9.0"
+  tag: "0.10.0"
 # The qr-manager-ui origin for this stage (its HTTPRoute host). Only the origin differs per
 # stage; the rest of ingress.cors is in values.yaml and merges in.
 ingress:
