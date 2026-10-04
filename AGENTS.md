@@ -143,7 +143,7 @@ gitops/
       reloader.yaml         cluster-specific overrides
       telegraf.yaml         server1 overrides (currently empty)
       traefik.yaml          dashboard hostname/IP, externalIPs, statusAddress.ip,
-                            ports: 1883/8883/27017 + UDP 4000-4001 for the IoT estate
+                            ports: 1883/8883/27017 for the IoT estate
     server2/              LLM engine since 2026-09-20 (Ollama) — no datastores, no custom apps
       cert-manager.yaml     cluster-specific overrides
       external-dns.yaml     domainFilters, txtOwnerId

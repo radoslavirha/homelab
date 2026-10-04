@@ -34,7 +34,7 @@ below for the externally reachable form.
 | `GET /api/docs/` | none | Swagger UI. Trailing slash matters |
 | `GET /commands/docs/` | none | Swagger UI. Trailing slash matters |
 
-For miot-bridge egress (MQTT, Mongo, miIO UDP, Loxone UDP), use **V3 in-pod** and probe the
+For miot-bridge egress (MQTT, Mongo, miIO UDP), use **V3 in-pod** and probe the
 dependencies directly. Do not try to drive them through the HTTP API.
 
 ### qr-manager-api
@@ -98,7 +98,6 @@ Do not hand-assemble a URL that a run depends on without confirming against the 
 | Alloy OTLP gRPC | same host `:4317` | `/dev/tcp` |
 | InfluxDB2 |  `influxdb2.iot.svc.cluster.local:80` | `curl /health` |
 | miIO device (LAN) | `192.168.1.85:54321` UDP | `echo -n probe > /dev/udp/192.168.1.85/54321` |
-| Loxone (LAN) | `192.168.1.140:50450` UDP | same form |
 | CHMI (internet) | `opendata.chmi.cz:443`, `produkty.chmi.cz:443` | `curl -sS -o /dev/null -w '%{http_code}'` |
 | miot-spec (internet) | `miot-spec.org:443` | same |
 | OpenBao (server3) | `vault.server3.homelab.irha.cz:443` | HTTPS, from server1/server2 via ExternalSecrets |

@@ -114,7 +114,6 @@ the node IPs — what is defined in `ports:` is what the LAN can reach.
 | 1883 MQTT | server1 | plaintext, authenticated |
 | 8883 MQTTS | server1 | TLS, same broker behind it |
 | 4317 OTLP gRPC | server3 | **TLS**, terminated at Traefik; unauthenticated |
-| 4000-4001 | server1 | UDP, miot |
 
 server2 opens 443 and 80 only. Its `ports:` block was removed on 2026-09-13 with the IoT estate —
 every TCP/UDP entrypoint above routed to nothing once the `IngressRouteTCP` objects went.

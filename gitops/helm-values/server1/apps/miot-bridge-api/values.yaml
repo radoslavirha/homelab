@@ -92,17 +92,16 @@ ingress:
   serviceRef: http
   pathName: iot/miot-bridge
 # No udpIngress. The UDP command listener and the UDP/HTTP notification channels were
-# never used (owner, 2026-08-27) and are switched off in the config below, so the
-# Service, the IngressRouteUDP and the container's UDP port all go with them.
+# never used (owner, 2026-08-27). They are switched off in the config (production.yaml /
+# sandbox.yaml never set `udp` or `http`), and homelab-apps#160/#161 removed them from
+# the app itself, so the Service, the IngressRouteUDP and the container's UDP port all
+# go with them. Controllers talk REST + MQTT; the only UDP left is outbound miIO to the
+# devices (NetworkPolicy.egress-lan-miio.yaml).
 #
 # What this removed: Traefik runs hostNetwork and bound the `udp-miot-prod` /
-# `udp-miot-sbx` entrypoints on the node, so 192.168.1.20x:4000-4001/UDP was a real
-# LAN-reachable path into this pod. It is now closed at the application layer as well
-# as by NetworkPolicy — allow-host-ingress permits TCP only.
-#
-# The Traefik entrypoints themselves still exist in
-# gitops/helm-values/<cluster>/traefik.yaml and now have no backend. Removing them is
-# a separate change: Traefik is hostNetwork with one replica, so it restarts ingress.
+# `udp-miot-sbx` entrypoints (4000-4001/UDP) on the node, so 192.168.1.20x:4000-4001/UDP
+# was a real LAN-reachable path into this pod. Those entrypoints are gone from
+# gitops/helm-values/server1/traefik.yaml too, and allow-host-ingress permits TCP only.
 # Boot budget: 5s × 24 = 120s. Liveness and readiness stay suppressed until this passes,
 # which is the modern replacement for initialDelaySeconds guesswork.
 startupProbe:
