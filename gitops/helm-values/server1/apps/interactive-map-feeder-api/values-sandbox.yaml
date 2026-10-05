@@ -6,7 +6,7 @@
 # promoted once a sandbox rollout had been watched.
 
 image:
-  tag: "0.16.0"
+  tag: "0.16.1"
 templates:
   config:
     content: |

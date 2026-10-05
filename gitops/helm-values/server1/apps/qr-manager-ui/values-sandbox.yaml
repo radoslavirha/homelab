@@ -6,7 +6,7 @@
 # staged here first and promoted once a sandbox rollout had been watched.
 
 image:
-  tag: "0.13.1"
+  tag: "0.13.2"
 templates:
   config:
     # The auth block is templated, not spelled out. The ApplicationSet is a
