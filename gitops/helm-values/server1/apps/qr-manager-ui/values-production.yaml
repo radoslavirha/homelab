@@ -3,7 +3,7 @@
 # .app.* (name, group, component, pathName, containerPort, namespace, host).
 
 image:
-  tag: "0.13.1"
+  tag: "0.13.2"
 templates:
   config:
     # Production carries the auth block BEFORE it runs an image that requires it.
