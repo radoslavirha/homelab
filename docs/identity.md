@@ -8,9 +8,8 @@ The version is pinned in
 [`gitops/argocd-manifests/server3/apps/identity/Authentik.yaml`](../gitops/argocd-manifests/server3/apps/identity/Authentik.yaml)
 — chart version and app version are 1:1 upstream, so `targetRevision` pins both.
 
-Design records for work that has shipped live in `docs/superpowers/specs/archive/`: the object model
-in `2026-09-04-authentik-tenancy-topology.md`, the role ladder in `2026-09-08-role-hierarchy.md`. Not
-every spec there is committed.
+The design history behind this — the object model, the role ladder, what was rejected and why — lives
+in the private knowledge base (skill `knowledge-base`).
 
 ---
 
@@ -927,8 +926,7 @@ Break-glass, when nobody can mint a link — an admin locked out of Authentik it
 kubectl --context admin@server3 -n authentik exec -it deploy/authentik-worker -- ak changepassword <username>
 ```
 
-**SMTP would replace step 1 with self-service** and is the documented upgrade, not a redesign. See
-`docs/superpowers/specs/2026-09-18-authentik-identity-hardening.md` § "SMTP: deferred, not rejected".
+**SMTP would replace step 1 with self-service** and is the documented upgrade, not a redesign.
 
 Both flows are rendered by the blueprint chart from the `onboarding` block in
 [`gitops/helm-values/server3/authentik-blueprints.yaml`](../gitops/helm-values/server3/authentik-blueprints.yaml),

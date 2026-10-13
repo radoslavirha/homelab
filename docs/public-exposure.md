@@ -1,10 +1,7 @@
 # Public exposure
 
 How a service in this homelab becomes reachable from the internet, and what must be true before
-it is. The design decisions behind this live in
-[`superpowers/specs/archive/2026-09-01-public-exposure.md`](superpowers/specs/archive/2026-09-01-public-exposure.md)
-and [`superpowers/specs/archive/2026-09-22-exposure-edge-decision.md`](superpowers/specs/archive/2026-09-22-exposure-edge-decision.md);
-this document is the working reference.
+it is. This document is the working reference.
 
 ## What is published today
 

@@ -19,8 +19,7 @@
 # singleton.
 #
 # ── Status: experiment, not a dependency ────────────────────────────────────
-# Spec: docs/superpowers/specs/2026-09-19-ollama-server2.md. Mealie's AI
-# provider runs on Claude and works, so NO production feature depends on this.
+# Mealie's AI provider runs on Claude and works, so NO production feature depends on this.
 # It exists to be measured — decision 13 picks a model by measurement, and this
 # is what there is to measure on. Rollback is deleting this file and the
 # manifests directory and letting prune do the rest; the only thing lost is the

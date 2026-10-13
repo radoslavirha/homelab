@@ -1,6 +1,5 @@
 # Authentik — the homelab identity provider, serving auth.irha.cz.
-# Topology and naming: docs/superpowers/specs/archive/2026-09-04-authentik-tenancy-topology.md
-# Runbook:             docs/identity.md
+# Runbook: docs/identity.md
 #
 # Chart version and app version are 1:1 upstream, so targetRevision pins both.
 #

@@ -3,8 +3,7 @@
 # server2 has no GPU and is not getting one (parent spec decision 1).
 #
 # ── This is an experiment, not a dependency ────────────────────────────────
-# docs/superpowers/specs/2026-09-19-ollama-server2.md. Nothing in this repo
-# breaks if this is slow, wrong, or deleted — Mealie's AI provider runs on
+# Nothing in this repo breaks if this is slow, wrong, or deleted — Mealie's AI provider runs on
 # Claude and works. That framing is why there is no credential system here, no
 # PostSync pull Job, and one replica.
 #

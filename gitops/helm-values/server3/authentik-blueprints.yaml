@@ -4,8 +4,6 @@
 # mounted by the Authentik worker, and applied by Authentik itself. Adding an
 # application or a role is a few lines here; the chart produces the repetitive YAML.
 #
-# Topology: docs/superpowers/specs/archive/2026-09-04-authentik-tenancy-topology.md
-#
 # Hostnames are derived as:
 #   production -> <hostPrefix>.<cluster>.homelab.irha.cz
 #   sandbox    -> <hostPrefix>.<stage>.<cluster>.homelab.irha.cz
@@ -41,8 +39,6 @@
 # A bare string is still accepted and means a role with no parent. Ladders are per
 # application: `qr-manager.admin` implies nothing about `miot-bridge`.
 #
-# Design: docs/superpowers/specs/archive/2026-09-08-role-hierarchy.md
-#
 # `kind` says what sort of client an entry is. It is OURS, not Authentik's `client_type`
 # (public/confidential), which is derived from it.
 #
@@ -65,9 +61,6 @@
 #
 # An application that is someone's target may never declare `accesses` itself -- clients
 # are clients and APIs are APIs, and the chart fails on the overlap.
-#
-# Design: docs/superpowers/specs/archive/2026-09-08-multi-audience-tokens.md and
-#         docs/superpowers/specs/archive/2026-09-08-device-identity-esp32.md
 
 # Onboarding — invitation-gated enrollment and admin-minted recovery.
 #
@@ -81,7 +74,6 @@
 # invited member lands in (which grants nothing on its own).
 #
 # Runbook: docs/identity.md § Onboarding a household member
-# Design:  docs/superpowers/specs/2026-09-18-authentik-identity-hardening.md
 onboarding:
   enabled: true
   group: household
@@ -90,8 +82,6 @@ onboarding:
   recoveryTitle: Choose a new password
 
 # Login surface hardening. Chart default is off; this is the opt-in.
-# Design: docs/superpowers/specs/archive/2026-09-18-authentik-identity-hardening.md
-#         section "Out of scope".
 #
 # Every tunable below is explained in the chart's own values.yaml. The two that
 # carry a cost worth knowing before you touch them:
@@ -161,8 +151,7 @@ applications:
     # No UI. The application exists so a person can hold a token addressed to
     # this API; the LaskaKit map does NOT use it — a device is its own
     # confidential application with client_credentials, and that one cannot live
-    # here because it needs a client secret. See "Devices" in
-    # docs/superpowers/specs/archive/2026-09-04-authentik-tenancy-topology.md.
+    # here because it needs a client secret.
     #
     # Every route is a read of public CHMU data, so `reader` is the only rung with
     # anything behind it today. `editor` and `admin` are declared so the feeder is

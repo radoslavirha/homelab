@@ -18,12 +18,10 @@
 # chat histories, which is not a thing anyone wants -- this stays a singleton.
 #
 # ── What this app does NOT own ──────────────────────────────────────────────
-# The Ollama connection is a form in Settings, not a manifest: the sibling spec
-# (docs/superpowers/specs/2026-09-19-ollama-server2.md) stands the engine up at
+# The Ollama connection is a form in Settings, not a manifest: the Ollama app
+# (apps/household/Ollama.yaml) stands the engine up at
 # https://ollama.server2.homelab.irha.cz and this app reaches it over the LAN.
 # Nothing here blocks on it -- a cloud model connection is enough to use this.
-#
-# Spec: docs/superpowers/specs/2026-09-19-open-webui-server1.md.
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:

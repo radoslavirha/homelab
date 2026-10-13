@@ -9,8 +9,7 @@
 # (same chart, two environments) no longer true.
 #
 # The stage is named for what is coming, not for its first tenant: Open WebUI,
-# Ollama and the agent tool servers land here too. See
-# docs/superpowers/specs/2026-09-13-personal-agents-platform.md.
+# Ollama and the agent tool servers land here too.
 #
 # ── Sync wave 4 ─────────────────────────────────────────────────────────────
 # Alongside RootApps. Needs ESO (wave 1) for the OpenBao-backed Secret and

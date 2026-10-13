@@ -88,8 +88,6 @@ applications: []
 #
 # Onboarding is NOT per-application, which is why it is not part of the matrix
 # above: one enrollment flow and one recovery flow serve the whole instance.
-#
-# Design: docs/superpowers/specs/2026-09-18-authentik-identity-hardening.md
 onboarding:
   enabled: false
   # The group every invited member lands in. Grants NOTHING on its own: no
@@ -127,9 +125,6 @@ onboarding:
 #   2. Upstream's own blueprints manage these objects too, so an Authentik upgrade
 #      can quietly revert a field. The on-cluster verification in docs/identity.md is
 #      the only thing that catches it.
-#
-# Design: docs/superpowers/specs/archive/2026-09-18-authentik-identity-hardening.md
-#         section "Out of scope", which is where this work was deferred to.
 hardening:
   enabled: false
 

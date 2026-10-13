@@ -1,7 +1,6 @@
 # ── Kubernetes auth — provisioner roles ──────────────────────────────────────
 # PostSync provisioner Jobs (docs/provisioning.md) log in to OpenBao with their pod's
-# ServiceAccount token instead of carrying a hand-minted KV token. See
-# docs/superpowers/specs/2026-09-22-provisioner-kubernetes-auth.md.
+# ServiceAccount token instead of carrying a hand-minted KV token.
 #
 # Only the ROLE is managed here. The `kubernetes-<cluster>` auth MOUNT, its config and the
 # `external-secrets` role stay on the CLI (docs/iac.md § 3.c-3.d), for two reasons:

@@ -4,8 +4,6 @@
 # its own pre-built SvelteKit frontend, so there is no nginx sidecar and no
 # second image.
 #
-# Spec: docs/superpowers/specs/2026-09-19-open-webui-server1.md.
-#
 # ── The image tag is the version ────────────────────────────────────────────
 # There is no chart and no `targetRevision` to bump, so v0.11.3 below IS the
 # pinned version of this app. Renovate's `kubernetes` manager ships no default
@@ -270,7 +268,7 @@ spec:
               value: "false"
             #
             # ── The Ollama engine on server2 ────────────────────────────────
-            # The seam with docs/superpowers/specs/2026-09-19-ollama-server2.md.
+            # The seam with the Ollama app (gitops/k8s-manifests/server2/ollama/).
             # Cross-cluster over the LAN: this pod is on server1 (192.168.1.200) and
             # Ollama's Traefik pins an ipAllowList to exactly that node address, so
             # the call works from here and from a laptop it does not. Verified

@@ -15,7 +15,7 @@
 # renamed one fails silently.
 #
 # ── Trial status ────────────────────────────────────────────────────────────
-# docs/superpowers/specs/2026-09-17-mealie-trial-install.md. LAN only, local
+# LAN only, local
 # accounts; Authentik OIDC needs a confidential client and the blueprints matrix
 # renders public+PKCE `api` clients, so it is deliberately a follow-up.
 apiVersion: apps/v1

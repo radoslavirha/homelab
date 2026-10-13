@@ -5,7 +5,6 @@
 # annotations key, so Stakater Reloader cannot be opted in from values. Until then,
 # restart manually after rotation:
 #   kubectl rollout restart deploy/telegraf -n telegraf
-# Spec: docs/superpowers/specs/2026-08-08-telegraf-reloader-support.md
 # Upstream values.yaml: https://github.com/influxdata/helm-charts/blob/master/charts/telegraf/values.yaml
 # Credentials come from ExternalSecrets → telegraf-influxdb2-credentials, telegraf-mqtt-credentials
 

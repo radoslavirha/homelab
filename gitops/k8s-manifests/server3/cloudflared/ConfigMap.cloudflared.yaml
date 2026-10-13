@@ -5,7 +5,7 @@
 # service. That is the opt-in property the exposure spec is built on -- guard it.
 #
 # Names are added ONE AT A TIME and proven before the next (see the per-name checklist
-# in docs/superpowers/specs/2026-09-01-public-exposure.md). auth.irha.cz goes first and
+# in docs/public-exposure.md). auth.irha.cz goes first and
 # alone, because Grafana, Mealie and Open WebUI all redirect to it to log in.
 #
 # Traffic goes THROUGH Traefik, not around it: every HTTPRoute, middleware, access log

@@ -27,5 +27,4 @@ apm_modules/
 .github/hooks
 .github/skills
 
-docs/superpowers/plans
 .env
