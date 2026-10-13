@@ -1,0 +1,60 @@
+name: notify-knowledge-base
+
+# After a push to main that touches docs, ask the private knowledge base to
+# refresh its copy of this repo's docs.
+#
+# Identity: the knowledge-base-updater GitHub App, installed on the knowledge
+# base repository and nowhere else. Its token can reach only that repository,
+# and the workflow learns the repository's name from the installation itself,
+# so the name appears neither in this public repo nor in its logs.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "README.md"
+      - "AGENTS.md"
+      - "docs/**/*.md"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check configuration
+        id: config
+        env:
+          CLIENT_ID: ${{ vars.KB_UPDATER_APP_CLIENT_ID }}
+        run: |
+          if [ -z "$CLIENT_ID" ]; then
+            echo "::warning::KB_UPDATER_APP_CLIENT_ID is not set; knowledge base not notified."
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create knowledge-base-updater token
+        id: app-token
+        if: steps.config.outputs.enabled == 'true'
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.KB_UPDATER_APP_CLIENT_ID }}
+          private-key: ${{ secrets.KB_UPDATER_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+
+      - name: Dispatch source-updated
+        if: steps.config.outputs.enabled == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          target=$(gh api installation/repositories --jq '.repositories[].full_name')
+          echo "::add-mask::$target"
+          if [ "$(printf '%s\n' "$target" | wc -l)" -ne 1 ] || [ -z "$target" ]; then
+            echo "::error::knowledge-base-updater must be installed on exactly one repository."
+            exit 1
+          fi
+          gh api "repos/$target/dispatches" \
+            -f event_type=source-updated \
+            -f "client_payload[repo]=${GITHUB_REPOSITORY#*/}" \
+            -f "client_payload[sha]=$GITHUB_SHA"
