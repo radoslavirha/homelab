@@ -6,6 +6,12 @@ For the background, rationale, and troubleshooting see the [reference docs](#ref
 
 ---
 
+## Contents
+
+- Server3
+- Server2 / Server1
+- Reference docs
+
 ## Server3
 
 Server3 hosts OpenBao, ArgoCD, and the observability stack. Provision it first.

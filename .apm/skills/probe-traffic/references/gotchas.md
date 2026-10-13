@@ -1,5 +1,26 @@
 # Gotchas — traps that have actually bitten here
 
+## Contents
+
+- Green does not mean working
+- `/health` endpoints emit nothing
+- `401` from an API is a successful probe
+- The Hubble ring buffer turns over in ~60 seconds
+- Idle flows are invisible, and that is not a policy question
+- Loki index labels are OTel names, not Loki names
+- Telemetry lag is real — Loki ~7 s, Tempo 404s at first
+- One request does not move a rate
+- Ephemeral containers are permanent for the pod's life
+- The `kubectl debug` PodSecurity warning is not an error
+- `stripPrefix` changes the path between V1 and V2
+- `pathName` already contains `iot/`
+- A Swagger path without its trailing slash loses the prefix
+- `ds/cilium` is only unambiguous on a single-node cluster
+- macOS host lacks `timeout`
+- Applying part of the policy set causes an outage
+- A green Synced badge can hide an undeployed change
+- The redirect from `qr-manager-api /<slug>` points at user data
+
 Read this before declaring a signal missing or a component broken.
 
 ## Green does not mean working
@@ -16,6 +37,12 @@ that class of failure.
 produce no telemetry. A probe against them proves the process answers TCP, and nothing else.
 Never use them to test the observability pipeline.
 
+## `401` from an API is a successful probe
+
+The APIs require a bearer token. An anonymous request gets `401` from the app's auth guard — after
+Traefik logged it, the app logged it with `trace_id`, and the trace was exported. Report it as
+`response PASS 401 (expected: anonymous)`. Only a `401` where you sent a token is a finding.
+
 ## The Hubble ring buffer turns over in ~60 seconds
 
 ~4095 events per node, ~4000 flows/minute. `hubble observe --last N` is not a retrospective
@@ -26,12 +53,12 @@ the run is void — send again rather than reasoning about a gap.
 
 Three flows produce zero traffic under normal idle conditions:
 
-- **DNS** — app pods hold long-lived connections and resolved names at startup. Over 18 minutes
-  the four server2 app workloads emitted zero DNS queries.
+- **DNS** — app pods hold long-lived connections and resolved names at startup. In the
+  2026-08 flow inventory the app workloads emitted zero DNS queries over 18 minutes.
 - **CHMI internet egress** — only during a user request; the upstream health check is
   deliberately passive and issues no synthetic request.
-- **miIO LAN egress on server2** — both server2 miot-bridge pods have zero registered devices,
-  so the 5 s poller runs against an empty list.
+- **miIO LAN egress** — only while a registered device is being polled; a miot-bridge pod with
+  no devices polls an empty list.
 
 An empty Hubble window for these means nothing was asked of them. Generate the traffic, or use
 `http_client_request_duration_seconds{server_address=...}` in Prometheus, which retains ~30 days
@@ -41,13 +68,15 @@ of per-destination evidence.
 
 Logs arrive over Loki's native OTLP endpoint, so the index labels are `k8s_cluster_name`,
 `k8s_namespace_name`, `k8s_pod_name`. Plain `cluster`, `namespace` and `pod` exist only as
-**structured metadata** — a stream selector on `{cluster="server2"}` matches nothing and looks
+**structured metadata** — a stream selector on `{cluster="server1"}` matches nothing and looks
 exactly like "the logs are missing".
 
-## Telemetry lag is real — about 7 seconds, sometimes more
+## Telemetry lag is real — Loki ~7 s, Tempo 404s at first
 
-Measured request-to-queryable in Loki: ~7 s. Querying immediately after sending produces a false
-MISS. Retry to a ~90 s deadline, and report the time-to-appear alongside the verdict.
+Measured request-to-queryable in Loki: ~7 s. Tempo answers `404` for a trace id queried in the
+first seconds (seen 2026-10-06; the same id returned the full trace moments later). Querying
+immediately produces a false MISS. Retry to a ~90 s deadline, and report the time-to-appear
+alongside the verdict.
 
 ## One request does not move a rate
 
@@ -77,28 +106,35 @@ is the exception (`stripPrefix: false`). A 404 from the wrong form proves nothin
 `ingress.pathName` for the APIs is `iot/miot-bridge`, not `miot-bridge`. Building a URL from
 `partOf` **and** `pathName` doubles the segment. Read the values file.
 
-## `ds/cilium` is only unambiguous because these are single-node clusters
+## A Swagger path without its trailing slash loses the prefix
 
-server1 and server2 each have one node today. Every `exec ds/cilium` in this skill assumes that.
-Adding a node silently makes those commands address an arbitrary agent.
+`/iot/qr-manager/api/docs` answers `302` to `/api/docs/` — without the `/iot/qr-manager` prefix,
+which then 404s. Always request the Swagger paths with the trailing slash.
+
+## `ds/cilium` is only unambiguous on a single-node cluster
+
+server1 has one node today. Every `exec ds/cilium` in this skill assumes that. Adding a node
+silently makes those commands address an arbitrary agent.
 
 ## macOS host lacks `timeout`
 
 `timeout` is a GNU coreutils binary; it is not on the macOS host by default. Inside the probe
 container (debian) it is available. Put timeouts inside the container command, or use `curl -m`.
 
-## Applying part of the draft allowlist causes an outage
+## Applying part of the policy set causes an outage
 
 In Cilium's `default` enforcement mode, a policy that *selects* a pod flips that pod's direction
-to deny-by-default. `20-allow-egress-in-cluster.yaml` applied alone denies DNS immediately. The
-draft set is one atomic unit. This skill never applies policy — it observes.
+to deny-by-default. An egress rule applied without the DNS rule denies DNS immediately. The
+policy set under `gitops/k8s-manifests/server1/network-policies/<environment>/` is one unit. This
+skill never applies policy — it observes; changes go through the `network-egress` skill.
 
 ## A green Synced badge can hide an undeployed change
 
 Irrelevant to probing, relevant the moment a probe result leads to a manifest change. Most apps
 deploy a push within ~3 min, but values-only commits hit a stale multi-source cache and read
-`Synced` while serving the old values — hard refresh before the badge means anything. The
-network-policies Applications are manual-sync and deploy nothing until synced.
+`Synced` while serving the old values — compare `status.sync.revision(s)` with
+`git rev-parse origin/main`. The network-policies Applications are manual-sync and deploy nothing
+until synced.
 
 ## The redirect from `qr-manager-api /<slug>` points at user data
 

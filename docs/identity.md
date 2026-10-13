@@ -13,6 +13,28 @@ in the private knowledge base (skill `knowledge-base`).
 
 ---
 
+## Contents
+
+- The object model
+- Naming
+- The configuration graph
+- Token shape
+- Roles form a ladder
+- Applications
+- `kind` — what sort of client an entry is
+- Client-only applications — one token, several APIs
+- OpenBao
+- Mealie
+- Open WebUI
+- Headlamp
+- Adding an application
+- Adding or changing a role
+- Onboarding a household member
+- The login surface
+- Adding a social source
+- Operational notes
+- Where things live
+
 ## The object model
 
 | Object | What it is | What it isolates |

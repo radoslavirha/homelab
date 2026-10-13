@@ -10,6 +10,14 @@ own timeout fires.
 **If you are here because something "works locally but times out in the cluster", read the
 next section. That is the symptom this page exists for.**
 
+## Contents
+
+- The one that catches people: ports 80 and 443 only
+- Confirming it is the policy, in one command
+- What is allowed today
+- Changing what is allowed
+- If you have broken something
+
 ## The one that catches people: ports 80 and 443 only
 
 App pods may reach **any** internet host, but **only on TCP 80 and 443**.

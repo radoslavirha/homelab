@@ -3,6 +3,18 @@
 How a service in this homelab becomes reachable from the internet, and what must be true before
 it is. This document is the working reference.
 
+## Contents
+
+- What is published today
+- How it works
+- The allow-list is a ConfigMap, not DNS
+- Publishing a new service
+- Prerequisites — all must be true
+- Verification checklist
+- Un-publishing
+- Things that will catch you out
+- Related
+
 ## What is published today
 
 | Name | Cluster | Tunnel | Published |

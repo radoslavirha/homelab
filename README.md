@@ -17,7 +17,7 @@ what has moved on a **Dependency Dashboard** issue. It opens no pull request unt
 approved there, and never automerges.
 
 Merging is not deploying: `gitops/` changes need a Hard Refresh and Sync in ArgoCD, and `iac/`
-changes need `terraform apply`. See [AGENTS.md](AGENTS.md) → "Dependency monitoring (Renovate)".
+changes need `terraform apply`. See the [`upgrade-components` skill](.apm/skills/upgrade-components/SKILL.md).
 
 ## Repository structure
 

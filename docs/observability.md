@@ -2,6 +2,28 @@
 
 Central LGTM stack deployed on **server3** only. Collects metrics, logs, and traces from all workloads via a single OpenTelemetry push endpoint. Grafana provides the unified query and dashboard UI.
 
+## Contents
+
+- Architecture overview
+- Components
+- Internal service addresses
+- k8s-monitoring signal flow
+- Prometheus — TSDB only
+- Loki — Monolithic mode
+- Tempo — single-binary mode
+- Grafana datasources and correlations
+- Dashboards
+- Grafana access
+- Traefik integration
+- Sending telemetry from an application
+- Helm values — two-layer structure
+- ArgoCD deployment structure
+- Deploying / bootstrapping
+- Alert routing — where a firing alert goes
+- Failed logins against Authentik
+- Certificate alerting and the renewal path
+- Design decisions
+
 ## Architecture overview
 
 ```mermaid

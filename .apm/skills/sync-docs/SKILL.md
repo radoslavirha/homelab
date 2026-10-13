@@ -1,6 +1,6 @@
 ---
 name: sync-docs
-description: "Update repository documentation after a change that could make it stale. Use after any change to what exists (clusters, apps, Terraform modules or stages, directories), where versions live, how things are bootstrapped or operated, or machine specs. Keeps README.md, AGENTS.md, docs/architecture.md, docs/iac.md and docs/provisioning.md in sync with the codebase."
+description: "Update repository documentation after a change that could make it stale. Use after any change to what exists (clusters, apps, Terraform modules or stages, directories), where versions live, how things are bootstrapped or operated, or machine specs. Keeps README.md, AGENTS.md, docs/*.md and the .apm skills and rules in sync with the codebase, and checks every mentioned path still exists."
 argument-hint: "Describe what changed, e.g. 'added server4 cluster' or 'bumped Cilium to 1.17'"
 ---
 
@@ -25,7 +25,7 @@ Load this skill after **any** of the following:
 | File | Sections to Watch |
 |------|-------------------|
 | `README.md` | Cluster table (roles + machine specs); repo structure tree; quick-reference commands |
-| `AGENTS.md` | Repo layout tree; module+cluster pattern table; version location table; operational commands |
+| `AGENTS.md` | Clusters table; operating rules; commands; task index; terminology. Version locations live in the `upgrade-components` skill; per-directory gotchas in `.apm/instructions/` |
 | `docs/architecture.md` | Cluster roles table; technology stack table; design-decision narratives; bootstrap sequence diagram |
 | `docs/iac.md` | Directory structure tree; bootstrap sequences (server3, server1/server2); module variable reference tables; step 3.f "Seed initial KV secrets" (one entry per datastore app) |
 | `docs/provisioning.md` | Per-datastore credential bootstrapping commands; PostSync Job patterns; provisioner token setup |
@@ -36,9 +36,14 @@ See [doc-map](./references/doc-map.md) for the precise section-to-source mapping
 
 ### 1. Identify What Changed
 
-Read the changed files or use git diff to understand the scope:
+Docs are synced before the change is committed, so diff the working tree, not the last commit:
 ```bash
-git diff --name-only HEAD~1
+git status --porcelain            # includes untracked files
+git diff --name-only HEAD
+```
+Then list every name the change renamed or removed (cluster, chart, path, namespace, hostname) and find each one everywhere — this catches docs the tables below do not map, and skills under `.apm/`:
+```bash
+grep -rn '<old name>' README.md AGENTS.md docs/*.md .apm/
 ```
 
 ### 2. Map Changes to Affected Doc Sections
@@ -60,7 +65,7 @@ Follow the rules below, then verify each doc against the codebase.
 | Doc | What to update |
 |-----|----------------|
 | `README.md` | Cluster table: add/remove row with role and machine specs |
-| `AGENTS.md` | Repo layout tree under `iac/clusters/` and `gitops/`; version location table if new stages exist |
+| `AGENTS.md` | Clusters table; "Adding a cluster" checklist |
 | `docs/architecture.md` | Cluster roles table; bootstrap sequence diagram boxes |
 | `docs/iac.md` | Directory structure tree; add/remove cluster-specific bootstrap section |
 
@@ -70,7 +75,7 @@ Follow the rules below, then verify each doc against the codebase.
 
 | Doc | What to update |
 |-----|----------------|
-| `AGENTS.md` | "Adding a new ArgoCD app" section if steps changed |
+| `AGENTS.md` | "Adding a third-party app" checklist, if the steps changed |
 | `docs/architecture.md` | Technology stack table: add/remove row with all seven columns — Component (linked), Purpose, Clusters, Managed by, Artifact Hub link (or `—`), Local values links for every cluster file, Upstream `values.yaml` link (or `—`). Use `—` for all chart columns if the app has no Helm chart. |
 | `docs/iac.md` | If the app requires root/admin credentials at deploy time (datastores like InfluxDB2, EMQX, MongoDB), add a `bao kv put secret/<cluster>/<app> ...` line to the "Seed initial KV secrets" block (step 3.f) in the Server1/Server2 bootstrap sequence. Also add a comment referencing `docs/provisioning.md` for the per-app provisioner Job pattern. |
 
@@ -80,7 +85,8 @@ Follow the rules below, then verify each doc against the codebase.
 
 | Doc | What to update |
 |-----|----------------|
-| `AGENTS.md` | Repo layout tree; version location table |
+| `upgrade-components` skill | "Where each version lives" table |
+| `.apm/instructions/iac.instructions.md` | if the module changes a rule there |
 | `docs/iac.md` | Directory structure tree; module variable reference section (add/remove table) |
 
 ---
@@ -89,7 +95,8 @@ Follow the rules below, then verify each doc against the codebase.
 
 | Doc | What to update |
 |-----|----------------|
-| `AGENTS.md` | Repo layout tree; version location table |
+| `upgrade-components` skill | "Where each version lives" table |
+| `AGENTS.md` | Terminology table (Terraform stages) |
 | `docs/iac.md` | Directory structure tree; bootstrap sequence for that cluster |
 | `docs/architecture.md` | Bootstrap sequence diagram; technology stack table |
 
@@ -99,7 +106,7 @@ Follow the rules below, then verify each doc against the codebase.
 
 | Doc | What to update |
 |-----|----------------|
-| `AGENTS.md` | Version location table: verify the `main.tf` path and variable name are still correct |
+| `upgrade-components` skill | "Where each version lives": verify the `main.tf` path and variable name are still correct |
 
 Never put the actual version number in docs — docs reference *where* the version lives, not the value.
 
@@ -110,7 +117,7 @@ Never put the actual version number in docs — docs reference *where* the versi
 | Doc | What to update |
 |-----|----------------|
 | `README.md` | Repo structure tree if top-level dirs changed |
-| `AGENTS.md` | Repo layout tree |
+| `.apm/` skills and instructions | every path the change moved — `check-docs.sh` (step 6) finds them |
 | `docs/iac.md` | Directory structure tree |
 
 ---
@@ -135,22 +142,28 @@ Never put the actual version number in docs — docs reference *where* the versi
 
 ### 5. Cross-Check Consistency
 
-After all edits, verify that these items are consistent across **all four docs**:
+After all edits, verify that these items are consistent across **all five docs**:
 
 - [ ] Cluster names and count
 - [ ] Cluster roles (which cluster runs what)
 - [ ] Which cluster runs ArgoCD (server3 only)
 - [ ] Which clusters have a `vault` stage (server3 only)
-- [ ] Which clusters have an `apps` stage (server3 only)
+- [ ] Which clusters have a Terraform `apps` stage (server3 only) — not the ArgoCD `apps` stage, which is server1
 - [ ] Directory trees agree with actual workspace layout
 - [ ] Bootstrap sequences agree between `docs/iac.md` and `docs/architecture.md`
-- [ ] `AGENTS.md` version table lists every Terraform-managed component that exists
+- [ ] The `upgrade-components` version table lists every Terraform-managed component that exists
 - [ ] Every datastore app that needs root credentials at deploy time has a `bao kv put` entry in `docs/iac.md` step 3.f (Server1/Server2 bootstrap) and a corresponding entry in `docs/provisioning.md`
-- [ ] No stale references to `docs/secrets.md` — OpenBao init steps live in `docs/iac.md`
+- [ ] OpenBao init steps live in `docs/iac.md`; `docs/secrets.md` is the secrets path inventory
 
-### 6. Verify Against Actual Files
+### 6. Verify Against Actual Files — loop until clean
 
-For directory trees and file references, confirm against the workspace:
+Run the checker. It reports every repo path a doc or skill mentions that does not exist, and every
+file over 100 lines missing a `## Contents` list (`--toc FILE` prints one):
+```bash
+.claude/skills/sync-docs/scripts/check-docs.sh
+```
+Fix each finding, run it again, and stop only when it prints `check-docs: clean`. Then confirm the
+directory trees by hand:
 ```bash
 find iac/modules -maxdepth 1 -mindepth 1 -type d | sort
 find iac/clusters -maxdepth 3 -mindepth 3 -type d | sort
@@ -164,6 +177,5 @@ After updating docs, always also run the `sync-obsidian` skill to keep the Obsid
 ### 8. Do NOT Change
 
 - Architecture decision rationale (the "Why" sections) — only update if the decision itself changed
-- The `docs/secrets.md` placeholder reference — do not create or remove it
 - Gitignored credential paths — they are correct by design
 - Component version values — docs track *location*, not values

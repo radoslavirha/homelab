@@ -6,6 +6,20 @@ Shared logic lives in `iac/modules/`; cluster-specific values are inlined in `ia
 Everything above the platform layer belongs to ArgoCD, and what ArgoCD deploys differs per cluster —
 see [architecture.md](architecture.md#technology-stack) for which cluster runs what.
 
+## Contents
+
+- Prerequisites
+- Directory structure
+- Bootstrap sequence
+- Module variable reference
+- ArgoCD admin credential in OpenBao
+- Helm values for Terraform-managed components
+- Upgrading a Terraform-managed component
+- Adding a new cluster
+- State backend migration to MinIO
+- Talos schematic IDs
+- Destroying the cluster
+
 ## Prerequisites
 
 ```bash
@@ -511,7 +525,7 @@ re-apply-an-old-bundle failure described above is now blocked by admission as we
 downgrade requires deleting that policy first.)*
 
 Treat a clean `terraform plan` as the only evidence that a pinned version is real. See
-[AGENTS.md](../AGENTS.md) → "Dependency monitoring (Renovate)".
+the [`upgrade-components` skill](../.apm/skills/upgrade-components/SKILL.md).
 
 ## Adding a new cluster
 

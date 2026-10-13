@@ -7,6 +7,25 @@ Every stage in `docs/iac.md` and `gitops/README.md` that requires secrets links 
 
 ---
 
+## Contents
+
+- Quick reference — all paths
+- How to open an OpenBao session
+- server3/argocd
+- server3/openbao
+- server3/grafana
+- server3/grafana-image-renderer
+- \<cluster\>/cert-manager
+- \<cluster\>/external-dns
+- \<cluster\>/influxdb2
+- \<cluster\>/emqx
+- \<cluster\>/mongodb
+- \<cluster\>/mealie
+- otel-gateway/auth-token
+- \<cluster\>/influxdb2-grafana
+- Verify all secrets for a cluster before deploying
+- Picking up a rotated secret
+
 ## Quick reference — all paths
 
 | OpenBao path | Keys | Required before | Cluster |

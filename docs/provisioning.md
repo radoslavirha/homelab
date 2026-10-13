@@ -2,6 +2,19 @@
 
 This document describes the strategy for provisioning application-level credentials (tokens, users, passwords) for datastores — without any Terraform stage or manual UI clicks.
 
+## Contents
+
+- Problem
+- Solution: PostSync provisioner Jobs (Helm chart)
+- How a Job authenticates to OpenBao
+- InfluxDB2
+- EMQX
+- MongoDB
+- miot-bridge-api
+- qr-manager-api
+- Adding a new consumer app: checklist
+- Troubleshooting
+
 ## Problem
 
 Datastores like InfluxDB2, EMQX, and MongoDB need per-app credentials scoped to a specific purpose (e.g., Telegraf gets a write-only token for the `loxone` bucket). The root admin credential bootstraps the datastore, but connected apps should never use admin credentials.

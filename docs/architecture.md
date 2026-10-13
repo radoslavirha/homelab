@@ -2,6 +2,19 @@
 
 Multi-cluster Kubernetes homelab: three Talos Linux nodes managed with a shared Terraform module library and a single GitOps repo.
 
+## Contents
+
+- Cluster roles
+- Technology stack
+- Hostnames and TLS
+- ServiceAccounts
+- Multi-cluster design decisions
+- Bootstrap sequence
+- ArgoCD hub-spoke
+- Identity and access
+- Observability
+- Secret management
+
 ## Cluster roles
 
 | Cluster | Machine | Role |

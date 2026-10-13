@@ -1,7 +1,7 @@
 ---
 name: probe-traffic
-description: "Generate real traffic against server1/server2/server3 and observe what it produced. Use when: verifying telemetry actually flows (logs/traces/metrics), testing network reachability or egress, validating NetworkPolicy before or after a change, proving an app path works end-to-end, or investigating 'ArgoCD says Healthy but is anything happening?'. Sends correlated requests from a chosen vantage point, then verifies through a chosen lens."
-argument-hint: "What to test, e.g. 'do sandbox app logs reach Loki on server1' or 'can miot-bridge still reach EMQX under the draft netpol'"
+description: "Generate real traffic against the homelab clusters and observe what it produced. Use when: verifying telemetry actually flows (logs/traces/metrics), testing network reachability or egress, validating NetworkPolicy before or after a change, proving an app path works end-to-end, or investigating 'ArgoCD says Healthy but is anything happening?'. Sends correlated requests from a chosen vantage point, then verifies through a chosen lens."
+argument-hint: "What to test, e.g. 'do sandbox app logs reach Loki' or 'can miot-bridge still reach EMQX after the policy change'"
 ---
 
 # probe-traffic
@@ -10,6 +10,15 @@ Two decoupled halves: **send traffic** (vantage) and **look at what it produced*
 
 The skill exists because *green does not mean working*. ArgoCD `Synced`/`Healthy` with Running pods proves manifests applied. It does not prove a single byte moved. This skill moves bytes and then goes looking for them.
 
+All custom apps run on **server1**, in `production` and `sandbox`. Telemetry from every cluster lands on server3 and is read through the Grafana MCP.
+
+## Prerequisites
+
+- Laptop CLIs: `curl`, `xxd`, `kubectl`. Not needed locally: `hubble` and `cilium-dbg` run inside the Cilium agent pod; `mongosh`, `influx`, `bao` and GNU `timeout` run inside the probe image (V3/V4). macOS has no `timeout` — use `curl -m`.
+- Cluster access for V2–V4 and the flows/drops lenses: `export KUBECONFIG=iac/clusters/server1/credentials/kubeconfig`.
+- Telemetry lens: Grafana MCP tools `mcp__grafana__query_loki_logs`, `mcp__grafana__query_prometheus`, `mcp__grafana__grafana_api_request` (Tempo). Datasource UIDs: `loki`, `prometheus`, `tempo`.
+- V1 needs the laptop on the LAN.
+
 ## The one thing that makes this work: correlation
 
 Every run mints two ids **before** sending anything:
@@ -17,7 +26,7 @@ Every run mints two ids **before** sending anything:
 - `RUN_ID` — an opaque string, carried as `X-Probe-Run` header, `?probe=` query param, and User-Agent.
 - `TRACE_ID` — a 32-hex W3C trace id, sent as a `traceparent` header.
 
-**Traefik honours the injected `traceparent` and propagates it to the app** (verified 2026-08-26: the Traefik access log's `TraceId` and the app log's `trace_id` both equal the minted id). So the probe *chooses* its own trace id in advance, and every lens becomes an exact lookup instead of a search:
+**Traefik honours the injected `traceparent` and propagates it to the app** (re-verified on server1 2026-10-06: Traefik access log `TraceId`, the app log's `trace_id` and the Tempo trace all equal the minted id). So the probe *chooses* its own trace id in advance, and every lens becomes an exact lookup instead of a search:
 
 | Lens | Lookup |
 |---|---|
@@ -35,15 +44,30 @@ SPAN_ID=$(head -c8 /dev/urandom | xxd -p)
 
 ## Procedure
 
+Copy this checklist into your response and tick it off:
+
+```
+Probe run:
+- [ ] 1. Question stated in one sentence
+- [ ] 2. Vantage picked (V1–V4)
+- [ ] 3. Target picked from references/targets.md; expected status known (401 is normal for anonymous API calls)
+- [ ] 4. Shape picked (single / burst / sustained)
+- [ ] 5. V4 only: orphan probe-* pods swept
+- [ ] 6. Live-capture lens (Hubble, cilium monitor) started BEFORE sending
+- [ ] 7. Sent; RUN_ID and TRACE_ID recorded
+- [ ] 8. Each lens checked, retried to its deadline before calling MISS
+- [ ] 9. Report written, one line per signal, misses included
+```
+
 ### 1. State what is being investigated
 
-One sentence, before touching anything. It selects the vantage and the lens. "Do sandbox logs reach Loki" and "can the app still resolve DNS under the draft policy" need completely different setups.
+One sentence, before touching anything. It selects the vantage and the lens. "Do sandbox logs reach Loki" and "can the app still resolve DNS under the new policy" need completely different setups.
 
 ### 2. Pick a vantage — how traffic gets sent
 
 | | Mechanism | Use when isolating |
 |---|---|---|
-| **V1 laptop** | `curl` to `https://<component>.[sandbox.]<cluster>.homelab.irha.cz/...` | the full path: DNS → Traefik → HTTPRoute → Service → pod |
+| **V1 laptop** | `curl` to `https://<component>.[sandbox.]server1.homelab.irha.cz/...` | the full path: DNS → Traefik → HTTPRoute → Service → pod |
 | **V2 port-forward** | `kubectl port-forward` to Service or pod | the app alone, with Traefik removed from the picture |
 | **V3 in-pod** | `kubectl debug --target` into the app pod | **egress as the app** — DNS, Mongo, EMQX, LAN UDP, internet. The only correct vantage for NetworkPolicy work |
 | **V4 standalone pod** | `kubectl run --rm` with chosen labels | negative tests — what a pod that *should not* reach X can actually reach |
@@ -56,7 +80,7 @@ Exact commands, caveats, and the ephemeral-container residue rule: [references/v
 
 `/health/live` and `/health/ready` are **useless as probes**: they are excluded from access logging and emit no telemetry. Probing them proves nothing about the observability pipeline.
 
-The endpoint inventory — which paths are safe to call repeatedly, and which signals each one produces — is [references/targets.md](references/targets.md). Read it before choosing. It also carries the URL construction rules and every in-cluster service address.
+The endpoint inventory — which paths are safe to call repeatedly, which need a token, and which signals each one produces — is [references/targets.md](references/targets.md). Read it before choosing. It also carries the URL construction rules and every in-cluster service address.
 
 ### 4. Choose a shape
 
@@ -66,19 +90,21 @@ The endpoint inventory — which paths are safe to call repeatedly, and which si
 
 ### 5. Start the lens BEFORE sending, when the lens is live-capture
 
-Hubble and `cilium monitor` are live streams over a ring buffer that turns over in about a minute on these nodes. Start the follow, *then* send. Loki/Tempo/Prometheus are stores and can be queried afterwards.
+Hubble and `cilium monitor` are live streams over a ring buffer that turns over in about a minute. Start the follow, *then* send. If the follow started late, the run is void — send again. Loki/Tempo/Prometheus are stores and can be queried afterwards.
 
 ### 6. Send
 
-### 7. Verify through the lens
+### 7. Verify through the lens — retry before calling MISS
 
 Lenses and their exact, verified queries: [references/lenses.md](references/lenses.md).
 
 - **response** — status, latency, headers. No cluster access needed.
 - **telemetry** — Loki, Tempo, Prometheus. Per-signal PASS/MISS **and time-to-appear**.
-- **flows** — Hubble verdicts: FORWARDED / DROPPED / AUDIT.
-- **drops** — `cilium monitor --type drop`, policy denials.
+- **flows** — Hubble verdicts: FORWARDED / DROPPED.
+- **drops** — `cilium-dbg monitor --type drop`, policy denials.
 - **delivery** — did the side effect land: MQTT message, Mongo document, Influx point.
+
+Loki needs ~7 s and Tempo answers `404` for a few seconds after the request. Re-query until the signal appears or ~90 s pass; only then is it a MISS.
 
 ### 8. Report
 
@@ -86,15 +112,15 @@ Report what was observed, per signal, including misses. A miss is a finding, not
 
 ```
 Run:     <RUN_ID>   trace <TRACE_ID>
-Vantage: V1 laptop → api.server1.homelab.irha.cz
-Target:  GET /iot/interactive-map-feeder/data-sources/list  (production, server1)
+Vantage: V1 laptop → api.sandbox.server1.homelab.irha.cz
+Target:  GET /iot/interactive-map-feeder/data-sources/list  (sandbox, anonymous)
 Shape:   single
 
-response    PASS  200 in 37ms
-loki:traefik PASS  +7s
-loki:app     PASS  +7s
-tempo        PASS  2 services, 11 spans (traefik → interactive-map-feeder-api)
-prometheus   MISS  traefik_service_requests_total unchanged — see gotchas: scrape interval
+response     PASS  401 in 18ms (expected: anonymous)
+loki:traefik PASS  +5s
+loki:app     PASS  +5s
+tempo        PASS  +9s  traefik → interactive-map-feeder-api
+prometheus   not checked
 ```
 
 Never report a signal as PASS without having seen the data. If a lens was not run, say "not checked" — not "OK".
@@ -104,14 +130,15 @@ Never report a signal as PASS without having seen the data. If a lens was not ru
 - **Read-only endpoints by default.** GET only. Anything that writes needs the operator to say so explicitly, per run.
 - **Never follow redirects on `qr-manager-api /:slug`** — the redirect target is user-supplied data pointing anywhere. Record `%{redirect_url}`, do not fetch it.
 - **Prefer sandbox over production** whenever the question can be answered in either.
-- **This skill never applies policy**, never edits manifests, never syncs ArgoCD. It observes. Changes go through git.
+- **This skill never applies policy**, never edits manifests, never syncs ArgoCD. It observes. Policy changes go through the `network-egress` skill.
 - **Clean up.** `kubectl run` always with `--rm`. Sweep for orphaned `probe-*` pods on entry. Ephemeral containers cannot be removed without restarting the pod — see [references/vantages.md](references/vantages.md).
 - **Never touch anything holding data** — PVCs, PVs, Longhorn volumes, StatefulSets.
+- **Never echo a token** into commands you show, logs or the report.
 - Traffic is real traffic. It appears in dashboards, counts toward metrics, and is visible to anyone else looking at the cluster.
 
 ## Auth
 
-Every endpoint listed today is unauthenticated. Phase 0 hardening will change that. When it does, the credential step goes in [references/targets.md](references/targets.md) — fetched from OpenBao at run time, never committed.
+The three APIs require a bearer token (since 2026-09-09); anonymous calls get `401`. **A `401` is still a complete telemetry probe** — Traefik logs it, the app logs it with `trace_id`, and Tempo holds the trace. Authenticate only when the question needs the handler to run (internet egress, a real Mongo read): ask the operator for a token in `PROBE_TOKEN` and send `-H "Authorization: Bearer $PROBE_TOKEN"`. Details: [references/targets.md](references/targets.md).
 
 ## Before believing a negative result
 

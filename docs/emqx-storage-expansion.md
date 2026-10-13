@@ -7,6 +7,20 @@ values-file defects, which live in the shared `gitops/helm-values/emqx.yaml` and
 **Scope:** the size of the EMQX data volume on server1 and server2, and two values-file defects found alongside it. Enabling `emqx_prometheus` is a separate item (`4.2` in the dashboard plan) and is deliberately out of scope.
 **Audience:** whoever picks this up next. Everything below was verified against the live clusters on 2026-08-14; re-verify before acting, the numbers move.
 
+## Contents
+
+- How this surfaced
+- Verified current state
+- Two defects in the values file, independent of sizing
+- Is expansion actually needed?
+- Why this is not a one-line values change
+- Options
+- Procedure for option A
+- Verification
+- Rollback
+- Open questions for whoever picks this up
+- Do not
+
 ## How this surfaced
 
 Not from an incident. The `Platform` Grafana dashboard's storage panel showed the EMQX volume at ~100%, which turned out to be Longhorn reporting *blocks allocated*, not *bytes used* — see [observability.md](observability.md#dashboards). Chasing that false alarm turned up the real finding: the volume is **20 MiB**, and nobody chose that number.

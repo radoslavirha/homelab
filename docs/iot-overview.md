@@ -9,6 +9,21 @@ For infrastructure/deployment details see `AGENTS.md` and `docs/provisioning.md`
 
 ---
 
+## Contents
+
+- Physical Devices
+- Services
+- Data Flows
+- MQTT Topics
+- EMQX Rules
+- InfluxDB2 Buckets & Tasks
+- MQTT Users (EMQX)
+- miot-bridge-api
+- interactive-map-feeder-api
+- Telegraf Data Pipeline
+- Provisioned Resources Summary
+- Key Files
+
 ## Physical Devices
 
 | Device                | IP                                 | Role                                                                                                   |
