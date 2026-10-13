@@ -1,5 +1,5 @@
 lockfile_version: '1'
-generated_at: '2026-10-02T17:59:33.576056+00:00'
+generated_at: '2026-10-13T20:13:41.198764+00:00'
 apm_version: 0.28.0
 dependencies: []
 deployments:
@@ -140,6 +140,69 @@ deployments:
   content_hash: sha256:c32184df9603c2a5b0471958354bb89e2140f291d049a7b6ac05d2a33115782c
 - kind: project-relative
   target: claude
+  value: .claude/rules/app-chart.md
+  runtime: null
+  scope: project
+  owners:
+  - .
+  active_owner: .
+  content_hash: sha256:00043995101a0656efa4ab0e8d6cc6e8b49b6a0da1c8268cfb8bb9c30067a168
+- kind: project-relative
+  target: claude
+  value: .claude/rules/authentik.md
+  runtime: null
+  scope: project
+  owners:
+  - .
+  active_owner: .
+  content_hash: sha256:a780414d527696be69e4f631d500638f4c371e05903725526b3aedff533b3b41
+- kind: project-relative
+  target: claude
+  value: .claude/rules/gitops.md
+  runtime: null
+  scope: project
+  owners:
+  - .
+  active_owner: .
+  content_hash: sha256:c303f8f588cfe32d5fb870fccb8ee30d0018cf35697d6d16930c87e61672bb48
+- kind: project-relative
+  target: claude
+  value: .claude/rules/iac.md
+  runtime: null
+  scope: project
+  owners:
+  - .
+  active_owner: .
+  content_hash: sha256:65dd240639cd33774a9ece14bdd72806739e8dce4c343cfa04188067e3f5b889
+- kind: project-relative
+  target: claude
+  value: .claude/rules/observability.md
+  runtime: null
+  scope: project
+  owners:
+  - .
+  active_owner: .
+  content_hash: sha256:110ccf26e88c33fae1be8dcf48f682d08246da404a7686c7def566b767dade51
+- kind: project-relative
+  target: claude
+  value: .claude/skills/authentik-blueprints
+  runtime: null
+  scope: project
+  owners:
+  - .
+  active_owner: .
+  content_hash: null
+- kind: project-relative
+  target: claude
+  value: .claude/skills/authentik-blueprints/SKILL.md
+  runtime: null
+  scope: project
+  owners:
+  - .
+  active_owner: .
+  content_hash: sha256:c60700f5c18207fbd087331c723ee79b336e22f0bc07ac634eb4673b3e78a27c
+- kind: project-relative
+  target: claude
   value: .claude/skills/network-egress
   runtime: null
   scope: project
@@ -155,7 +218,7 @@ deployments:
   owners:
   - .
   active_owner: .
-  content_hash: sha256:1c3178c6368a4e5aba8e7156928e3847a0653a71a49eaf9c8c6cf4c87c105cef
+  content_hash: sha256:8ab704dd8a6bd7db9a4f723c52a3f11443f242af39412ff1ef9cf1bfebe7dbd4
 - kind: project-relative
   target: claude
   value: .claude/skills/probe-traffic
@@ -173,7 +236,7 @@ deployments:
   owners:
   - .
   active_owner: .
-  content_hash: sha256:d7ab38513a54d3b8e08eb256589f3c23aab3184e2e21998b6d208fef2d5f007e
+  content_hash: sha256:5d9f35d8e2417e0ac71469d828ad8f7007c315890293d84da52198d741d3212f
 - kind: project-relative
   target: claude
   value: .claude/skills/probe-traffic/references/gotchas.md
@@ -182,7 +245,7 @@ deployments:
   owners:
   - .
   active_owner: .
-  content_hash: sha256:06a97db562fc75600f436435c6e1cf70e4d6981217d347a8c894e83a6a0ea9c2
+  content_hash: sha256:fd607e5a5dc650d723d7c89b2b92cd76e55c3568728b6a3c3d0d96c62395c1ac
 - kind: project-relative
   target: claude
   value: .claude/skills/probe-traffic/references/lenses.md
@@ -191,7 +254,7 @@ deployments:
   owners:
   - .
   active_owner: .
-  content_hash: sha256:1da93d1d5599d415929bb0f0ef1703e498207e1b131280bec82a1f81e47e645e
+  content_hash: sha256:c7aa6e53a0df6b0dadf4abfcd0fbe8a2619e8929352d615edafd25867a6d56c3
 - kind: project-relative
   target: claude
   value: .claude/skills/probe-traffic/references/targets.md
@@ -200,7 +263,7 @@ deployments:
   owners:
   - .
   active_owner: .
-  content_hash: sha256:80ee1e5d1444560ce2b1f19e57a28500b16e1f3dc186f2db902877662eadfdee
+  content_hash: sha256:ca8132f4117f8076cd0058e80bf1b6d25d687362211f9de97aa6bc92fccebdff
 - kind: project-relative
   target: claude
   value: .claude/skills/probe-traffic/references/vantages.md
@@ -209,7 +272,7 @@ deployments:
   owners:
   - .
   active_owner: .
-  content_hash: sha256:044a100f97ae008985be4399fbe3fd561f5f650dcaca5ac82125862cedd42c0a
+  content_hash: sha256:21026afc3bc39d113ab3a23393e4faf8376bbc3b7434cb61865f100bf1e99d0b
 - kind: project-relative
   target: claude
   value: .claude/skills/sync-docs
@@ -227,7 +290,7 @@ deployments:
   owners:
   - .
   active_owner: .
-  content_hash: sha256:bbdbd56127405e11d896b3d8382ddb16a4682c4a3d92a3bbfcd6f4c377bf505d
+  content_hash: sha256:7d990e48c0c9c6146743fffe78b99eef32bc6c3630e4a2debd8c7f27b82f9b16
 - kind: project-relative
   target: claude
   value: .claude/skills/sync-docs/references/doc-map.md
@@ -236,7 +299,34 @@ deployments:
   owners:
   - .
   active_owner: .
-  content_hash: sha256:4ad83558822de790cdc61e79b51cb35d67dd8c349105a6466ecd901e175cc948
+  content_hash: sha256:fd0d3c675236a5b8c236a471cd755036bbf7cb04ec147a23a4b192b82c6e3b1f
+- kind: project-relative
+  target: claude
+  value: .claude/skills/sync-docs/scripts/check-docs.sh
+  runtime: null
+  scope: project
+  owners:
+  - .
+  active_owner: .
+  content_hash: sha256:7b628e2297fd888d685d80995aebdbb5b22c055b91da7557ccff6486791c6b22
+- kind: project-relative
+  target: claude
+  value: .claude/skills/upgrade-components
+  runtime: null
+  scope: project
+  owners:
+  - .
+  active_owner: .
+  content_hash: null
+- kind: project-relative
+  target: claude
+  value: .claude/skills/upgrade-components/SKILL.md
+  runtime: null
+  scope: project
+  owners:
+  - .
+  active_owner: .
+  content_hash: sha256:1f5546ebc1204d91213175eba1914fed148a2e9e1ea0e37022bb1b7bdb164666
 - kind: project-relative
   target: copilot
   value: .github/skills/sync-docs
@@ -271,6 +361,13 @@ local_deployed_files:
 - .agents/skills/sync-obsidian/SKILL.md
 - .agents/skills/sync-obsidian/references/note-template.md
 - .agents/skills/sync-obsidian/references/source-map.md
+- .claude/rules/app-chart.md
+- .claude/rules/authentik.md
+- .claude/rules/gitops.md
+- .claude/rules/iac.md
+- .claude/rules/observability.md
+- .claude/skills/authentik-blueprints
+- .claude/skills/authentik-blueprints/SKILL.md
 - .claude/skills/network-egress
 - .claude/skills/network-egress/SKILL.md
 - .claude/skills/probe-traffic
@@ -282,6 +379,9 @@ local_deployed_files:
 - .claude/skills/sync-docs
 - .claude/skills/sync-docs/SKILL.md
 - .claude/skills/sync-docs/references/doc-map.md
+- .claude/skills/sync-docs/scripts/check-docs.sh
+- .claude/skills/upgrade-components
+- .claude/skills/upgrade-components/SKILL.md
 - .github/skills/sync-docs
 - .github/skills/sync-obsidian
 local_deployed_file_hashes:
@@ -296,11 +396,19 @@ local_deployed_file_hashes:
   .agents/skills/sync-obsidian/SKILL.md: sha256:c655aa1d306933889daf5e39d657564c42689be95302338467269125c57e08e8
   .agents/skills/sync-obsidian/references/note-template.md: sha256:11c4159d4646f4acc6ff1b835d19643c85a4e361fb38bdc20056a7f872ed1510
   .agents/skills/sync-obsidian/references/source-map.md: sha256:c32184df9603c2a5b0471958354bb89e2140f291d049a7b6ac05d2a33115782c
-  .claude/skills/network-egress/SKILL.md: sha256:1c3178c6368a4e5aba8e7156928e3847a0653a71a49eaf9c8c6cf4c87c105cef
-  .claude/skills/probe-traffic/SKILL.md: sha256:d7ab38513a54d3b8e08eb256589f3c23aab3184e2e21998b6d208fef2d5f007e
-  .claude/skills/probe-traffic/references/gotchas.md: sha256:06a97db562fc75600f436435c6e1cf70e4d6981217d347a8c894e83a6a0ea9c2
-  .claude/skills/probe-traffic/references/lenses.md: sha256:1da93d1d5599d415929bb0f0ef1703e498207e1b131280bec82a1f81e47e645e
-  .claude/skills/probe-traffic/references/targets.md: sha256:80ee1e5d1444560ce2b1f19e57a28500b16e1f3dc186f2db902877662eadfdee
-  .claude/skills/probe-traffic/references/vantages.md: sha256:044a100f97ae008985be4399fbe3fd561f5f650dcaca5ac82125862cedd42c0a
-  .claude/skills/sync-docs/SKILL.md: sha256:bbdbd56127405e11d896b3d8382ddb16a4682c4a3d92a3bbfcd6f4c377bf505d
-  .claude/skills/sync-docs/references/doc-map.md: sha256:4ad83558822de790cdc61e79b51cb35d67dd8c349105a6466ecd901e175cc948
+  .claude/rules/app-chart.md: sha256:00043995101a0656efa4ab0e8d6cc6e8b49b6a0da1c8268cfb8bb9c30067a168
+  .claude/rules/authentik.md: sha256:a780414d527696be69e4f631d500638f4c371e05903725526b3aedff533b3b41
+  .claude/rules/gitops.md: sha256:c303f8f588cfe32d5fb870fccb8ee30d0018cf35697d6d16930c87e61672bb48
+  .claude/rules/iac.md: sha256:65dd240639cd33774a9ece14bdd72806739e8dce4c343cfa04188067e3f5b889
+  .claude/rules/observability.md: sha256:110ccf26e88c33fae1be8dcf48f682d08246da404a7686c7def566b767dade51
+  .claude/skills/authentik-blueprints/SKILL.md: sha256:c60700f5c18207fbd087331c723ee79b336e22f0bc07ac634eb4673b3e78a27c
+  .claude/skills/network-egress/SKILL.md: sha256:8ab704dd8a6bd7db9a4f723c52a3f11443f242af39412ff1ef9cf1bfebe7dbd4
+  .claude/skills/probe-traffic/SKILL.md: sha256:5d9f35d8e2417e0ac71469d828ad8f7007c315890293d84da52198d741d3212f
+  .claude/skills/probe-traffic/references/gotchas.md: sha256:fd607e5a5dc650d723d7c89b2b92cd76e55c3568728b6a3c3d0d96c62395c1ac
+  .claude/skills/probe-traffic/references/lenses.md: sha256:c7aa6e53a0df6b0dadf4abfcd0fbe8a2619e8929352d615edafd25867a6d56c3
+  .claude/skills/probe-traffic/references/targets.md: sha256:ca8132f4117f8076cd0058e80bf1b6d25d687362211f9de97aa6bc92fccebdff
+  .claude/skills/probe-traffic/references/vantages.md: sha256:21026afc3bc39d113ab3a23393e4faf8376bbc3b7434cb61865f100bf1e99d0b
+  .claude/skills/sync-docs/SKILL.md: sha256:7d990e48c0c9c6146743fffe78b99eef32bc6c3630e4a2debd8c7f27b82f9b16
+  .claude/skills/sync-docs/references/doc-map.md: sha256:fd0d3c675236a5b8c236a471cd755036bbf7cb04ec147a23a4b192b82c6e3b1f
+  .claude/skills/sync-docs/scripts/check-docs.sh: sha256:7b628e2297fd888d685d80995aebdbb5b22c055b91da7557ccff6486791c6b22
+  .claude/skills/upgrade-components/SKILL.md: sha256:1f5546ebc1204d91213175eba1914fed148a2e9e1ea0e37022bb1b7bdb164666

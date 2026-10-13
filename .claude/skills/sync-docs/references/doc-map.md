@@ -14,12 +14,14 @@ Maps each documentation section to its authoritative source so the agent knows e
 
 | Section | Source of Truth |
 |---------|----------------|
-| Repository layout tree (```block at top```) | Actual workspace: `iac/modules/`, `iac/clusters/`, `gitops/` |
-| "Two installation paths" — Terraform-managed version table | Each component's `iac/clusters/<cluster>/<stage>/main.tf` — the `module {}` call variable names |
-| "Two installation paths" — ArgoCD-managed description | `gitops/argocd-manifests/server3/` — which apps live there |
-| "Adding a new cluster" — steps | Bootstrap procedure in `docs/iac.md` |
-| "Adding a new ArgoCD app" — steps | ArgoCD manifests structure in `gitops/argocd-manifests/` |
-| "Credentials" paths | `iac/clusters/<cluster>/credentials/` actual layout |
+| Clusters table | `docs/architecture.md` cluster roles table |
+| Commands, Access | `iac/clusters/<cluster>/credentials/` layout; how ArgoCD is actually driven |
+| Task index | the skills in `.apm/skills/` and the docs it links |
+| "Adding a third-party app" / "Adding a cluster" checklists | `gitops/argocd-manifests/` structure; bootstrap procedure in `docs/iac.md` |
+| Terminology | Terraform stages under `iac/clusters/<cluster>/`; ArgoCD stages under `gitops/argocd-manifests/apps/` |
+
+Version locations: the `upgrade-components` skill (`.apm/skills/upgrade-components/SKILL.md`), sourced
+from each `iac/clusters/<cluster>/<stage>/main.tf`.
 
 ## docs/architecture.md
 
@@ -29,7 +31,7 @@ Maps each documentation section to its authoritative source so the agent knows e
 | Technology stack table (`Component / Purpose / Clusters / Managed by / Artifact Hub / Local values / Upstream values.yaml`) | Terraform stages in `iac/` + ArgoCD manifests in `gitops/argocd-manifests/`; local values files in `iac/clusters/` (Terraform-managed) and `gitops/helm-values/` (ArgoCD-managed); upstream links point to chart repo `main` branch |
 | Bootstrap sequence diagram (ASCII boxes) | `docs/iac.md` bootstrap sequences — must stay in sync |
 | "ArgoCD hub-spoke" description | `gitops/argocd-manifests/server3/` — which clusters are registered |
-| "Secret management" — OpenBao KV path layout | `docs/iac.md` SOPS section + actual ESO manifests in `gitops/k8s-manifests/` |
+| "Secret management" — OpenBao KV path layout | `docs/secrets.md` + actual ESO manifests in `gitops/k8s-manifests/` |
 
 ## docs/iac.md
 
@@ -38,7 +40,7 @@ Maps each documentation section to its authoritative source so the agent knows e
 | Directory structure tree | Actual workspace layout (run `find iac/ gitops/ -maxdepth 3 -type d`) |
 | Bootstrap sequence — Server3 | Actual Terraform stages: `iac/clusters/server3/` subdirectories |
 | Bootstrap sequence — Server1/Server2 | Actual Terraform stages: `iac/clusters/<cluster>/` subdirectories |
-| Bootstrap step 3.f "Seed initial KV secrets" | Every IoT app deployed on server1/server2 must have its `bao kv put` command listed here. Source of truth: `docs/provisioning.md` + `gitops/argocd-manifests/apps/iot/` |
+| Bootstrap step 3.f "Seed initial KV secrets" | Every IoT app deployed on server1 must have its `bao kv put` command listed here. Source of truth: `docs/provisioning.md` + `gitops/argocd-manifests/apps/iot/` |
 | Module variable reference — `modules/bootstrap` | `iac/modules/bootstrap/variables.tf` |
 | Module variable reference — `modules/platform` | `iac/modules/platform/variables.tf` |
 | Module variable reference — `modules/vault` | `iac/modules/vault/variables.tf` |
@@ -59,9 +61,8 @@ These values must be identical wherever they appear:
 
 | Fact | Appears in |
 |------|-----------|
-| Which cluster hosts ArgoCD | `README.md` cluster table, `AGENTS.md` layout, `docs/architecture.md` stack table + hub-spoke section, `docs/iac.md` bootstrap |
-| Which cluster has `vault` stage | `AGENTS.md` version table + layout, `docs/architecture.md` stack table, `docs/iac.md` structure + bootstrap |
+| Which cluster hosts ArgoCD | `README.md` cluster table, `AGENTS.md` clusters table, `docs/architecture.md` stack table + hub-spoke section, `docs/iac.md` bootstrap |
+| Which cluster has `vault` stage | `upgrade-components` version table, `docs/architecture.md` stack table, `docs/iac.md` structure + bootstrap |
 | Which cluster has `apps` stage | Same as vault stage above |
 | Cluster count and names | All four docs |
-| `gitops/` subdirectory layout | `AGENTS.md` layout tree |
-| `iac/modules/` subdirectory list | `AGENTS.md` layout tree, `docs/iac.md` structure tree |
+| `iac/modules/` subdirectory list | `docs/iac.md` structure tree |
