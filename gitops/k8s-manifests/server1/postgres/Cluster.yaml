@@ -19,7 +19,7 @@ spec:
   postgresql:
     extensions:
       # Resolved from ImageCatalog.yaml. Databases still CREATE EXTENSION themselves —
-      # see Database.knowledge.yaml.
+      # see Database.knowledge-base.yaml.
       - name: pgvector
 
   # Superuser login stays off (the default, stated so it is not flipped casually): no app
