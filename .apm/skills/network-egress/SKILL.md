@@ -30,6 +30,11 @@ today is how the other ends up missing it, so `sandbox` and `production` change 
 second cluster ever runs apps again, its `network-policies/` must be a byte-identical copy of
 server1's.
 
+The one exception is an app deployed to one environment only (its ApplicationSet lists only
+`production`, e.g. `knowledge-base-api`): its own files — `podSelector` on that app — live in that
+environment's directory alone. A copy elsewhere would select nothing and suggest the app runs there.
+Namespace-wide rules (`podSelector: {}`) never take this exception.
+
 **2. A green apply proves nothing.** Cilium tracks connections in conntrack, so established
 connections survive a policy change. A broken policy looks completely fine at apply time and
 breaks at the next reconnect, restart or rollout — decoupled from the change that caused it.
@@ -70,7 +75,7 @@ not your problem; stop here and say so.
 | a new in-cluster service | the app's `NetworkPolicy.egress-<app>.yaml` |
 | a new LAN host or port | `NetworkPolicy.egress-lan-miio.yaml`, or a new file if unrelated to miIO |
 | a new inbound port | `CiliumNetworkPolicy.host-ingress.yaml` |
-| a whole new app | a new `NetworkPolicy.egress-<app>.yaml`, both environments |
+| a whole new app | a new `NetworkPolicy.egress-<app>.yaml`, in each environment the app runs in |
 
 Prefer **plain `NetworkPolicy`**. The one deliberate exception is `host-ingress`: all ingress
 arrives from the node, and an `ipBlock` cannot match Cilium's `host` identity while
@@ -96,8 +101,8 @@ diff -r gitops/k8s-manifests/server1/network-policies/sandbox \
         gitops/k8s-manifests/server1/network-policies/production
 ```
 
-The only expected differences are `namespace:` lines and comments naming the environment.
-Anything else: fix it before going on.
+The only expected differences are `namespace:` lines, comments naming the environment, and the files
+of single-environment apps (fact 1). Anything else: fix it before going on.
 
 Say **why** in a comment in the file. These files are read during incidents by someone who did
 not write them; a rule whose reason is not written down gets deleted by the next person.
@@ -166,7 +171,8 @@ sandbox. **Never move to production with a drop in sandbox.** If sandbox is brok
 not obvious, roll back (below) and stop.
 
 When sandbox is clean, repeat steps 5–6 for `network-policies-server1-production` and namespace
-`production`.
+`production`. A rule for a production-only app has no sandbox rehearsal: sync production, and the
+restart of that app is the whole test.
 
 For end-to-end proof that a path works rather than merely being permitted, use the
 **`probe-traffic`** skill — V3 (in-pod) is the correct vantage for egress, because it inherits
@@ -189,7 +195,8 @@ says. So the way back is a fixed commit followed by steps 4–6, not re-applying
 
 ## Do not
 
-- **Do not edit one environment only.** The next incident will be in the other one.
+- **Do not edit one environment only** — unless the app itself runs in one environment only (fact 1).
+  The next incident will be in the other one.
 - **Do not widen `allow-egress-internet` to all ports** to make a single dependency work. The
   port restriction is the remaining value in that rule; add the one port.
 - **Do not use `ipBlock` for in-cluster or node traffic.** Pod IPs churn, and CIDR selectors do

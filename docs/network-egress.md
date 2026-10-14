@@ -32,7 +32,7 @@ points at your HTTP client rather than at a firewall.
 | `https://api.example.com` (443) | yes |
 | `http://api.example.com` (80) | yes |
 | `https://api.example.com:8443` | **no — dropped** |
-| anything on the LAN (`192.168.x.x`) | **no** unless it is the miIO device rule below |
+| anything on the LAN (`192.168.x.x`) | **no** unless a LAN rule below names it (the IdP, Ollama, miIO devices) |
 | another pod or namespace | **no** unless listed in the table below |
 
 To allow a new port, see [Changing what is allowed](#changing-what-is-allowed).
@@ -53,7 +53,8 @@ A policy drop looks like this — note `DROPPED` and `Policy denied`:
 production/api-iot-my-api-xxxx:41234 -> 203.0.113.10:8443 (world) Policy denied DROPPED (TCP Flags: SYN)
 ```
 
-Swap `production` for `sandbox` as needed. Both namespaces carry an identical policy set.
+Swap `production` for `sandbox` as needed. Both namespaces carry an identical policy set, except the
+files of an app that runs in one of them only (`knowledge-base-api`: production).
 
 ## What is allowed today
 
@@ -68,6 +69,7 @@ empty.
 | CoreDNS (`kube-system`) | UDP+TCP 53 | `NetworkPolicy.dns-egress.yaml` |
 | the internet, excluding RFC1918 | TCP 80, 443 | `NetworkPolicy.egress-internet.yaml` |
 | the Kubernetes apiserver | TCP 6443 | `CiliumNetworkPolicy.egress-apiserver.yaml` |
+| `192.168.1.202` — server3's Traefik, i.e. `auth.irha.cz` (JWKS, tokens) | TCP 443 | `NetworkPolicy.egress-idp.yaml` |
 
 Call the apiserver at `https://kubernetes.default.svc` (port 443) as usual. Cilium rewrites that
 to the node's `:6443` before policy sees it, so 6443 is the only port the rule needs. Do not add
@@ -91,6 +93,9 @@ every namespace. Verified working in all four namespaces; a `curl --cacert /ca/c
 | `qr-manager-api` | MongoDB | TCP 27017 | `NetworkPolicy.egress-qr-manager-api.yaml` |
 | `qr-manager-api` | Alloy (OTLP) | TCP 4318 | same |
 | `interactive-map-feeder-api` | Alloy (OTLP) | TCP 4318 | `NetworkPolicy.egress-interactive-map-feeder-api.yaml` |
+| `knowledge-base-api` (production only) | Postgres (`postgres` namespace, CNPG) | TCP 5432 | `NetworkPolicy.egress-knowledge-base-api.yaml` |
+| `knowledge-base-api` | Alloy (OTLP) | TCP 4318 | same |
+| `knowledge-base-api` | `192.168.1.201` — server2's Traefik, i.e. Ollama | TCP 443 | `NetworkPolicy.egress-lan-ollama.yaml` |
 | `qr-manager-ui` | *(nothing)* | — | static SPA; DNS and internet only, from the namespace-wide rules |
 
 ### Ingress

@@ -1,0 +1,49 @@
+# knowledge-base-api in-cluster egress: the shared Postgres and OTLP.
+# Production only, like the app (one index, one database): no sandbox copy — the
+# network-egress skill's single-environment exception.
+# Its other dependencies need no rule here:
+#   - api.github.com:443 (the GitHub App)      NetworkPolicy.egress-internet.yaml
+#   - auth.irha.cz:443 (JWKS)                  NetworkPolicy.egress-idp.yaml
+#   - Ollama on server2 (embeddings)           NetworkPolicy.egress-lan-ollama.yaml
+#
+# Postgres: the app connects to postgres-rw.postgres.svc (vars.postgres.host). The
+# selector is the CNPG cluster label, not instanceRole=primary: the -rw Service already
+# picks the primary, and pinning the role here would drop traffic for the length of a
+# failover if the cluster ever grows a replica.
+#
+# The postgres namespace has no ingress policy of its own (like mongodb's chart
+# policy, which admits 27017 from anywhere). What keeps other pods out is this side:
+# production and sandbox are default-deny for egress, and the role's password
+# is the app's alone.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-egress-knowledge-base-api
+  namespace: production
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: knowledge-base-api
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: postgres
+          podSelector:
+            matchLabels:
+              cnpg.io/cluster: postgres
+      ports:
+        - protocol: TCP
+          port: 5432
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: alloy-receiver
+      ports:
+        - protocol: TCP
+          port: 4318

@@ -1,0 +1,38 @@
+# Outbound access to Ollama on server2, for knowledge-base-api's embeddings.
+# Production only, like the app: no sandbox copy.
+#
+# ── Why this needs its own rule ──────────────────────────────────────────────
+# ollama.server2.homelab.irha.cz resolves to 192.168.1.201 — server2's Traefik on
+# the LAN — so it sits inside the 192.168.0.0/16 that NetworkPolicy.egress-internet
+# excludes. Same shape as NetworkPolicy.egress-idp.yaml, one address, one port.
+#
+# ── Why it is scoped to one app, unlike egress-idp ──────────────────────────
+# Ollama has no authentication. Its only gate is the ipAllowList on server2
+# (gitops/k8s-manifests/server2/ollama/Middleware.ipallowlist.yaml), which admits
+# server1's node address — and every pod here leaves server1 SNAT'd to that
+# address. So whatever this rule admits can run inference, pull models and
+# delete them. egress-idp is namespace-wide because every API verifies tokens;
+# only knowledge-base-api needs an embedding engine, so only it gets one.
+#
+# The address is server2's whole Traefik, not just Ollama: what else answers
+# there authenticates its own traffic, which is what any LAN device already sees.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-egress-lan-ollama
+  namespace: production
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: knowledge-base-api
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - ipBlock:
+            # server2 Traefik — ollama.server2.homelab.irha.cz. A /32 for the same
+            # reason as egress-idp: anything wider re-opens the LAN.
+            cidr: 192.168.1.201/32
+      ports:
+        - protocol: TCP
+          port: 443

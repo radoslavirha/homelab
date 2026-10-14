@@ -10,7 +10,7 @@
 # would imply it protects something.
 #
 # So the allowlist IS the access control, and it is pinned to a single address:
-# 192.168.1.200, the server1 node, where both callers live.
+# 192.168.1.200, the server1 node, where every caller lives.
 #
 # ── Why not something stronger ─────────────────────────────────────────────
 #   * basicAuth does not fit. Both callers send `Authorization: Bearer <key>`
@@ -62,5 +62,7 @@ spec:
   ipAllowList:
     sourceRange:
       # server1's node address. Open WebUI and Mealie both run there, and pod
-      # egress to another node is SNAT'd to this address.
+      # egress to another node is SNAT'd to this address. So does knowledge-base-api
+      # (embeddings), from `production`, where default-deny plus
+      # NetworkPolicy.egress-lan-ollama.yaml admit that one app and no other pod.
       - 192.168.1.200/32
