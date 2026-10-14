@@ -20,6 +20,7 @@ Every stage in `docs/iac.md` and `gitops/README.md` that requires secrets links 
 - \<cluster\>/influxdb2
 - \<cluster\>/emqx
 - \<cluster\>/mongodb
+- server1/postgres
 - \<cluster\>/mealie
 - otel-gateway/auth-token
 - \<cluster\>/influxdb2-grafana
@@ -39,6 +40,7 @@ Every stage in `docs/iac.md` and `gitops/README.md` that requires secrets links 
 | `secret/<cluster>/influxdb2` | `admin-password`, `admin-token` | iot stage | server1 |
 | `secret/<cluster>/emqx` | `dashboard-username`, `dashboard-password` | iot stage | server1 |
 | `secret/<cluster>/mongodb` | `root-password` | databases stage | server1 |
+| `secret/server1/postgres` | `knowledge-password` | databases stage — `postgres` app | server1 |
 | `secret/<cluster>/mealie` | `postgres-password`, `oidc-client-secret` | household stage | server1 |
 | `secret/otel-gateway/auth-token` | `token` | observability stage | server1, server2 |
 | `secret/<cluster>/influxdb2-grafana` | `token` | *provisioned at runtime* | server1 |
@@ -301,6 +303,32 @@ bao kv get secret/<cluster>/mongodb
 ```
 
 See [provisioning.md](provisioning.md) for per-app scoped user provisioning via the MongoDB management API.
+
+---
+
+## server1/postgres
+
+**Required before:** first sync of the `postgres-server1` Application (databases stage).
+
+One key per CloudNativePG role. There is no superuser password to seed: superuser login is off,
+and the operator manages its own credentials inside the cluster. `ExternalSecret.knowledge.yaml`
+renders the value into the `kubernetes.io/basic-auth` Secret the `knowledge` `DatabaseRole` reads.
+Its consumer (the knowledge-base indexer) gets its own ExternalSecret from the same key.
+
+```bash
+# Hex: consumers build a postgresql:// URL from it, and @ : / ? # % would break the URL.
+bao kv put secret/server1/postgres knowledge-password="$(openssl rand -hex 32)"
+
+# Verify — keys only
+bao kv get -format=json secret/server1/postgres | jq '.data.data | keys'
+```
+
+A new role later is a new key on this path: add it with **`patch`, never `put`** — `put` replaces
+the whole path and drops the other roles' passwords.
+
+**Rotation is one step here, unlike MongoDB's.** Re-seed, force-sync the ExternalSecret; the Secret
+carries `cnpg.io/reload`, so the operator re-applies the `DatabaseRole` and the server moves to the
+new password itself. Consumers pick it up through their own ExternalSecret.
 
 ---
 

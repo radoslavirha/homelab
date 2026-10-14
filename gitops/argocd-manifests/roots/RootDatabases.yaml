@@ -1,4 +1,4 @@
-# Databases App-of-Apps: MongoDB (+ future PostgreSQL, Redis, …).
+# Databases App-of-Apps: MongoDB, the CloudNativePG operator and the shared PostgreSQL.
 # Sync wave 3 — needs ESO (wave 1) for root-password and Traefik (wave 2)
 # for IngressRouteTCP.
 apiVersion: argoproj.io/v1alpha1

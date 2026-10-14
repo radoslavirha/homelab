@@ -1,0 +1,48 @@
+# Shared PostgreSQL on server1, run by the CloudNativePG operator (CloudNativePG.yaml).
+#
+# One server, one database per app, each with its own role that sees only its own
+# database. Databases and roles are Database and DatabaseRole CRs in
+# gitops/k8s-manifests/<cluster>/postgres/; role passwords come from OpenBao through ESO.
+#
+# Authentik keeps its bundled Postgres on server3. Mealie and Open WebUI keep their own
+# StatefulSets for now; moving either in is a migration of its own, with a dump first.
+#
+# sync-wave 2 inside root-databases: after the operator and its CRDs (wave 1).
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: postgres
+  namespace: argocd
+spec:
+  generators:
+    - list:
+        elements:
+          - cluster: server1
+            clusterServer: https://192.168.1.200:6443
+  template:
+    metadata:
+      name: postgres-{{cluster}}
+      annotations:
+        argocd.argoproj.io/sync-wave: "2"
+        # The CNPG CRs and the ExternalSecret carry defaulted fields the manifests omit;
+        # the default client-side diff reads them OutOfSync forever. See CertManager.yaml.
+        argocd.argoproj.io/compare-options: ServerSideDiff=true
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/radoslavirha/homelab
+        targetRevision: HEAD
+        path: gitops/k8s-manifests/{{cluster}}/postgres
+      destination:
+        server: '{{clusterServer}}'
+        namespace: postgres
+      syncPolicy:
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
+        automated:
+          selfHeal: true
+          # Pruning the Cluster CR deletes its PVC with it (owner reference). Acceptable while
+          # the only database is `knowledge`, which is derived and rebuilt from git. Revisit
+          # before a database with real data moves in.
+          prune: true

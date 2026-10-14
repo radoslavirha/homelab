@@ -1,0 +1,26 @@
+# PostgreSQL 18 and the extension images the Cluster may load, as image volumes.
+#
+# Trimmed from upstream's extensions-enabled catalog (CNPG >= 1.29):
+#   https://github.com/cloudnative-pg/artifacts/blob/main/image-catalogs-extensions/catalog-minimal-trixie.yaml
+# taken 2026-10-14 (images.cnpg.io/date 20261012). Only PG 18 and the extensions in use are
+# kept, so a bump is a reviewable diff rather than a moving upstream URL. To update: copy the
+# `major: 18` image and the matching extension references from that file.
+#
+# The base image is the official minimal one: no extensions baked in. pgvector is mounted
+# read-only from its own OCI image (ImageVolume, on by default since Kubernetes 1.35; needs
+# containerd >= 2.1 — server1 runs 1.36.4 / 2.2.7).
+apiVersion: postgresql.cnpg.io/v1
+kind: ImageCatalog
+metadata:
+  name: postgresql-18
+  namespace: postgres
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  images:
+    - major: 18
+      image: ghcr.io/cloudnative-pg/postgresql:18.6-202610120828-minimal-trixie@sha256:c9be7f221a05b18fe65259d9136affbabe3b39ad91c3b68f8f2f990a45f35f38
+      extensions:
+        - name: pgvector
+          image:
+            reference: ghcr.io/cloudnative-pg/pgvector:0.8.7-202610110422-18-trixie@sha256:f4007eb83db8e67d0b42e2ddf11d3368b490b1d35f02cc34b99a9c200877b104

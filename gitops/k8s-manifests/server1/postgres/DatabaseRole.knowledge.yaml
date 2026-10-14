@@ -1,0 +1,17 @@
+# Login role for the `knowledge` database: owns it, sees nothing else.
+apiVersion: postgresql.cnpg.io/v1
+kind: DatabaseRole
+metadata:
+  name: knowledge
+  namespace: postgres
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  cluster:
+    name: postgres
+  name: knowledge
+  login: true
+  passwordSecret:
+    name: postgres-knowledge
+  # Removing this manifest drops the role. The database is derived, so nothing is lost.
+  databaseRoleReclaimPolicy: delete

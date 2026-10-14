@@ -1,0 +1,55 @@
+# The shared PostgreSQL server. One instance: server1 is a single node, so a replica would
+# share the disk and the failure domain. Longhorn replicates the volume.
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: postgres
+  namespace: postgres
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  instances: 1
+
+  imageCatalogRef:
+    apiGroup: postgresql.cnpg.io
+    kind: ImageCatalog
+    name: postgresql-18
+    major: 18
+
+  postgresql:
+    extensions:
+      # Resolved from ImageCatalog.yaml. Databases still CREATE EXTENSION themselves —
+      # see Database.knowledge.yaml.
+      - name: pgvector
+
+  # Superuser login stays off (the default, stated so it is not flipped casually): no app
+  # connects as postgres, and no superuser password needs seeding. Each app gets a
+  # DatabaseRole.
+  enableSuperuserAccess: false
+
+  # The operator's default PDB protects the primary from eviction. With one instance on a
+  # single-node cluster it would block every drain — a Talos upgrade included.
+  enablePDB: false
+
+  # The instance exporter (:9187) is scraped through k8s-monitoring's prometheus.io/*
+  # annotation autodiscovery; server1 has no Prometheus Operator for a PodMonitor.
+  inheritedMetadata:
+    annotations:
+      prometheus.io/scrape: "true"
+      prometheus.io/port: "9187"
+      prometheus.io/path: /metrics
+
+  storage:
+    storageClass: longhorn
+    # The knowledge index is a few thousand rows of text and vectors. Longhorn expands
+    # online, so this errs small.
+    size: 5Gi
+
+  resources:
+    requests:
+      # server1 sits near its CPU-request ceiling; this is an idle-server floor.
+      cpu: 50m
+      memory: 256Mi
+    limits:
+      # No CPU limit: throttling a database turns a slow query into a timeout cascade.
+      memory: 1Gi

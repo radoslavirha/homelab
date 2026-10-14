@@ -1,0 +1,17 @@
+# CloudNativePG operator. Chart: https://github.com/cloudnative-pg/charts
+#
+# Operator metrics (:8080) are scraped through k8s-monitoring's prometheus.io/*
+# annotation autodiscovery. There is no Prometheus Operator on server1, so the
+# chart's PodMonitor (monitoring.podMonitorEnabled) would have no CRD to land in.
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8080"
+  prometheus.io/path: /metrics
+
+# server1 sits near its CPU-request ceiling; the operator idles at a few millicores.
+resources:
+  requests:
+    cpu: 20m
+    memory: 128Mi
+  limits:
+    memory: 256Mi

@@ -1,0 +1,52 @@
+# CloudNativePG operator — server1 only, where the shared PostgreSQL runs.
+#
+# The operator owns Postgres clusters, databases and roles as CRs in git (Cluster, Database,
+# DatabaseRole), so a new database or user is a manifest, not a PostSync provisioner Job.
+# The provisioner chart stays for MongoDB, EMQX and InfluxDB2.
+#
+# sync-wave 1 inside root-databases: its CRDs must exist before postgres-<cluster> (wave 2)
+# applies a Cluster.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: cloudnative-pg
+  namespace: argocd
+spec:
+  generators:
+    - list:
+        elements:
+          - cluster: server1
+            clusterServer: https://192.168.1.200:6443
+  template:
+    metadata:
+      name: cloudnative-pg-{{cluster}}
+      annotations:
+        argocd.argoproj.io/sync-wave: "1"
+        # Required companion to ServerSideApply, not an optimisation: with the default
+        # client-side diff, CRD-defaulted fields read OutOfSync forever. See CertManager.yaml.
+        argocd.argoproj.io/compare-options: ServerSideDiff=true
+    spec:
+      project: default
+      sources:
+        - repoURL: https://cloudnative-pg.github.io/charts
+          chart: cloudnative-pg
+          targetRevision: 0.29.1
+          helm:
+            releaseName: cnpg
+            valueFiles:
+              - $values/gitops/helm-values/cloudnative-pg.yaml
+        - repoURL: https://github.com/radoslavirha/homelab
+          targetRevision: HEAD
+          ref: values
+      destination:
+        server: '{{clusterServer}}'
+        namespace: cnpg-system
+      syncPolicy:
+        syncOptions:
+          - CreateNamespace=true
+          # Required: two CRDs are past the 262144-byte last-applied-configuration
+          # ceiling that client-side apply needs — clusters 275KB, poolers 352KB (0.29.1).
+          - ServerSideApply=true
+        automated:
+          selfHeal: true
+          prune: true
