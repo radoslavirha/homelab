@@ -1,5 +1,5 @@
 lockfile_version: '1'
-generated_at: '2026-10-13T20:13:41.198764+00:00'
+generated_at: '2026-10-14T17:26:44.918754+00:00'
 apm_version: 0.28.0
 dependencies: []
 deployments:
@@ -326,7 +326,25 @@ deployments:
   owners:
   - .
   active_owner: .
-  content_hash: sha256:1f5546ebc1204d91213175eba1914fed148a2e9e1ea0e37022bb1b7bdb164666
+  content_hash: sha256:2c65e52ca483c5ca70edde3cec86a3cabea406c184d955d9e0c48709aceb78e6
+- kind: project-relative
+  target: claude
+  value: .claude/skills/upgrade-components/evals/evals.json
+  runtime: null
+  scope: project
+  owners:
+  - .
+  active_owner: .
+  content_hash: sha256:6c616988f105a67abf3eb23f961972b9948a4afcad221452ec601bbd7fc54bb0
+- kind: project-relative
+  target: claude
+  value: .claude/skills/upgrade-components/references/longhorn-stale-instance-managers.md
+  runtime: null
+  scope: project
+  owners:
+  - .
+  active_owner: .
+  content_hash: sha256:0636ead05b6d7007b25c0114a3cf4dd9bd27d7232bc41cc0211ed917eda3147f
 - kind: project-relative
   target: copilot
   value: .github/skills/sync-docs
@@ -382,6 +400,8 @@ local_deployed_files:
 - .claude/skills/sync-docs/scripts/check-docs.sh
 - .claude/skills/upgrade-components
 - .claude/skills/upgrade-components/SKILL.md
+- .claude/skills/upgrade-components/evals/evals.json
+- .claude/skills/upgrade-components/references/longhorn-stale-instance-managers.md
 - .github/skills/sync-docs
 - .github/skills/sync-obsidian
 local_deployed_file_hashes:
@@ -411,4 +431,6 @@ local_deployed_file_hashes:
   .claude/skills/sync-docs/SKILL.md: sha256:7d990e48c0c9c6146743fffe78b99eef32bc6c3630e4a2debd8c7f27b82f9b16
   .claude/skills/sync-docs/references/doc-map.md: sha256:fd0d3c675236a5b8c236a471cd755036bbf7cb04ec147a23a4b192b82c6e3b1f
   .claude/skills/sync-docs/scripts/check-docs.sh: sha256:7b628e2297fd888d685d80995aebdbb5b22c055b91da7557ccff6486791c6b22
-  .claude/skills/upgrade-components/SKILL.md: sha256:1f5546ebc1204d91213175eba1914fed148a2e9e1ea0e37022bb1b7bdb164666
+  .claude/skills/upgrade-components/SKILL.md: sha256:2c65e52ca483c5ca70edde3cec86a3cabea406c184d955d9e0c48709aceb78e6
+  .claude/skills/upgrade-components/evals/evals.json: sha256:6c616988f105a67abf3eb23f961972b9948a4afcad221452ec601bbd7fc54bb0
+  .claude/skills/upgrade-components/references/longhorn-stale-instance-managers.md: sha256:0636ead05b6d7007b25c0114a3cf4dd9bd27d7232bc41cc0211ed917eda3147f
