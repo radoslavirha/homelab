@@ -168,6 +168,7 @@ grant. "Remove their access" means removing the *lowest* membership they hold, n
 | `qr-manager` | `qr-manager-ui` at `apps.<cluster>…/qr-manager` | admin → editor → reader | server1 × sandbox · production, + local |
 | `miot-bridge` | none — REST surface operated by hand | admin → editor → reader | server1 × sandbox · production, + local |
 | `interactive-map-feeder` | none — reads of public CHMU data | admin → editor → reader | server1 × sandbox · production, + local |
+| `knowledge-base-api` | none — ClusterIP only, never exposed; the host in the matrix is nominal | `admin` → `reader` — **two rungs**: reader searches and reads, admin reindexes | server1 production, + local |
 | `homelab-dashboard` | `dashboard.server3.homelab.irha.cz` | admin → editor → reader | server3 production, + local |
 | `argocd` | `argocd.server3.homelab.irha.cz` | admin → editor → reader | server3 production |
 | `grafana` | `grafana.irha.cz` | admin → editor → reader | server3 production |
@@ -177,6 +178,7 @@ grant. "Remove their access" means removing the *lowest* membership they hold, n
 | `open-webui` | `assistant.irha.cz` — **confidential**, see [Open WebUI](#open-webui) | `admin` → `user` — **two rungs**: `OAUTH_ALLOWED_ROLES` gates who may log in and `OAUTH_ADMIN_ROLES` grants admin, so a middle rung would be a claim nothing reads | server1 production |
 | `postman` | none — a client, not an API | `user` (the access gate only) | one client, every environment |
 | `interactive-map` | none — an ESP32, `kind: device` | none of its own; holds `interactive-map-feeder.reader` | one client: server1 production + local |
+| `knowledge-base-test-client` | none — `kind: device`, a person with curl through a port-forward until a real caller exists | none of its own; holds `knowledge-base-api.admin` | one client: server1 production + local |
 | `longhorn` | `longhorn.<cluster>.homelab.irha.cz` — **`kind: proxy`**, see [Proxies](#proxies--uis-with-no-login-of-their-own) | `admin` (the access gate only) | server1 · server2 · server3, production |
 | `hubble` | `hubble.<cluster>.homelab.irha.cz` — **`kind: proxy`**, the Cilium flow UI in `kube-system` | `admin` (the access gate only) | server1 · server2 · server3, production |
 | `traefik` | `traefik.<cluster>.homelab.irha.cz` — **`kind: proxy`**, and the one guarded by an **IngressRoute** rather than an HTTPRoute | `admin` (the access gate only) | server1 · server2 · server3, production |
@@ -398,7 +400,7 @@ it serves nothing and *calls* the others. An application that declares `accesses
 ```yaml
   - name: postman
     title: Postman
-    accesses: [qr-manager, miot-bridge, interactive-map-feeder, homelab-dashboard]
+    accesses: [qr-manager, miot-bridge, interactive-map-feeder, homelab-dashboard, knowledge-base-api]
     redirectUris:
       - https://oauth.pstmn.io/v1/callback
     roles:
@@ -420,7 +422,7 @@ What the chart does with it:
 - **No `meta_launch_url`, no logout URI, no host.** The callback belongs to the tool, via `redirectUris`.
 
 **One client, every environment.** A `client` or `device` entry renders exactly one Application whose
-`aud` names every API in every environment it lists — 18 entries for `postman`. One login, one token,
+`aud` names every API in every environment it lists — 13 entries for `postman`. One login, one token,
 every API. `api` entries are unchanged: still one Application per environment.
 
 What that costs, stated once: the `roles` claim is `app.role` and carries no environment, so a token

@@ -168,12 +168,32 @@ applications:
       - { cluster: server1, stage: production }
       - { stage: local }
 
+  - name: knowledge-base-api
+    title: Knowledge Base API
+    # ClusterIP only, never exposed: no route serves the host below, and no browser logs
+    # in here. kind api needs a host to derive its redirect from, so this one is nominal --
+    # like miot-bridge's and the feeder's, which serve no UI either. The application exists
+    # for its audience and its role groups: callers hold a token addressed to it, and the
+    # API checks `knowledge-base-api.*` roles (and each knowledge base's `readers`).
+    hostPrefix: apps
+    basePath: /knowledge-base-api
+    # reader: search, documents, status. admin: reindex -- a full rebuild saturates
+    # server2's CPU and evicts Open WebUI's chat model, so it is its own rung.
+    roles:
+      - name: admin
+        inherits: reader
+      - name: reader
+    # Production only: one index, one database. Sandbox would need a database of its own.
+    environments:
+      - { cluster: server1, stage: production }
+      - { stage: local }
+
   - name: postman
     title: Postman
     kind: client
     # Postman serves nothing, it calls the APIs above. `accesses` names the applications
     # and `environments` the environments; the audience is the intersection -- every one of
-    # those applications that actually runs in each of those environments, 18 entries today.
+    # those applications that actually runs in each of those environments, 13 entries today.
     #
     # ONE client for every environment: log in once, call any API anywhere. The `roles`
     # claim is `app.role` and carries no environment, so this token holds the union of
@@ -188,7 +208,7 @@ applications:
     #
     # Public client + PKCE means there is no secret, which is why this belongs in git with
     # the rest instead of in OpenBao.
-    accesses: [qr-manager, miot-bridge, interactive-map-feeder, homelab-dashboard]
+    accesses: [qr-manager, miot-bridge, interactive-map-feeder, homelab-dashboard, knowledge-base-api]
     # Postman's hosted callback, used by the desktop app and the web client alike.
     redirectUris:
       - https://oauth.pstmn.io/v1/callback
@@ -518,6 +538,23 @@ applications:
     # 10-second poll is 8640 database writes a day for this one device.
     accesses:
       - { app: interactive-map-feeder, role: reader }
+    environments:
+      - { cluster: server1, stage: production }
+      - { stage: local }
+
+  - name: knowledge-base-test-client
+    title: Knowledge Base API test client
+    kind: device
+    # Not a device: a person with curl, calling knowledge-base-api through a port-forward
+    # before any real caller exists. kind device is the matrix's client_credentials client,
+    # and client_credentials is the flow the API's future callers (the MCP adapter) will
+    # use, so this exercises that path end to end. Same secret handling as every device:
+    # Authentik generates it, read it from the provider page, never into git.
+    #
+    # admin, so `POST /reindex` can be tested too; it inherits reader. Drop the entry
+    # (two commits, see the authentik-blueprints skill) once a real caller exists.
+    accesses:
+      - { app: knowledge-base-api, role: admin }
     environments:
       - { cluster: server1, stage: production }
       - { stage: local }
