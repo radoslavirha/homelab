@@ -10,7 +10,7 @@ Apps that should deploy together are grouped by ArgoCD (one ApplicationSet per a
 
 ```
 helm-values/server1/apps/
-  vars/common.yaml              ← `vars:` shared by every app and stage (protocol, mqtt.url, mongodb.url)
+  vars/common.yaml              ← `vars:` shared by every app and stage (protocol, mqtt.url, mongodb.url, postgres.host, postgres.port)
   vars/{env}.yaml               ← `vars:` per stage (cluster, domain); Helm deep-merges both
   {app}/values.yaml             ← shared: image, resources, labels, services, ingress, templates.file/path
   {app}/values-{env}.yaml       ← env-specific: image.tag, templates.<name>.content + .secrets

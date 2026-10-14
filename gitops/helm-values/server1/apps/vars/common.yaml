@@ -12,3 +12,11 @@ vars:
     url: "mqtt://emqx.iot.svc.cluster.local:1883"
   mongodb:
     url: "mongodb://mongodb.mongodb.svc.cluster.local:27017"
+  # The shared CloudNativePG server (gitops/k8s-manifests/server1/postgres/). `-rw` is the
+  # Service CNPG points at the primary; there is one instance, so `-ro`/`-r` buy nothing.
+  # Host and port only, unlike mongodb.url: the database, the role and its password are per
+  # app (the password through templates.config.secrets, from the key the postgres
+  # namespace's PushSecret wrote).
+  postgres:
+    host: "postgres-rw.postgres.svc.cluster.local"
+    port: 5432
