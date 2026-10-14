@@ -319,6 +319,14 @@ In `gitops/k8s-manifests/server1/postgres/`, per role:
 | `ExternalSecret.<role>.yaml` | Reads it back into the `kubernetes.io/basic-auth` Secret the `DatabaseRole` needs |
 | `DatabaseRole.<role>.yaml` | The login role |
 
+Each new database also needs one statement by hand, because PostgreSQL lets every role CONNECT to
+every database by default and CNPG's `Database` resource cannot revoke it (done 2026-10-14 for
+`app`, `postgres` and `knowledge_base`):
+
+```bash
+kubectl -n postgres exec postgres-1 -c postgres -- psql -U postgres -c "REVOKE CONNECT ON DATABASE <db> FROM PUBLIC"
+```
+
 The consuming app reads the same key through its own ExternalSecret, like any provisioner-made
 credential. Writes go through the `openbao-push` SecretStore in the `postgres` namespace, logged in
 as its `provisioner` ServiceAccount; the fleet-wide `openbao` ClusterSecretStore stays read-only.
