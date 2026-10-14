@@ -58,10 +58,13 @@ module "vault_config" {
   # here. See modules/vault-config/kubernetes.tf for why the mount and ESO's role are not.
   # Namespaces are where the provisioner chart renders its PostSync Jobs: EMQX and InfluxDB2
   # into `iot`, MongoDB into `mongodb`. server2 and server3 run no provisioner Jobs.
+  # `postgres` runs no Job: its `provisioner` ServiceAccount backs the namespaced SecretStore
+  # that ESO PushSecrets use to write generated role passwords (server1-postgres-push adds the
+  # metadata write a PushSecret needs and the Jobs' policy does not grant).
   kubernetes_provisioner_roles = {
     "kubernetes-server1" = {
-      namespaces     = ["iot", "mongodb"]
-      token_policies = ["server1-provisioner"]
+      namespaces     = ["iot", "mongodb", "postgres"]
+      token_policies = ["server1-provisioner", "server1-postgres-push"]
     }
   }
 

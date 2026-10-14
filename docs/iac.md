@@ -286,6 +286,16 @@ path "secret/data/<cluster>/*"     { capabilities = ["create", "read", "update",
 path "secret/metadata/<cluster>/*" { capabilities = ["read", "list"] }
 EOF
 
+#    server1 only: ESO PushSecrets in the `postgres` namespace write each CloudNativePG role's
+#    generated password once (docs/secrets.md § server1/postgres). A push also writes KV
+#    metadata, which the policy above does not grant. Attached to the same provisioner role,
+#    whose namespaces include `postgres` (kubernetes_provisioner_roles in vault-config).
+
+bao policy write server1-postgres-push - <<'EOF'
+path "secret/data/server1/postgres/*"     { capabilities = ["create", "read", "update"] }
+path "secret/metadata/server1/postgres/*" { capabilities = ["create", "read", "update"] }
+EOF
+
 #    ── 3.f  Seed initial KV secrets ──────────────────────────────────────────────────────────
 #    ⚠️  PREREQUISITE: all secrets below MUST exist in OpenBao before any ArgoCD stage
 #    is committed for this cluster. ESO syncs immediately on first Application sync —

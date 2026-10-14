@@ -1,10 +1,10 @@
-# The knowledge-base index: documents, chunks and embeddings for every KB, keyed by a `kb`
-# column. Derived data — rebuilt from the KB git repo by the indexer — so it is not in the
-# backup path.
+# The knowledge-base index: every KB in one database, keyed by a `kb` column. Tables and
+# indexes are knowledge-base-api's migrations. Derived data — rebuilt from the sources by the
+# indexer — so it is not in the backup path.
 apiVersion: postgresql.cnpg.io/v1
 kind: Database
 metadata:
-  name: knowledge
+  name: knowledge-base
   namespace: postgres
   annotations:
     # After the role it is owned by.
@@ -12,8 +12,8 @@ metadata:
 spec:
   cluster:
     name: postgres
-  name: knowledge
-  owner: knowledge
+  name: knowledge_base
+  owner: knowledge_base
   extensions:
     # pgvector's extension name is `vector`; the image comes from ImageCatalog.yaml.
     - name: vector

@@ -1,17 +1,18 @@
-# Login role for the `knowledge` database: owns it, sees nothing else.
+# Login role of knowledge-base-api, the only service with access to the `knowledge_base`
+# database. Owns it; runs the app's migrations.
 apiVersion: postgresql.cnpg.io/v1
 kind: DatabaseRole
 metadata:
-  name: knowledge
+  name: knowledge-base
   namespace: postgres
   annotations:
     argocd.argoproj.io/sync-wave: "2"
 spec:
   cluster:
     name: postgres
-  name: knowledge
+  name: knowledge_base
   login: true
   passwordSecret:
-    name: postgres-knowledge
+    name: postgres-knowledge-base
   # Removing this manifest drops the role. The database is derived, so nothing is lost.
   databaseRoleReclaimPolicy: delete
