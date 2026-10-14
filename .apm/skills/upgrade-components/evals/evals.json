@@ -1,0 +1,48 @@
+{
+  "skill_name": "upgrade-components",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I bumped longhorn_version from 1.11.1 to 1.12.1 and ran terraform apply on all three clusters last week. Everything is green, but server1 shows 85% CPU requested while it barely does anything. Is the upgrade done?",
+      "expected_output": "Runs the instance-manager detection on every cluster, identifies any v1.11.1 IM still hosting engines as stale and as the reservation, explains that a pod restart will not move the engines, and lays out the cordon → delete pods → wait for detached → uncordon procedure with the dump, operator confirmation, OpenBao unseal and miot-bridge checks — then re-runs detection until only 1.12.1 IMs remain.",
+      "files": [],
+      "expectations": [
+        "Queries instancemanagers.longhorn.io on server1, server2 and server3, not only server1",
+        "Treats an IM whose image is not v1.12.1 and still lists engines as stale",
+        "States that rollout restart / deleting a pod alone does not detach the volume on a single-node cluster",
+        "Maps the stale IM to its volumes and the pods mounting them before deleting anything",
+        "Asks the operator before the detach and takes a dump-all.sh dump first",
+        "Uses cordon, not drain, and uncordons only after every volume reads detached",
+        "Stops and waits for the operator to unseal OpenBao when server3 is involved, then force-syncs an ExternalSecret and checks refreshTime moves",
+        "Checks miot-bridge subscriptions after EMQX restarts on server1",
+        "Re-runs detection until one NEW-image IM per node remains and volumes are attached and healthy"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "I changed only gitops/helm-values/server3/loki.yaml to raise retention and pushed it 20 minutes ago. ArgoCD says loki is Synced and Healthy. Is the new retention live?",
+      "expected_output": "Does not trust Synced: compares the app's status.sync.revisions with git rev-parse origin/main, recognises the stale multi-source values cache, checks git log for other unsynced commits before a hard refresh, hard-refreshes and syncs once, then verifies the running config rather than the pin.",
+      "files": [],
+      "expectations": [
+        "Compares status.sync.revision(s) with git rev-parse origin/main",
+        "Names the values-only stale multi-source cache as the reason Synced can be wrong",
+        "Warns that a hard refresh reconciles every app with unsynced commits and checks git log first",
+        "Triggers exactly one sync and does not loop syncs",
+        "Verifies on the cluster (rendered config or running pod), not by the Synced badge"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Renovate wants to bump the mongodb chart. I also plan a Talos upgrade on server1 next week. Anything to watch for?",
+      "expected_output": "Explains that the mongodb chart does not pin the binary (bitnami/mongodb:latest), that a digest pin is deliberately not used and should not be proposed, that the Talos upgrade's fresh pull can move mongod irreversibly, and asks for a dump plus a comparison of mongod --version with what latest resolves to before the node work.",
+      "files": [],
+      "expectations": [
+        "States the chart targetRevision does not decide the mongod version",
+        "Does not propose pinning the MongoDB image by digest",
+        "Links the Talos upgrade (fresh pull) to an irreversible MongoDB data-file upgrade",
+        "Requires a dump before the Talos upgrade",
+        "Renders OLD and NEW chart with this repo's values and diffs them before merging the bump"
+      ]
+    }
+  ]
+}

@@ -54,7 +54,8 @@ Upgrade progress:
 - [ ] 7. Pin changed (and its duplicate); diff shown to the operator
 - [ ] 8. Deployed the way this pin deploys
 - [ ] 9. Verified on the cluster: running version == NEW
-- [ ] 10. sync-docs run, if a pin moved or a variable was added
+- [ ] 10. Longhorn only: no stale instance-manager left on any cluster
+- [ ] 11. sync-docs run, if a pin moved or a variable was added
 ```
 
 ### 1–4. Prove it is safe against this repo's values
@@ -150,3 +151,19 @@ running version you observed, not the pin you changed.
 Terraform state has silently stopped describing reality here before: a Gateway API pin sat at one
 version while all three clusters ran a newer one installed underneath it. A clean `terraform plan` plus
 the live version is the only evidence a pin is real.
+
+### 10. Longhorn: drain the stale instance-managers
+
+A Longhorn upgrade leaves the **old** instance-manager running on every node whose volumes stayed
+attached, still hosting their engines and still reserving 12% of node CPU — a pod restart does not
+move them. It does not show in ArgoCD, Terraform or pod health. Check every cluster after the apply:
+
+```bash
+kubectl --context admin@<cluster> -n longhorn-system get instancemanagers.longhorn.io -o json \
+  | jq -r '.items[] | "\(.metadata.name) \(.spec.image) engines=\((.status.instanceEngines//{})|keys)"'
+```
+
+Any IM whose image is not NEW and still lists engines is stale. Clearing it means detaching its
+volumes — downtime, and an OpenBao reseal on server3 — so follow
+[references/longhorn-stale-instance-managers.md](references/longhorn-stale-instance-managers.md) and
+loop until only NEW-image IMs remain.
