@@ -1,3 +1,17 @@
 # MongoDB — server1 cluster overrides
 # Shared base values: gitops/helm-values/mongodb.yaml
-# No cluster-specific Helm overrides needed; TCP route is set in gitops/k8s-manifests/server1/mongodb/IngressRouteTCP.yaml
+# TCP route is set in gitops/k8s-manifests/server1/mongodb/IngressRouteTCP.yaml
+
+# Replaces the chart's resourcesPreset "small" (500m/750m CPU, 512Mi/768Mi, 50Mi/2Gi
+# ephemeral) — setting `resources` drops the preset entirely, so every field is restated.
+# Only the CPU request changes: 7-day peak (5m rate) was 141m (2026-10-14); 500m
+# reserved a twelfth of the node for it.
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+    ephemeral-storage: 50Mi
+  limits:
+    cpu: 750m
+    memory: 768Mi
+    ephemeral-storage: 2Gi

@@ -41,12 +41,16 @@ serviceAccount:
 # lower still (115-155Mi at startup); revisit the ceiling once they have a week of
 # history, not before.
 #
-# CPU is deliberately unchanged. Measured peak CFS throttling over 3 days was 9% /
-# 4% / 2% (feeder / miot / qr) — not enough to justify removing limits on a node
+# CPU limit is deliberately unchanged. Measured peak CFS throttling over 3 days was
+# 9% / 4% / 2% (feeder / miot / qr) — not enough to justify removing limits on a node
 # shared with EMQX, InfluxDB and Longhorn. Revisit above 25% sustained.
+#
+# CPU request is sized for scheduling, not bursts: 7-day peak (5m rate) was 34m for
+# miot-bridge production and under 6m for everything else (2026-10-14). 250m x 8 pods
+# reserved ~2 cores on server1 for ~13m of real use. The 500m limit absorbs startup.
 resources:
   requests:
-    cpu: 250m
+    cpu: 50m
     memory: 500Mi
   limits:
     cpu: 500m
