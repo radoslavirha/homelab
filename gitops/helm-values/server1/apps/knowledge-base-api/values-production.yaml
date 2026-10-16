@@ -15,7 +15,7 @@
 
 # Placeholder until the first release: the homelab-apps release workflow rewrites it.
 image:
-  tag: "0.1.0"
+  tag: "0.1.1"
 templates:
   config:
     # Read from OpenBao by the chart's ExternalSecret; the template reads .secrets.<name>.
