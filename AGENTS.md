@@ -44,7 +44,7 @@ All skills, instructions and agents live in `.apm/` and nowhere else:
 
 | Cluster | Runs |
 |---------|------|
-| server1 | Every datastore (InfluxDB2, EMQX, MongoDB). Every IoT custom app, in `production` and `sandbox` namespaces under a default-deny NetworkPolicy. Mealie, Open WebUI |
+| server1 | Every datastore (InfluxDB2, EMQX, MongoDB, the shared CloudNativePG Postgres). Every IoT custom app, in `production` and `sandbox` namespaces under a default-deny NetworkPolicy; knowledge-base-api in `production` only. Mealie, Open WebUI |
 | server2 | Ollama — the LLM engine since 2026-09-20. No datastores, no custom apps |
 | server3 | ArgoCD (manages all three clusters), OpenBao, Authentik, the LGTM stack (Prometheus, Grafana, Loki, Tempo), homelab-dashboard-ui |
 

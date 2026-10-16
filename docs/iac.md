@@ -370,6 +370,14 @@ bao kv put secret/<cluster>/open-webui \
 #        bao kv patch secret/<cluster>/open-webui oauth-client-secret=<paste>
 #      Same pattern as mealie's oidc-client-secret. See docs/identity.md.
 
+#    knowledge-base-api's GitHub App credentials (apps stage; server1 production only).
+#      Only that app's pod waits on it — nothing else fails without it. Both values come
+#      from the App's settings page; generate a NEW private key there. See docs/secrets.md.
+#      Its database password is NOT seeded: ESO generates it (server1/postgres).
+bao kv put secret/server1/production/knowledge-base-api-github \
+  github-client-id=<client-id> \
+  github-private-key=@<downloaded-key.pem>
+
 #    Verify all secrets are present before continuing:
 bao kv list secret/<cluster>
 

@@ -149,7 +149,7 @@ Wave layout:
 |1|`RootInfra`|ESO + CRDs|
 |2|`RootGateway`, `server3/RootDashboards`|Traefik + ExternalDNS · OpenBao HTTPRoute|
 |3|`RootObservability`, `server3/RootObservability`, `server3/RootIdentity`, `RootIoT`, `RootDatabases`, `RootDashboards`|k8s-monitoring · LGTM · Authentik · IoT · MongoDB · UI dashboards|
-|4|`RootApps`|Custom apps (miot-bridge, interactive-map-feeder, qr-manager)|
+|4|`RootApps`|Custom apps (miot-bridge, interactive-map-feeder, qr-manager, knowledge-base-api)|
 
 ### Step 7 — OpenBao configuration (after Authentik is up)
 
