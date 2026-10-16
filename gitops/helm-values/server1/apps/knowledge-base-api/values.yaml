@@ -1,0 +1,142 @@
+# knowledge-base-api — shared base values
+# Env-specific: image.tag, templates.config (content + secrets) → values-production.yaml.
+# Production only (see the ApplicationSet). ClusterIP only: no HTTPRoute, no pathName — callers
+# reach it in-cluster, and a person tests it through a port-forward.
+
+# Restart when the ESO-rendered config Secret changes — a vars edit or a credential
+# rotated in OpenBao. The file is read once, at pod start.
+annotations:
+  reloader.stakater.com/auto: "true"
+image:
+  repository: ghcr.io/radoslavirha/knowledge-base-api
+  pullPolicy: Always
+# One replica, on purpose. The indexer holds a Postgres advisory lock for a whole run, and a
+# replica without it skips its scheduled runs and answers POST /reindex with `queued: false`
+# without ever running it — so a second replica buys nothing and makes reindex a coin toss.
+# The two pods a rolling update overlaps are the same case, for the length of the rollout.
+replicas: 1
+serviceAccount:
+  create: true
+  # No ambient token: automount would give every pod a long-lived,
+  # full-audience one.
+  automountServiceAccountToken: false
+  # Off, unlike the other APIs: the projected token is what lets a service verify
+  # cluster-issued ServiceAccount tokens, and this one trusts Authentik issuers only
+  # (auth.IDP in values-production.yaml). It also calls no Kubernetes API. Turn it on
+  # with the first caller that authenticates with a ServiceAccount token.
+  projectedToken:
+    enabled: false
+# Memory requests == limits so the scheduler reserves what this pod can actually use,
+# and kubelet ranks it last among Burstable pods for eviction (usage can never exceed
+# requests — it OOMKills first).
+#
+# This is NOT the Guaranteed QoS class, only because CPU is unequal by the decision
+# below: Guaranteed requires requests == limits for BOTH cpu and memory on every
+# container.
+#
+# The 500Mi ceiling is the other APIs' (measured peak 273Mi over 7 days, the slim images
+# 115-155Mi at startup). Unmeasured for this one: an indexing run holds a batch of chunks
+# (embeddings.batchSize, 16) and their vectors, and a full rebuild re-reads every document.
+# Check the working set after the first POST /reindex?full=true, before trusting it.
+#
+# CPU request is sized for scheduling, not bursts, like the other APIs (server1's requests
+# were near full until 2026-10-14). The embedding work runs on server2; here a run is
+# chunking, hashing and SQL. The 500m limit absorbs startup and the migrations.
+resources:
+  requests:
+    cpu: 50m
+    memory: 500Mi
+  limits:
+    cpu: 500m
+    memory: 500Mi
+# V8 sizes its heap from what it detects, which is not the cgroup limit, and the
+# failure mode is an OOMKill with no Node-level error. 384Mi is ~75% of the container
+# limit; the remaining quarter is buffers, native modules, the code cache and thread
+# stacks, which all live outside the old space.
+env:
+  - name: NODE_OPTIONS
+    value: "--max-old-space-size=384"
+# The distroless base (gcr.io/distroless/nodejs24-debian12:nonroot) declares USER
+# 65532; runAsUser repeats it numerically because kubelet verifies runAsNonRoot
+# against the image's configured user and cannot resolve a username — a named user
+# fails closed with CreateContainerConfigError.
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: [ALL]
+labels:
+  component: api
+  partOf: knowledge-base
+services:
+  http:
+    enabled: true
+    protocol: TCP
+    port: 80
+    targetPort: 4000
+# No HTTPRoute. serviceRef stays: the chart reads {{ .app.containerPort }} through it, and
+# without it the port falls back to 80. With no route there is no {{ .app.host }} either,
+# so the config template sets no publicURL.
+ingress:
+  enabled: false
+  serviceRef: http
+# Boot budget: 5s × 24 = 120s, which includes the schema migrations run at startup.
+# Liveness and readiness stay suppressed until this passes, which is the modern
+# replacement for initialDelaySeconds guesswork.
+startupProbe:
+  httpGet:
+    path: /health/live
+    port: http
+  periodSeconds: 5
+  failureThreshold: 24
+  timeoutSeconds: 2
+# Shallow by design — /health/live never touches the check registry.
+livenessProbe:
+  httpGet:
+    path: /health/live
+    port: http
+  periodSeconds: 10
+  failureThreshold: 3
+  timeoutSeconds: 2
+# Depends on the database only. Postgres is registered as critical: without it there is no
+# search at all. Ollama is critical: false — search falls back to full-text when the
+# embedder is down, so a server2 outage degrades /health to warn while /health/ready stays
+# 200. GitHub has no check: an unreachable GitHub only delays indexing (GET /status shows
+# the failed run). Do NOT make readiness depend on either.
+readinessProbe:
+  httpGet:
+    path: /health/ready
+    port: http
+  periodSeconds: 5
+  failureThreshold: 3
+  successThreshold: 1
+  timeoutSeconds: 3
+# preStop covers Endpoints removal for in-cluster callers; the app's own SIGTERM drain
+# (readiness flips to 503, in-flight requests finish) covers the window after it. Budget:
+# preStop 10s + drain + the app's 10s hard deadline, inside 30s. An indexing run in
+# progress is cut off at that deadline. Nothing is lost: the cursor moves only once the
+# documents are stored, and chunks still without a vector are picked up by the next run
+# (or wait for POST /reindex when more than indexer.maxScheduledEmbeddings are pending).
+terminationGracePeriodSeconds: 30
+lifecycle:
+  preStop:
+    sleep:
+      seconds: 10
+# maxUnavailable: 0 keeps the Ready pod serving until its replacement is Ready.
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 1
+    maxUnavailable: 0
+templates:
+  config:
+    file: production.json
+    path: /home/app/config
+    # content and secrets defined per-env

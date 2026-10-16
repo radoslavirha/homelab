@@ -1,0 +1,52 @@
+# knowledge-base-api — ApplicationSet (server1 × production only)
+# Chart: gitops/helm-charts/app/ (path-based, no publishing)
+# Production only: one index, in one database on the shared Postgres. A sandbox would need a
+# database and role of its own and a second full embed on server2, for an environment no
+# caller uses — so there is no sandbox element, no values-sandbox.yaml and no sandbox
+# NetworkPolicy. Adding one later is an element here plus those files.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: knowledge-base-api
+  namespace: argocd
+spec:
+  generators:
+    - matrix:
+        generators:
+          - list:
+              elements:
+                - cluster: server1
+                  clusterServer: https://192.168.1.200:6443
+          - list:
+              elements:
+                - env: production
+  template:
+    metadata:
+      name: knowledge-base-api-{{cluster}}-{{env}}
+    spec:
+      project: default
+      sources:
+        - repoURL: https://github.com/radoslavirha/homelab
+          targetRevision: HEAD
+          path: gitops/helm-charts/app
+          helm:
+            releaseName: knowledge-base-api
+            valueFiles:
+              - $values/gitops/helm-values/server1/apps/knowledge-base-api/values.yaml
+              - $values/gitops/helm-values/server1/apps/knowledge-base-api/values-{{env}}.yaml
+              # Every template variable (vars:) is in a file, so whoever edits a config can find it.
+              # Loaded last: an app file cannot shadow a variable by accident.
+              - $values/gitops/helm-values/server1/apps/vars/common.yaml
+              - $values/gitops/helm-values/server1/apps/vars/{{env}}.yaml
+        - repoURL: https://github.com/radoslavirha/homelab
+          targetRevision: HEAD
+          ref: values
+      destination:
+        server: '{{clusterServer}}'
+        namespace: '{{env}}'
+      syncPolicy:
+        syncOptions:
+          - CreateNamespace=true
+        automated:
+          selfHeal: true
+          prune: true
