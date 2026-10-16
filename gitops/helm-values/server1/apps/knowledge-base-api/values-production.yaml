@@ -109,16 +109,6 @@ templates:
                   "type": "bearer-jwt",
                   "trustedIssuers": [
                       {
-                          "name": "knowledge-base-test-client",
-                          "issuer": "https://auth.irha.cz/application/o/knowledge-base-test-client/",
-                          "audience": "knowledge-base-api-{{ .vars.cluster }}-{{ .app.namespace }}",
-                          "subjectKind": "service",
-                          "key": {
-                              "source": "jwks",
-                              "uri": "https://auth.irha.cz/application/o/knowledge-base-test-client/jwks/"
-                          }
-                      },
-                      {
                           "name": "postman",
                           "issuer": "https://auth.irha.cz/application/o/postman/",
                           "audience": "knowledge-base-api-{{ .vars.cluster }}-{{ .app.namespace }}",

@@ -545,6 +545,7 @@ applications:
   - name: knowledge-base-test-client
     title: Knowledge Base API test client
     kind: device
+    state: absent
     # Not a device: a person with curl, calling knowledge-base-api through a port-forward
     # before any real caller exists. kind device is the matrix's client_credentials client,
     # and client_credentials is the flow the API's future callers (the MCP adapter) will
