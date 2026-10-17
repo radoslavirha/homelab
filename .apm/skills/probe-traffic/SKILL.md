@@ -138,7 +138,7 @@ Never report a signal as PASS without having seen the data. If a lens was not ru
 
 ## Auth
 
-The three APIs require a bearer token (since 2026-09-09); anonymous calls get `401`. **A `401` is still a complete telemetry probe** — Traefik logs it, the app logs it with `trace_id`, and Tempo holds the trace. Authenticate only when the question needs the handler to run (internet egress, a real Mongo read): ask the operator for a token in `PROBE_TOKEN` and send `-H "Authorization: Bearer $PROBE_TOKEN"`. Details: [references/targets.md](references/targets.md).
+The APIs require a bearer token (the IoT ones since 2026-09-09); anonymous calls get `401`. **A `401` is still a complete telemetry probe** — Traefik logs it, the app logs it with `trace_id`, and Tempo holds the trace. Authenticate only when the question needs the handler to run (internet egress, a real Mongo read): ask the operator for a token in `PROBE_TOKEN` and send `-H "Authorization: Bearer $PROBE_TOKEN"`. Details: [references/targets.md](references/targets.md).
 
 ## Before believing a negative result
 

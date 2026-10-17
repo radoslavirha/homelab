@@ -97,7 +97,7 @@ image runs as root, so the probe would not start at all.
 
 ## `stripPrefix` changes the path between V1 and V2
 
-The three APIs have `stripPrefix: true`: Traefik removes `/iot/<app>` before the app sees the
+The APIs have `stripPrefix: true`: Traefik removes `/<pathName>` before the app sees the
 request. So the laptop URL carries the prefix and the port-forward URL must not. qr-manager-ui
 is the exception (`stripPrefix: false`). A 404 from the wrong form proves nothing.
 

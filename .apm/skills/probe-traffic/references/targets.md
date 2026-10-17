@@ -55,6 +55,17 @@ dependencies directly. Do not try to drive them through the HTTP API.
 | `GET /<slug>` | **reads MongoDB**, responds with a redirect | Public. The Mongo-path probe. **Never follow the redirect** — the target is user-supplied data. Use `-o /dev/null -w '%{http_code} %{redirect_url}'`, no `-L`. An unknown slug returns `404` and still proves Mongo was reached, via the app's own log line |
 | `GET /api/docs/` | none | Swagger UI. **Without** the trailing slash it 302s to a URL that has lost the `/iot/qr-manager` prefix |
 
+### knowledge-base-api
+
+Production only — there is no sandbox instance. From the code, 2026-10-17; not re-checked.
+
+| Path | Side effects | Notes |
+|---|---|---|
+| `GET /status` | reads Postgres | `reader`. Anonymous → `401` |
+| `GET /search?q=<question>` | **embeds the question on server2's Ollama**, reads Postgres | `reader`. Exercises the server2 egress path; answers `mode: FULLTEXT` when Ollama is unreachable |
+| `POST /reindex` | **starts an indexing run** — `full=true` saturates server2's CPU for ~25 minutes | `admin`. Never a probe |
+| `GET /api/docs/` | none | Swagger UI. Trailing slash matters |
+
 ### qr-manager-ui
 
 | Path | Side effects | Notes |
@@ -72,7 +83,7 @@ https://<component>.<vars.domain>/<pathName>/<app path>
 
 | Piece | Where it comes from | Values today |
 |---|---|---|
-| `component` | `labels.component` in `gitops/helm-values/server1/apps/<app>/values.yaml` | `api` for the three APIs · `apps` for qr-manager-ui |
+| `component` | `labels.component` in `gitops/helm-values/server1/apps/<app>/values.yaml` | `api` for the APIs · `apps` for qr-manager-ui |
 | `vars.domain` | `gitops/helm-values/server1/apps/vars/<env>.yaml` — carries the environment | production: `server1.homelab.irha.cz` · sandbox: `sandbox.server1.homelab.irha.cz` |
 | `pathName` | `ingress.pathName` in the app's `values.yaml` | see table |
 
@@ -81,6 +92,7 @@ https://<component>.<vars.domain>/<pathName>/<app path>
 | miot-bridge-api | `iot/miot-bridge` | true |
 | interactive-map-feeder-api | `iot/interactive-map-feeder` | true |
 | qr-manager-api | `iot/qr-manager` | true |
+| knowledge-base-api | `kb/knowledge-base` — production only | true |
 | qr-manager-ui | `qr-manager` | **false** |
 
 `stripPrefix: true` means Traefik removes the prefix before the app sees it — which is why the
@@ -132,7 +144,7 @@ Which is exactly why this skill generates traffic rather than waiting for it.
 
 ## Auth
 
-The three APIs require a bearer token since 2026-09-09; anonymous callers get `401` from the app's
+The APIs require a bearer token (the IoT ones since 2026-09-09); anonymous callers get `401` from the app's
 auth guard. The app still logs the request with `trace_id` and exports the trace, so an anonymous
 probe exercises ingress and the whole telemetry pipeline. It does **not** run the handler, so it
 cannot prove internet egress or a Mongo read behind auth.

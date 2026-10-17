@@ -170,8 +170,8 @@ applications:
 
   - name: knowledge-base-api
     title: Knowledge Base API
-    # ClusterIP only, never exposed: no route serves the host below, and no browser logs
-    # in here. kind api needs a host to derive its redirect from, so this one is nominal --
+    # No UI: the REST surface is served at api.<domain>/kb/knowledge-base, and no browser
+    # logs in here. kind api needs a host to derive its redirect from, so this one is nominal --
     # like miot-bridge's and the feeder's, which serve no UI either. The application exists
     # for its audience and its role groups: callers hold a token addressed to it, and the
     # API checks `knowledge-base-api.*` roles (and each knowledge base's `readers`).

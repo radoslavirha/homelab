@@ -168,7 +168,7 @@ grant. "Remove their access" means removing the *lowest* membership they hold, n
 | `qr-manager` | `qr-manager-ui` at `apps.<cluster>…/qr-manager` | admin → editor → reader | server1 × sandbox · production, + local |
 | `miot-bridge` | none — REST surface operated by hand | admin → editor → reader | server1 × sandbox · production, + local |
 | `interactive-map-feeder` | none — reads of public CHMU data | admin → editor → reader | server1 × sandbox · production, + local |
-| `knowledge-base-api` | none — ClusterIP only, never exposed; the host in the matrix is nominal | `admin` → `reader` — **two rungs**: reader searches and reads, admin reindexes | server1 production, + local |
+| `knowledge-base-api` | none — REST at `api.server1.homelab.irha.cz/kb/knowledge-base`, LAN only; the host in the matrix is nominal | `admin` → `reader` — **two rungs**: reader searches and reads, admin reindexes | server1 production, + local |
 | `homelab-dashboard` | `dashboard.server3.homelab.irha.cz` | admin → editor → reader | server3 production, + local |
 | `argocd` | `argocd.server3.homelab.irha.cz` | admin → editor → reader | server3 production |
 | `grafana` | `grafana.irha.cz` | admin → editor → reader | server3 production |
@@ -440,7 +440,7 @@ entries, which still use the prefix rule.
 `aud` is: every API needs a trusted-issuer row for `https://auth.irha.cz/application/o/postman/` — the
 same value in every deployment, one row, not one per environment. **Deployed since 2026-09-09**, and
 the row is **this** repo's config, not `homelab-apps`: `gitops/helm-values/server1/apps/<api>/{production,sandbox}.yaml`,
-under `auth.IDP.trustedIssuers`. All three APIs load it at boot and refuse anonymous callers with `401`.
+under `auth.IDP.trustedIssuers`. Every API loads it at boot and refuses anonymous callers with `401`.
 
 **In Postman** it is one collection-level OAuth 2.0 config, and nothing about it varies by environment:
 

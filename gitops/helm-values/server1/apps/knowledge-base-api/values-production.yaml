@@ -1,10 +1,10 @@
 # knowledge-base-api — production overrides
 # Template variables: .vars.* from ../vars/common.yaml + ../vars/production.yaml, chart built-ins
-# .app.* (name, group, component, containerPort, namespace — no host or pathName: there is no
-# route), and .secrets.* from secrets: below.
+# .app.* (name, group, component, pathName, containerPort, namespace, host), and .secrets.* from
+# secrets: below.
 #
-# No publicURL: it would read {{ .app.host }}, which does not exist without a route, and ESO
-# fails the whole render on a missing key. It is optional in the app's config.
+# publicURL is the Swagger UI's server URL: without it the UI fetches its spec from the host
+# root and "Try it out" drops the /kb/knowledge-base prefix.
 #
 # The repository to index is never named here. The GitHub App's installation says which
 # repository it covers, and the service asks it at runtime.
@@ -40,6 +40,7 @@ templates:
           "server": {
               "httpPort": {{ .app.containerPort }}
           },
+          "publicURL": "{{ .vars.protocol }}://{{ .app.host }}/{{ .app.pathName }}",
           "externalApis": {
               "OLLAMA": {
                   "baseURL": "https://ollama.server2.homelab.irha.cz",

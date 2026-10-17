@@ -1,7 +1,7 @@
 # knowledge-base-api — shared base values
 # Env-specific: image.tag, templates.config (content + secrets) → values-production.yaml.
-# Production only (see the ApplicationSet). ClusterIP only: no HTTPRoute, no pathName — callers
-# reach it in-cluster, and a person tests it through a port-forward.
+# Production only (see the ApplicationSet). A LAN route like the other APIs' (ingress below);
+# in-cluster callers use the ClusterIP Service directly.
 
 # Restart when the ESO-rendered config Secret changes — a vars edit or a credential
 # rotated in OpenBao. The file is read once, at pod start.
@@ -81,12 +81,15 @@ services:
     protocol: TCP
     port: 80
     targetPort: 4000
-# No HTTPRoute. serviceRef stays: the chart reads {{ .app.containerPort }} through it, and
-# without it the port falls back to 80. With no route there is no {{ .app.host }} either,
-# so the config template sets no publicURL.
+# https://api.<domain>/kb/knowledge-base, LAN-only like every homelab.irha.cz name. Every
+# route but /health/* demands a token, so the route opens nothing a token does not. `kb/` is
+# the group segment, as `iot/` is for the IoT APIs; labels.partOf stays `knowledge-base`
+# because it names every resource the chart renders. stripPrefix (the chart default) hands
+# the app /search, /status and the rest at its root.
 ingress:
-  enabled: false
+  enabled: true
   serviceRef: http
+  pathName: kb/knowledge-base
 # Boot budget: 5s × 24 = 120s, which includes the schema migrations run at startup.
 # Liveness and readiness stay suppressed until this passes, which is the modern
 # replacement for initialDelaySeconds guesswork.
