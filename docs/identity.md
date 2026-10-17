@@ -178,7 +178,6 @@ grant. "Remove their access" means removing the *lowest* membership they hold, n
 | `open-webui` | `assistant.irha.cz` — **confidential**, see [Open WebUI](#open-webui) | `admin` → `user` — **two rungs**: `OAUTH_ALLOWED_ROLES` gates who may log in and `OAUTH_ADMIN_ROLES` grants admin, so a middle rung would be a claim nothing reads | server1 production |
 | `postman` | none — a client, not an API | `user` (the access gate only) | one client, every environment |
 | `interactive-map` | none — an ESP32, `kind: device` | none of its own; holds `interactive-map-feeder.reader` | one client: server1 production + local |
-| `knowledge-base-test-client` | none — `kind: device`, a person with curl through a port-forward until a real caller exists | none of its own; holds `knowledge-base-api.admin` | one client: server1 production + local |
 | `longhorn` | `longhorn.<cluster>.homelab.irha.cz` — **`kind: proxy`**, see [Proxies](#proxies--uis-with-no-login-of-their-own) | `admin` (the access gate only) | server1 · server2 · server3, production |
 | `hubble` | `hubble.<cluster>.homelab.irha.cz` — **`kind: proxy`**, the Cilium flow UI in `kube-system` | `admin` (the access gate only) | server1 · server2 · server3, production |
 | `traefik` | `traefik.<cluster>.homelab.irha.cz` — **`kind: proxy`**, and the one guarded by an **IngressRoute** rather than an HTTPRoute | `admin` (the access gate only) | server1 · server2 · server3, production |
