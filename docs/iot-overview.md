@@ -55,10 +55,6 @@ keys are `podSecurityContext` / `containerSecurityContext`, covered by
 
 Two things this couples to, worth knowing before changing either:
 
-- **`miot-bridge-api` tolerates the read-only filesystem only while `mongodb.enabled` is
-  true.** Its device, notification and model-property-override facades fall back to local
-  JSON files under `cachePath` (`/home/app/cache`) when Mongo is off, and those writes fail
-  on a read-only root. Turn one off, turn the other off.
 - **The nginx UI pods (`qr-manager-ui`, `homelab-dashboard-ui`) still start as root.** They
   need `nginxinc/nginx-unprivileged` (port 8080, Service `targetPort` change) before the
   same block can apply to them.

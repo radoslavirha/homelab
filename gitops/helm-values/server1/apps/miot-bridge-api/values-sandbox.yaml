@@ -33,7 +33,6 @@ templates:
               "httpPort": {{ .app.containerPort }}
           },
           "publicURL": "{{ .vars.protocol }}://{{ .app.host }}/{{ .app.pathName }}",
-          "cachePath": "./cache",
           "mqtt": {
               "enabled": true,
               "url": "{{ .vars.mqtt.url }}",
