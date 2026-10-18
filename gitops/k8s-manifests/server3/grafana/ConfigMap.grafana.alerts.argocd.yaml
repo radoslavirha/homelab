@@ -121,13 +121,13 @@ data:
             annotations:
               summary: 'Sync of {{ $labels.name }} on {{ $labels.cluster }} ended in {{ $labels.phase }}'
               description: >-
-                The previous revision is still what runs. An automated sync is not retried on
-                the same commit, so this stays broken until a new commit or a manual sync. Read
-                the operation message first:
+                The previous revision is still what runs. Any retries of this operation are
+                spent and the same commit is not tried again, so it stays broken until a new
+                commit or a manual sync. Read the operation message first:
                 `kubectl --context admin@server3 -n argocd get application {{ $labels.name }}
-                -o jsonpath='{.status.operationState.message}'`. If a hook Job failed, its pod
-                logs are in {{ $labels.dest_namespace }} on {{ $labels.cluster }} until the next
-                sync deletes it.
+                -o jsonpath='{.status.operationState.message}'`. If a hook Job failed, it may
+                already be gone — each retry deletes it — and then its output is only in Loki:
+                {k8s_cluster_name="{{ $labels.cluster }}", k8s_namespace_name="{{ $labels.dest_namespace }}"}.
 
           # ---------------------------------------------------------------------------
           # An app has been Degraded for 15 minutes: a crash-looping pod, a Deployment past
@@ -182,7 +182,14 @@ data:
             labels:
               # The custom apps' production namespace is the one thing here a household
               # member notices; everything else is the operator's own platform.
-              severity: '{{ if eq $labels.dest_namespace "production" }}critical{{ else }}warning{{ end }}'
+              #
+              # `.Labels`, NEVER `$labels`, in a LABEL template. MEASURED 2026-10-18: file
+              # provisioning stripped `$labels` out of this label value (env-var style
+              # expansion — annotations are left alone), leaving `.dest_namespace`, which is
+              # not a field. Grafana then renders an invalid template as plain text, so the
+              # firing instance carried the literal `{{ if eq … }}` as its severity and matched
+              # neither route. `.Labels` is the same map without a `$` to expand.
+              severity: '{{ if eq .Labels.dest_namespace "production" }}critical{{ else }}warning{{ end }}'
               component: argocd
             annotations:
               summary: '{{ $labels.name }} on {{ $labels.cluster }} has been Degraded for 15 minutes'

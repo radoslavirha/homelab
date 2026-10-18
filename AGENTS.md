@@ -95,9 +95,15 @@ terraform apply -auto-approve                 # version bumps and config changes
 kubectl rollout restart deploy/<name>
 kubectl -n argocd annotate application <name> argocd.argoproj.io/refresh=hard --overwrite
 kubectl -n argocd patch application <name> --type merge \
-  -p '{"operation":{"sync":{"revision":"HEAD"}}}'            # sync — once
+  -p '{"operation":{"sync":{"revision":"HEAD"}}}'            # sync — once (single-source app)
 kubectl -n argocd patch application <name> --type merge -p '{"operation": null}'   # clear a stuck sync
 ```
+
+A **multi-source** app (every custom app, most Helm apps) needs `"revisions":["<sha>","<sha>",…]`, one
+per source, instead of `"revision":"HEAD"`. With the singular form only the first attempt runs at HEAD;
+the retries ArgoCD adds to a patched sync (5) fall back to the last-synced commits and can "succeed" at
+the old revision.
+Measured 2026-10-18 — see docs/observability.md § What the fire test showed.
 
 **Ask before running** (destructive or irreversible):
 

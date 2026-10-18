@@ -809,9 +809,9 @@ Reputation snippet in [identity.md](identity.md) § Login surface.
 [`ConfigMap.grafana.alerts.argocd.yaml`](../gitops/k8s-manifests/server3/grafana/ConfigMap.grafana.alerts.argocd.yaml)
 and [`ConfigMap.grafana.alerts.workloads.yaml`](../gitops/k8s-manifests/server3/grafana/ConfigMap.grafana.alerts.workloads.yaml),
 `Platform` folder, evaluated every minute. Before these, nothing said a release had not arrived:
-a failed sync leaves the previous revision serving, and an automated sync is **not retried on
-the same commit**, so a failed migration hook or PostSync provisioner simply stops the release
-with every badge still green. In August 2026 the controller stopped reconciling for hours and
+a failed sync leaves the previous revision serving, and once its retries are spent (5 by default)
+an automated sync is **not retried on the same commit**, so a failed migration hook or PostSync
+provisioner simply stops the release with every badge still green. In August 2026 the controller stopped reconciling for hours and
 everything read Synced/Healthy.
 
 | Rule | Fires when | `for` | Severity |
@@ -845,7 +845,7 @@ cover Jobs no sync owns.
   for healthy Jobs, so the series has never been seen here — no Job has failed in retention. It
   is collected already: the chart's default allow-list has `kube_job.*`. Successful PostSync
   provisioner Jobs have never been scraped at all; `HookSucceeded` deletes them within a scrape
-  interval. A failed one stays until `BeforeHookCreation` deletes it at the next sync.
+  interval.
 - **Baseline over 7 days:** Degraded at most 9 minutes (external-secrets during an upgrade),
   autosync OutOfSync at most 2 minutes, reconciles per app per 30m never below 8.9 (the default
   180 s timer gives ~10). Prometheus retention starts 2026-09-17, so the August stall itself is
@@ -853,6 +853,40 @@ cover Jobs no sync owns.
 
 Only the reconcile rule uses `noDataState: Alerting` — its NoData means ArgoCD is not scraped,
 which silences the other three ArgoCD rules too. For the rest, no series is the healthy case.
+
+### What the fire test showed, 2026-10-18
+
+Each rule except OutOfSync and reconcile-stalled was made to fire on sandbox: a non-existent image
+tag on `qr-manager-ui`, and an always-failing PreSync hook Job on `qr-manager-api`. Four things
+contradicted the design:
+
+- **`$labels` does not survive file provisioning in a *label* value.** The Degraded rule's
+  `severity: '{{ if eq $labels.dest_namespace "production" }}…'` was stored as
+  `{{ if eq .dest_namespace … }}` — `$labels` stripped, as if expanded as an environment variable
+  — and Grafana renders an invalid template as plain text, so the instance carried the literal
+  template as its severity and matched neither route. Annotations keep `$labels` intact. In a
+  label template write `.Labels.<name>`.
+- **A failed hook Job often does not stay around.** ArgoCD v3.5 attached `retry: {limit: 5}` to
+  the automated and API-patched syncs here even though `spec.syncPolicy` has none, and each
+  retry's `BeforeHookCreation` deletes the failed Job before recreating it. When the retries run
+  out the operation ends `Failed` (`retried 5 times`) with **no Job left**, so "Job failed"
+  catches the hook only during a backoff gap. A sync started from the UI had no retries, left the
+  failed Job in place, and "Job failed" fired. **For hooks, "ArgoCD sync failed" is the alert that counts**; "Job
+  failed" is for Jobs no sync deletes. The hook's output survives only in Loki.
+- **The counter counts operations, not attempts.** `argocd_app_sync_total` takes the operation's
+  *final* phase. A failed attempt followed by a successful retry adds one `Succeeded` and no
+  `Failed`, so it raises nothing.
+- **A manual sync of a multi-source app must set `revisions`, not `revision`.** Patching
+  `{"operation":{"sync":{"revision":"HEAD"}}}` runs the first attempt at HEAD, but the retries use
+  `operation.sync.revisions`, which ArgoCD fills with the *last synced* commits. Twice here the
+  hook failed at HEAD and the retry then "succeeded" at the old commit, without the hook. For a
+  multi-source app (every custom app), name the commit once per source:
+
+  ```bash
+  R=$(git rev-parse origin/main)
+  kubectl --context admin@server3 -n argocd patch application <name> --type merge \
+    -p "{\"operation\":{\"sync\":{\"revisions\":[\"$R\",\"$R\",\"$R\"]}}}"
+  ```
 
 **When one fires**, the annotations carry the next command. The usual first step for any ArgoCD
 alert:

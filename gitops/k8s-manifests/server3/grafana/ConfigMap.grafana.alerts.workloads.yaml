@@ -44,10 +44,18 @@ data:
             title: Job failed
             condition: B
             # No `for`. ArgoCD hook Jobs are short-lived objects: `HookSucceeded` deletes a
-            # successful one, and `BeforeHookCreation` deletes a failed one at the next sync,
-            # taking its series with it. MEASURED: no PostSync provisioner Job has ever been
-            # scraped here — they live for less than a scrape interval. A failed one stays
-            # until the next sync, which is long enough, but waiting would only risk it.
+            # successful one within a scrape interval — no PostSync provisioner Job has ever
+            # been scraped here.
+            #
+            # A FAILED HOOK JOB OFTEN DOES NOT STAY EITHER. MEASURED 2026-10-18 (fire test,
+            # ArgoCD v3.5.2): automated and API-patched syncs carry `retry: {limit: 5}` even
+            # with no retry in spec, and each retry's `BeforeHookCreation` deletes the failed
+            # Job before recreating it. When the retries run out the operation ends Failed
+            # with no Job left — the hook existed only during the backoff gaps (5 s … 80 s),
+            # so this rule may or may not catch it. A sync started from the UI had no retries
+            # and left the failed Job in place, and this rule fired. For hooks,
+            # argocd-sync-failed is the reliable alert; this one is for everything else —
+            # chart hooks ArgoCD applies as plain resources, manual Jobs, CronJobs.
             for: 0s
             # No series is the healthy case, and not only because nothing failed:
             # kube-state-metrics emits kube_job_failed ONLY for a Job that carries a Failed
@@ -89,10 +97,11 @@ data:
             annotations:
               summary: 'Job {{ $labels.job_name }} in {{ $labels.namespace }} on {{ $labels.cluster }} failed'
               description: >-
-                Read its pods' logs before the next sync deletes a failed hook Job:
                 `kubectl --context admin@{{ $labels.cluster }} -n {{ $labels.namespace }} logs
-                job/{{ $labels.job_name }}`. If it is an ArgoCD hook (a migration, a PostSync
-                provisioner), the sync failed with it and the previous revision is still running.
+                job/{{ $labels.job_name }}` while it exists; afterwards its output is in Loki
+                under k8s_namespace_name="{{ $labels.namespace }}". If it is an ArgoCD hook (a
+                migration, a PostSync provisioner), expect "ArgoCD sync failed" too: ArgoCD
+                deletes the Job on each retry, and the previous revision is still running.
 
           # ---------------------------------------------------------------------------
           # A Deployment passed progressDeadlineSeconds (600 s by default) without its new

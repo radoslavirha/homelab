@@ -34,6 +34,9 @@ Full guide: `docs/observability.md`. The traps below have each cost hours.
   `policies:` replaces, never merges.
 - Reloader restarts Grafana on a ConfigMap **update**, not on create. A new `grafana-alerts-*`
   ConfigMap loads only after a `kubectl rollout restart` — confirm by pod age.
+- In a provisioned rule's **label** template write `.Labels.x`, never `$labels.x` — provisioning
+  strips `$labels` from label values and the template then renders as literal text. Annotations
+  are unaffected.
 - Every `argocd_*` series carries `cluster="server3"` (the scrape), not the app's cluster. Join to
   `argocd_cluster_info` on `dest_server`, as `ConfigMap.grafana.alerts.argocd.yaml` does.
 - Tempo-backed table panels: never `select()` a numeric span attribute — it crashes the panel and
