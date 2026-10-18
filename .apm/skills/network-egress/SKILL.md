@@ -125,7 +125,9 @@ commit until both pass.
 ### 5. Sandbox first, then production
 
 The Applications are **manual-sync** on purpose — `selfHeal` would undo the emergency rollback.
-A push deploys nothing until you sync. After pushing, sync sandbox **once**:
+A push deploys nothing until you sync. After pushing, sync sandbox **once**. These Applications are
+single-source, so the singular `revision` is right here; a multi-source app needs `revisions[]`
+(AGENTS.md § Commands):
 
 ```bash
 kubectl --context admin@server3 -n argocd patch app network-policies-server1-sandbox \

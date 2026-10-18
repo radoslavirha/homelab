@@ -13,7 +13,7 @@ naming and token claims: `docs/identity.md`.
 
 ## Prerequisites
 
-- CLIs: `helm`, `yq`, `kubectl`, `git`.
+- CLIs: `helm`, `yq`, `jq`, `kubectl`, `git`.
 - `KUBECONFIG` with server3 in it — commands use `--context admin@server3` (AGENTS.md § Access).
 - An Authentik admin session in the UI, for the steps that are deliberately not in git (group
   membership, reading a generated client secret).
@@ -77,14 +77,24 @@ or an unresolved `!Find`. If the change touches `hardening` or `onboarding`, run
 `VALID: True` with no warnings. Two lines decide whether anyone can log in at all: the order-15 deny
 stage must keep ≥ 1 policy bound, and the MFA chooser must not be empty.
 
-**5. Deploy.** Pushing is not deploying. Hard refresh, then sync **once**:
+**5. Deploy.** Pushing is not deploying. Hard refresh, then sync **once**. `authentik-server3` is
+multi-source (the Authentik chart, then three sources from this repo), so the sync names one revision
+per source: the chart's pinned version, then your commit. With `"revision":"HEAD"` only the first
+attempt runs at HEAD; the retries fall back to the last-synced commits and can "succeed" without your
+change (AGENTS.md § Commands).
 
 ```bash
 kubectl --context admin@server3 -n argocd annotate application authentik-server3 \
   argocd.argoproj.io/refresh=hard --overwrite
+R=$(git rev-parse origin/main)
+REVS=$(kubectl --context admin@server3 -n argocd get application authentik-server3 -o json \
+  | jq -c --arg r "$R" '[.spec.sources[]
+      | if .repoURL == "https://github.com/radoslavirha/homelab" then $r else .targetRevision end]')
 kubectl --context admin@server3 -n argocd patch application authentik-server3 --type merge \
-  -p '{"operation":{"sync":{"revision":"HEAD"}}}'
+  -p "{\"operation\":{\"sync\":{\"revisions\":$REVS}}}"
 ```
+
+Then `status.sync.revisions` must list the same commit for every homelab source.
 
 **6. Confirm it applied — this is a loop.** Authentik applies blueprints on a cron
 (`blueprints_discovery` at `57 * * * *`) and only when the file hash changed, so the wait is up to an
