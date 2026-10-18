@@ -496,7 +496,8 @@ bao kv get -format=json secret/agents/e2e-claude | jq '.data.data | keys'
 
 **Rotating the password:** change it in Authentik, then `read -rs P && bao kv patch secret/agents/e2e-claude password="$P"; unset P`.
 **Re-enrolling TOTP:** delete the device on the user in Authentik, log in as `claude` to enrol a new
-one, and patch `totp-secret` with the new value the same way.
+one, patch `totp-secret` with the new value the same way, and finish enrolment with the code from the
+agents' helper (`claude-e2e totp`), never a phone app: [identity.md](identity.md#the-e2e-test-user).
 
 ---
 

@@ -1010,10 +1010,16 @@ applied.
 - [ ] Read the `otpauth://` link out of the QR code (`zbarimg -q --raw <screenshot>`, from
       `brew install zbar`) and keep its `secret=` value.
 - [ ] Seed KV: secrets.md § agents/e2e-claude.
-- [ ] Finish enrolment with a code computed from that secret (the helper's `totp`), or scan the QR
-      into your own app as well.
+- [ ] Finish enrolment with the code from `claude-e2e totp`, NOT from a phone app. Want `claude`
+      in your app too? Scan the same QR afterwards.
 - [ ] Verify below.
 ```
+
+**Why the helper's code and not the phone's.** Only a code computed from the KV copy proves KV holds
+*this* device's secret. On 2026-10-18 the QR changed between the screenshot and the phone scan, so
+enrolment succeeded with the phone's secret while KV held another. Every agent login then passed the
+password and failed at MFA. Each failure costs reputation, so stop after one and compare
+`claude-e2e totp` with the app: different codes mean re-enrol.
 
 ### Verifying
 
