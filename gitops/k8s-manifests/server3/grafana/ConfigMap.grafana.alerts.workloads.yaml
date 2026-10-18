@@ -1,0 +1,144 @@
+---
+# Workloads: a Job that gave up, and a Deployment rollout past its progress deadline.
+#
+# Both are kube-state-metrics series from all three clusters, so `cluster` arrives as a real
+# label and needs no rewriting (unlike the ArgoCD rules next door).
+#
+# Provisioned like every other alert here: the grafana-init-sc-alerts initContainer writes the
+# file before Grafana boots, and a change reaches Grafana by POD RESTART (Stakater Reloader
+# matches `grafana-alerts-.*` on UPDATE — creating this ConfigMap does not restart Grafana on
+# its own). Routing needs nothing here: `severity` is matched by the policy tree in
+# ConfigMap.grafana.alerting.notifications.yaml.
+#
+# ---------------------------------------------------------------------------
+# OVERLAP WITH THE ARGOCD RULES IS DELIBERATE
+#
+# A failed hook Job also fails the sync (argocd-sync-failed), and a stuck rollout also turns
+# the app Degraded (argocd-app-degraded, 15 m later). Expect two messages for those. These
+# rules are the ones that NAME the object, they fire sooner, and they also cover Jobs no sync
+# owns — chart hooks that ArgoCD runs as plain resources, the manual verify-mongodb-provision-*
+# Jobs, any CronJob.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-alerts-workloads
+  namespace: monitoring
+  labels:
+    grafana_alert: "1"
+  annotations:
+    argocd.argoproj.io/sync-wave: "-50"
+data:
+  workloads.yaml: |-
+    apiVersion: 1
+    groups:
+      - orgId: 1
+        name: workloads
+        folder: Platform
+        interval: 1m
+        rules:
+          # ---------------------------------------------------------------------------
+          # A Job reached its Failed condition: backoffLimit or activeDeadlineSeconds used up.
+          # Retries in between do NOT fire — kube_job_status_failed counts failed pods and
+          # rises on every retry, kube_job_failed only flips when the Job itself gives up.
+          - uid: job-failed
+            title: Job failed
+            condition: B
+            # No `for`. ArgoCD hook Jobs are short-lived objects: `HookSucceeded` deletes a
+            # successful one, and `BeforeHookCreation` deletes a failed one at the next sync,
+            # taking its series with it. MEASURED: no PostSync provisioner Job has ever been
+            # scraped here — they live for less than a scrape interval. A failed one stays
+            # until the next sync, which is long enough, but waiting would only risk it.
+            for: 0s
+            # No series is the healthy case, and not only because nothing failed:
+            # kube-state-metrics emits kube_job_failed ONLY for a Job that carries a Failed
+            # condition (internal/store/job.go, v2.20.0). That is also why this series has
+            # never been seen here — no Job has failed in retention — while the chart's
+            # default allow-list (`kube_job.*`) has been collecting it all along.
+            noDataState: OK
+            execErrState: Alerting
+            data:
+              - refId: A
+                relativeTimeRange:
+                  from: 600
+                  to: 0
+                datasourceUid: prometheus
+                model:
+                  editorMode: code
+                  expr: max by (cluster, namespace, job_name) (kube_job_failed{condition="true"}) == 1
+                  instant: true
+                  range: false
+                  intervalMs: 1000
+                  maxDataPoints: 43200
+                  refId: A
+              - refId: B
+                relativeTimeRange:
+                  from: 0
+                  to: 0
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  expression: A
+                  conditions:
+                    - evaluator:
+                        type: gt
+                        params: [0]
+                  refId: B
+            labels:
+              severity: warning
+              component: workloads
+            annotations:
+              summary: 'Job {{ $labels.job_name }} in {{ $labels.namespace }} on {{ $labels.cluster }} failed'
+              description: >-
+                Read its pods' logs before the next sync deletes a failed hook Job:
+                `kubectl --context admin@{{ $labels.cluster }} -n {{ $labels.namespace }} logs
+                job/{{ $labels.job_name }}`. If it is an ArgoCD hook (a migration, a PostSync
+                provisioner), the sync failed with it and the previous revision is still running.
+
+          # ---------------------------------------------------------------------------
+          # A Deployment passed progressDeadlineSeconds (600 s by default) without its new
+          # ReplicaSet becoming available: an image tag that does not exist, a pod that never
+          # passes readiness (e.g. a schema check failing at boot), a quota.
+          - uid: deployment-rollout-stuck
+            title: Deployment rollout stuck
+            condition: B
+            # The condition is sticky until the next rollout, so this is not a flapping
+            # signal; 5 m only rides out a single odd scrape.
+            for: 5m
+            noDataState: OK
+            execErrState: Alerting
+            data:
+              - refId: A
+                relativeTimeRange:
+                  from: 600
+                  to: 0
+                datasourceUid: prometheus
+                model:
+                  editorMode: code
+                  expr: max by (cluster, namespace, deployment, reason) (kube_deployment_status_condition{condition="Progressing", status="false"}) == 1
+                  instant: true
+                  range: false
+                  intervalMs: 1000
+                  maxDataPoints: 43200
+                  refId: A
+              - refId: B
+                relativeTimeRange:
+                  from: 0
+                  to: 0
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  expression: A
+                  conditions:
+                    - evaluator:
+                        type: gt
+                        params: [0]
+                  refId: B
+            labels:
+              severity: warning
+              component: workloads
+            annotations:
+              summary: 'Rollout of {{ $labels.deployment }} in {{ $labels.namespace }} on {{ $labels.cluster }} is stuck{{ if $labels.reason }} ({{ $labels.reason }}){{ end }}'
+              description: >-
+                The new pods never became ready, so the old ReplicaSet is still serving.
+                `kubectl --context admin@{{ $labels.cluster }} -n {{ $labels.namespace }}
+                describe deploy/{{ $labels.deployment }}`, then the newest pod's events and logs.

@@ -79,8 +79,9 @@ data:
         repeat_interval: 12h
         routes:
           # critical jumps the queue and repeats more often. Today that is a
-          # certificate that is not Ready, i.e. every HTTPS name on a cluster is
-          # about to stop working.
+          # certificate that is not Ready (every HTTPS name on a cluster is about to
+          # stop working), a Degraded app in `production`, and a stalled ArgoCD
+          # reconciliation loop (nothing deploys and every badge is stale).
           - receiver: slack-irha-homelab
             object_matchers:
               - ['severity', '=', 'critical']
