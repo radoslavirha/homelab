@@ -2,13 +2,11 @@
 # Mealie — the household cookbook. One container: FastAPI backend serving its
 # own pre-built frontend, so there is no nginx sidecar and no second image.
 #
-# ── The image tag is the version, and Renovate cannot see it ────────────────
-# There is no chart and no `targetRevision` to bump, so v3.28.0 below IS the
-# pinned version of this app. renovate.json5 gives file patterns to the argocd
-# and helm-values managers only; Renovate's `kubernetes` manager ships no
-# default patterns either, so this line is currently invisible to it — which
-# looks exactly like being up to date. Bump it by hand, or add a `kubernetes`
-# manager pattern for gitops/k8s-manifests/ to renovate.json5.
+# ── The image tag is the version ────────────────────────────────────────────
+# There is no chart and no `targetRevision` to bump, so v3.29.0 below IS the
+# pinned version of this app. Renovate sees it through the `kubernetes` manager
+# pattern for gitops/k8s-manifests/ in renovate.json5 — that manager ships no
+# default patterns, so removing the pattern makes this line silently invisible.
 #
 # On every bump, also re-diff ConfigMap.prompts.yaml against the new tag's
 # upstream prompt — it is a verbatim copy plus local rules, and a stale or
@@ -63,7 +61,7 @@ spec:
       # skips the chown and Mealie cannot write /app/data.
       containers:
         - name: mealie
-          image: ghcr.io/mealie-recipes/mealie:v3.28.0
+          image: ghcr.io/mealie-recipes/mealie:v3.29.0
           ports:
             - name: http
               # 9000 is Mealie's API_PORT default and upstream says not to change
@@ -90,7 +88,7 @@ spec:
             # ── There is deliberately no DEFAULT_EMAIL / DEFAULT_PASSWORD ────
             # They are not settable any more. In v3.x `_DEFAULT_EMAIL` and
             # `_DEFAULT_PASSWORD` are pydantic PRIVATE attributes of AppSettings
-            # (mealie/core/settings/settings.py at the v3.28.0 tag) and
+            # (mealie/core/settings/settings.py at the v3.29.0 tag) and
             # pydantic-settings never fills a leading-underscore attribute from
             # the environment. Because AppSettings sets `extra="allow"`, adding
             # them back is WORSE than useless: they are accepted, ignored, and
@@ -103,7 +101,7 @@ spec:
             #
             # ── Database ────────────────────────────────────────────────────
             # Names verified against Mealie's own PostgresProvider
-            # (mealie/core/settings/db_providers.py, v3.28.0), not guessed.
+            # (mealie/core/settings/db_providers.py, v3.29.0), not guessed.
             # DB_ENGINE anything but "postgres" silently falls back to SQLite in
             # db_provider_factory — there is no error to notice, so confirm the
             # tables really landed in PostgreSQL before trusting a green pod.
