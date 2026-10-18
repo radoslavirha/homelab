@@ -6,7 +6,7 @@
 # staged here first and promoted once a sandbox rollout had been watched.
 
 image:
-  tag: "0.0.0-alerttest"  # TEMPORARY issue-19 fire test: tag does not exist; revert
+  tag: "0.13.4"
 templates:
   config:
     # The auth block is templated, not spelled out. The ApplicationSet is a
