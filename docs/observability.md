@@ -856,8 +856,8 @@ which silences the other three ArgoCD rules too. For the rest, no series is the 
 
 ### What the fire test showed, 2026-10-18
 
-Each rule except OutOfSync and reconcile-stalled was made to fire on sandbox: a non-existent image
-tag on `qr-manager-ui`, and an always-failing PreSync hook Job on `qr-manager-api`. Four things
+The first run made each rule except OutOfSync and reconcile-stalled fire on sandbox: a non-existent
+image tag on `qr-manager-ui`, and an always-failing PreSync hook Job on `qr-manager-api`. Four things
 contradicted the design:
 
 - **`$labels` does not survive file provisioning in a *label* value.** The Degraded rule's
@@ -887,6 +887,32 @@ contradicted the design:
   kubectl --context admin@server3 -n argocd patch application <name> --type merge \
     -p "{\"operation\":{\"sync\":{\"revisions\":[\"$R\",\"$R\",\"$R\"]}}}"
   ```
+
+  A source that is a Helm chart repository takes its chart version in that slot, not a commit —
+  the `authentik-blueprints` skill builds the list from `spec.sources`.
+
+The second run (issue #19) fired the remaining two, and caught a correctly labelled Degraded
+message. All six rules have now reached Slack (`#grafana-alerts`) and resolved.
+
+- **Reconcile-stalled, NoData branch.** `argocd-application-controller` scaled to 0 on server3.
+  The pod was gone in 2 s — too fast for the `argocd` Application's selfHeal to restore its own
+  replica count — and the rule went Pending (NoData) **98 s** later, once Alloy marked the series
+  stale, then Firing after `for: 5m` (6.5 min from the scale) and reached Slack 15 s after that as
+  `critical`. A NoData instance keeps the rule's own alertname and labels (no `DatasourceNoData`), so
+  it routes like any other. Scaled back to 1, it went Normal on the next evaluation (~2 min) — the
+  30-minute `increase()` is still well above 1 from the samples before the stop. The "< 1 reconcile"
+  branch has not fired; a half-stalled controller cannot be produced safely.
+- **OutOfSync.** A ConfigMap with an invalid name (`alerttest_INVALID`) added to the qr-manager-api
+  sandbox app. The API server rejected it, the sync ended `Failed` after 5 retries (~5.5 min), and
+  automated sync did not try the same commit again, so the app sat `OutOfSync` with nothing else
+  changed. Pending from the first evaluation, Firing 30 m later, in Slack as `warning` with the
+  destination cluster (`server1`).
+- **"ArgoCD sync failed" resolves while the app is still broken.** It is a 15-minute event window:
+  it went RESOLVED in Slack 15 minutes after the failure with the app unchanged. When the failure
+  leaves resources unapplied, **OutOfSync is the alert that holds the fault**. A failed PostSync
+  hook runs after everything is applied and leaves the app `Synced`, so for that one the RESOLVED
+  sync-failed message is the last word — read it as "stopped alerting", not "fixed".
+- **Degraded renders `severity=warning` for sandbox**, through to Slack — the `.Labels` fix holds.
 
 **When one fires**, the annotations carry the next command. The usual first step for any ArgoCD
 alert:
