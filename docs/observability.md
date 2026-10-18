@@ -21,6 +21,7 @@ Central LGTM stack deployed on **server3** only. Collects metrics, logs, and tra
 - Deploying / bootstrapping
 - Alert routing — where a firing alert goes
 - Failed logins against Authentik
+- ArgoCD and workload alerting
 - Certificate alerting and the renewal path
 - Design decisions
 
@@ -438,7 +439,7 @@ What replaces it, per kind:
 | Datasources | A pod restart. File provisioning for these runs at startup only |
 | Alert rules | A pod restart. Same |
 
-The restart is automatic. Stakater Reloader watches by name for `grafana-alerts-*`, `grafana-alerting-*` and `grafana-datasource-*` ConfigMaps in `monitoring` and rolls the Deployment when one changes — the entries are anchored regexes, so a **new** alert or datasource ConfigMap is covered the moment it is created. A one-shot initContainer repopulates the provisioning directory before Grafana boots, which is what makes the restart deterministic rather than a race.
+The restart is automatic. Stakater Reloader watches by name for `grafana-alerts-*`, `grafana-alerting-*` and `grafana-datasource-*` ConfigMaps in `monitoring` and rolls the Deployment when one changes — the entries are anchored regexes, so a **new** alert or datasource ConfigMap is matched without editing the list. Matched is not restarted, though: Reloader acts on **update**, not on create, so the commit that adds a ConfigMap needs a `kubectl rollout restart` (or any later edit) before Grafana loads it. Confirm by pod age. A one-shot initContainer repopulates the provisioning directory before Grafana boots, which is what makes the restart deterministic rather than a race.
 
 Two things worth knowing:
 
@@ -802,6 +803,64 @@ a login, which is the good case, whereas a missing certificate series means the 
 household member locked out of their own account rather than an attack. Full detail is in
 Authentik's own event log (Admin → Events → Logs, `action=login_failed`); clearing a lock is the
 Reputation snippet in [identity.md](identity.md) § Login surface.
+
+## ArgoCD and workload alerting
+
+[`ConfigMap.grafana.alerts.argocd.yaml`](../gitops/k8s-manifests/server3/grafana/ConfigMap.grafana.alerts.argocd.yaml)
+and [`ConfigMap.grafana.alerts.workloads.yaml`](../gitops/k8s-manifests/server3/grafana/ConfigMap.grafana.alerts.workloads.yaml),
+`Platform` folder, evaluated every minute. Before these, nothing said a release had not arrived:
+a failed sync leaves the previous revision serving, and an automated sync is **not retried on
+the same commit**, so a failed migration hook or PostSync provisioner simply stops the release
+with every badge still green. In August 2026 the controller stopped reconciling for hours and
+everything read Synced/Healthy.
+
+| Rule | Fires when | `for` | Severity |
+|------|-----------|-------|----------|
+| ArgoCD sync failed | a sync operation ended `Failed` or `Error` in the last 15m | — | warning |
+| ArgoCD app Degraded | `health_status="Degraded"`, App-of-Apps parents excluded | 15m | critical in `production`, else warning |
+| ArgoCD auto-synced app stuck OutOfSync | `OutOfSync` with `autosync_enabled="true"` | 30m | warning |
+| ArgoCD reconciliation stalled | fewer than 1 reconcile per app in 30m, **or no ArgoCD metrics at all** | 5m | critical |
+| Job failed | `kube_job_failed{condition="true"}` — the Job gave up, not a retry | — | warning |
+| Deployment rollout stuck | `Progressing=false`, i.e. past `progressDeadlineSeconds` | 5m | warning |
+
+**Expect overlap.** A failed hook Job also fails its sync, and a stuck rollout also turns its app
+Degraded 15 minutes later. The workload rules are the ones that name the object, and they also
+cover Jobs no sync owns.
+
+### What was measured, 2026-10-17
+
+- **Every `argocd_*` series carries `cluster="server3"`** — where the controller is scraped, not
+  where the app runs. The per-app rules join `argocd_app_info` to `argocd_cluster_info` on
+  `dest_server` and take `cluster` from the ArgoCD cluster name (`in-cluster` keeps `server3`).
+  Without it a server1 app reads "on server3" and three clusters fold into one Slack message.
+- **The App-of-Apps parents report their children's health.** The Lua health check that makes
+  sync waves wait (in `gitops/helm-values/server3/argocd.yaml`) also makes `bootstrap` and the
+  `root-*` apps go Degraded with any child. They are excluded from the Degraded rule, or one fault
+  would send three alerts.
+- **`increase()` misses a sync counter's first failure.** The `phase="Failed"` series for an app
+  does not exist until that app first fails and appears already at 1. The rule adds an
+  `unless … offset 15m` arm for that; backtested over 30 days, mealie-server1's first failure
+  fired only through it.
+- **`kube_job_failed` exists only for a Job that has failed.** kube-state-metrics emits nothing
+  for healthy Jobs, so the series has never been seen here — no Job has failed in retention. It
+  is collected already: the chart's default allow-list has `kube_job.*`. Successful PostSync
+  provisioner Jobs have never been scraped at all; `HookSucceeded` deletes them within a scrape
+  interval. A failed one stays until `BeforeHookCreation` deletes it at the next sync.
+- **Baseline over 7 days:** Degraded at most 9 minutes (external-secrets during an upgrade),
+  autosync OutOfSync at most 2 minutes, reconciles per app per 30m never below 8.9 (the default
+  180 s timer gives ~10). Prometheus retention starts 2026-09-17, so the August stall itself is
+  not in the data.
+
+Only the reconcile rule uses `noDataState: Alerting` — its NoData means ArgoCD is not scraped,
+which silences the other three ArgoCD rules too. For the rest, no series is the healthy case.
+
+**When one fires**, the annotations carry the next command. The usual first step for any ArgoCD
+alert:
+
+```bash
+kubectl --context admin@server3 -n argocd get application <name> \
+  -o jsonpath='{.status.operationState.phase}{"\n"}{.status.operationState.message}{"\n"}'
+```
 
 ## Certificate alerting and the renewal path
 

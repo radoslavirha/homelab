@@ -1,0 +1,315 @@
+---
+# ArgoCD: failed syncs, Degraded apps, auto-synced apps stuck OutOfSync, and a stalled
+# reconciliation loop.
+#
+# Every one of these used to be silent. A failed sync leaves the old version serving and an
+# automated sync is NOT retried on the same commit, so a release that fails — a migration
+# hook, a PostSync provisioner — simply never arrives. And in August 2026 the controller
+# stopped reconciling on its timer for hours while everything read Synced/Healthy.
+#
+# Provisioned like every other alert here: the grafana-init-sc-alerts initContainer writes the
+# file before Grafana boots, and a change reaches Grafana by POD RESTART (Stakater Reloader
+# matches `grafana-alerts-.*` on UPDATE — creating this ConfigMap does not restart Grafana on
+# its own). Routing needs nothing here: `severity` is matched by the policy tree in
+# ConfigMap.grafana.alerting.notifications.yaml.
+#
+# ---------------------------------------------------------------------------
+# THE `cluster` LABEL IS REWRITTEN TO THE DESTINATION
+#
+# Every argocd_* series carries cluster="server3", because that is where the controller is
+# scraped — so a Degraded app on server1 would read "on server3", and the policy tree (grouped
+# by alertname + cluster) would fold all three clusters into one message. The per-app rules
+# therefore join argocd_app_info to argocd_cluster_info on dest_server and take `cluster` from
+# the ArgoCD cluster name, which is the cluster name here (`argocd cluster add … --name
+# serverN`). `in-cluster` is the one exception: it keeps the scrape label, server3.
+#
+#   * on (dest_server) group_left (cluster)
+#     max by (dest_server, cluster) (label_replace(
+#         label_replace(argocd_cluster_info{name!="in-cluster"}, "cluster", "$1", "name", "(.+)")
+#         or argocd_cluster_info{name="in-cluster"},
+#       "dest_server", "$1", "server", "(.+)"))
+#
+# MEASURED 2026-10-17 against this Prometheus: the join returns all 58 non-parent apps, each on
+# the right cluster. Both series come from the same controller scrape, so one cannot vanish
+# without the other — and if both do, the reconcile rule below alerts on the NoData.
+#
+# MEASURED 7-DAY BASELINE (2026-10-10 → 2026-10-17), so the `for:` values are not guesses:
+#   * Degraded: longest stretch 9 minutes (external-secrets-* during an upgrade).
+#   * OutOfSync with autosync on: longest 2 minutes.
+#   * Reconciles per app per 30 minutes: never below 8.9 (default 180 s timer → ~10).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-alerts-argocd
+  namespace: monitoring
+  labels:
+    grafana_alert: "1"
+  annotations:
+    argocd.argoproj.io/sync-wave: "-50"
+data:
+  argocd.yaml: |-
+    apiVersion: 1
+    groups:
+      - orgId: 1
+        name: argocd
+        folder: Platform
+        interval: 1m
+        rules:
+          # ---------------------------------------------------------------------------
+          # A sync operation ended in Failed or Error: a hook Job failed, a manifest was
+          # rejected, a sync wave never became healthy. The old version keeps serving.
+          - uid: argocd-sync-failed
+            title: ArgoCD sync failed
+            condition: B
+            # No `for`: a failed sync is a discrete event, and the 15-minute window already
+            # holds it for 15 evaluations.
+            for: 0s
+            # No series means no failures — the normal case. A missing ArgoCD scrape is
+            # caught by argocd-reconcile-stalled, not here.
+            noDataState: OK
+            execErrState: Alerting
+            data:
+              - refId: A
+                relativeTimeRange:
+                  from: 900
+                  to: 0
+                datasourceUid: prometheus
+                model:
+                  editorMode: code
+                  # Two arms, because increase() cannot see a counter's FIRST sample. The
+                  # Failed series for an app does not exist until that app first fails, and
+                  # it appears already at 1 — increase() over a window that holds only that
+                  # one value is 0. The `unless … offset 15m` arm catches exactly that: a
+                  # Failed series that exists now and did not 15 minutes ago. Backtested
+                  # over 30 days: mealie-server1's first-ever failure fired only through the
+                  # second arm, authentik-server3's repeat failures through the first.
+                  expr: >-
+                    max by (cluster, name, dest_namespace, phase) (
+                      (
+                        increase(argocd_app_sync_total{phase=~"Error|Failed"}[15m]) > 0
+                        or
+                        (argocd_app_sync_total{phase=~"Error|Failed"} unless argocd_app_sync_total{phase=~"Error|Failed"} offset 15m)
+                      )
+                      * on (name) group_left (dest_namespace) max by (name, dest_namespace) (argocd_app_info)
+                      * on (dest_server) group_left (cluster)
+                      max by (dest_server, cluster) (label_replace(
+                          label_replace(argocd_cluster_info{name!="in-cluster"}, "cluster", "$1", "name", "(.+)")
+                          or argocd_cluster_info{name="in-cluster"},
+                        "dest_server", "$1", "server", "(.+)"))
+                    )
+                  instant: true
+                  range: false
+                  intervalMs: 1000
+                  maxDataPoints: 43200
+                  refId: A
+              - refId: B
+                relativeTimeRange:
+                  from: 0
+                  to: 0
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  expression: A
+                  conditions:
+                    - evaluator:
+                        type: gt
+                        params: [0]
+                  refId: B
+            labels:
+              severity: warning
+              component: argocd
+            annotations:
+              summary: 'Sync of {{ $labels.name }} on {{ $labels.cluster }} ended in {{ $labels.phase }}'
+              description: >-
+                The previous revision is still what runs. An automated sync is not retried on
+                the same commit, so this stays broken until a new commit or a manual sync. Read
+                the operation message first:
+                `kubectl --context admin@server3 -n argocd get application {{ $labels.name }}
+                -o jsonpath='{.status.operationState.message}'`. If a hook Job failed, its pod
+                logs are in {{ $labels.dest_namespace }} on {{ $labels.cluster }} until the next
+                sync deletes it.
+
+          # ---------------------------------------------------------------------------
+          # An app has been Degraded for 15 minutes: a crash-looping pod, a Deployment past
+          # its progress deadline, a failed Job, a PVC that will not bind.
+          - uid: argocd-app-degraded
+            title: ArgoCD app Degraded
+            condition: B
+            # 15 m is above the measured worst-case transient (9 m during an upgrade).
+            for: 15m
+            noDataState: OK
+            execErrState: Alerting
+            data:
+              - refId: A
+                relativeTimeRange:
+                  from: 600
+                  to: 0
+                datasourceUid: prometheus
+                model:
+                  editorMode: code
+                  # The App-of-Apps parents (bootstrap, root-*) are excluded. The Lua health
+                  # check in gitops/helm-values/server3/argocd.yaml makes a parent report its
+                  # children's health — that is what makes sync waves wait — so one Degraded
+                  # child would otherwise also fire for its root and for bootstrap: three
+                  # alerts for one fault, two of them naming nothing useful.
+                  expr: >-
+                    max by (cluster, name, dest_namespace) (
+                      argocd_app_info{health_status="Degraded", name!~"bootstrap|root-.*"}
+                      * on (dest_server) group_left (cluster)
+                      max by (dest_server, cluster) (label_replace(
+                          label_replace(argocd_cluster_info{name!="in-cluster"}, "cluster", "$1", "name", "(.+)")
+                          or argocd_cluster_info{name="in-cluster"},
+                        "dest_server", "$1", "server", "(.+)"))
+                    )
+                  instant: true
+                  range: false
+                  intervalMs: 1000
+                  maxDataPoints: 43200
+                  refId: A
+              - refId: B
+                relativeTimeRange:
+                  from: 0
+                  to: 0
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  expression: A
+                  conditions:
+                    - evaluator:
+                        type: gt
+                        params: [0]
+                  refId: B
+            labels:
+              # The custom apps' production namespace is the one thing here a household
+              # member notices; everything else is the operator's own platform.
+              severity: '{{ if eq $labels.dest_namespace "production" }}critical{{ else }}warning{{ end }}'
+              component: argocd
+            annotations:
+              summary: '{{ $labels.name }} on {{ $labels.cluster }} has been Degraded for 15 minutes'
+              description: >-
+                `kubectl --context admin@server3 -n argocd get application {{ $labels.name }}
+                -o jsonpath='{.status.resources[?(@.health.status=="Degraded")]}'` names the
+                resource, then look at it in {{ $labels.dest_namespace }} on
+                {{ $labels.cluster }}. A Deployment past its progress deadline also fires
+                "Deployment rollout stuck", which names it directly.
+
+          # ---------------------------------------------------------------------------
+          # An auto-synced app has been OutOfSync for 30 minutes. With selfHeal on, ArgoCD
+          # corrects drift within minutes, so a long OutOfSync means a sync it cannot finish
+          # (a wedged operation, an immutable field) or a diff it can never close (a
+          # server-defaulted field it keeps reading as drift).
+          - uid: argocd-app-outofsync
+            title: ArgoCD auto-synced app stuck OutOfSync
+            condition: B
+            # Measured worst case with autosync on is 2 minutes.
+            for: 30m
+            noDataState: OK
+            execErrState: Alerting
+            data:
+              - refId: A
+                relativeTimeRange:
+                  from: 600
+                  to: 0
+                datasourceUid: prometheus
+                model:
+                  editorMode: code
+                  # autosync_enabled="true" leaves out the network-policies-* apps, which are
+                  # manual-sync on purpose and sit OutOfSync legitimately.
+                  expr: >-
+                    max by (cluster, name, dest_namespace) (
+                      argocd_app_info{sync_status="OutOfSync", autosync_enabled="true"}
+                      * on (dest_server) group_left (cluster)
+                      max by (dest_server, cluster) (label_replace(
+                          label_replace(argocd_cluster_info{name!="in-cluster"}, "cluster", "$1", "name", "(.+)")
+                          or argocd_cluster_info{name="in-cluster"},
+                        "dest_server", "$1", "server", "(.+)"))
+                    )
+                  instant: true
+                  range: false
+                  intervalMs: 1000
+                  maxDataPoints: 43200
+                  refId: A
+              - refId: B
+                relativeTimeRange:
+                  from: 0
+                  to: 0
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  expression: A
+                  conditions:
+                    - evaluator:
+                        type: gt
+                        params: [0]
+                  refId: B
+            labels:
+              severity: warning
+              component: argocd
+            annotations:
+              summary: '{{ $labels.name }} on {{ $labels.cluster }} has been OutOfSync for 30 minutes despite automated sync'
+              description: >-
+                Check for a stuck operation first:
+                `kubectl --context admin@server3 -n argocd get application {{ $labels.name }}
+                -o jsonpath='{.status.operationState.phase}'`. A Running operation that never
+                ends is cleared with the `{"operation": null}` patch in AGENTS.md — sync once
+                afterwards, then wait.
+
+          # ---------------------------------------------------------------------------
+          # The controller has (nearly) stopped reconciling. This is the August 2026 failure:
+          # pushes stopped deploying and every app kept reading Synced/Healthy, because
+          # nothing re-evaluated them.
+          - uid: argocd-reconcile-stalled
+            title: ArgoCD reconciliation stalled
+            condition: B
+            for: 5m
+            # NoData is the alert here, not the quiet case: no argocd_* series at all means
+            # ArgoCD is not being scraped, and then none of the rules above can fire either.
+            noDataState: Alerting
+            execErrState: Alerting
+            data:
+              - refId: A
+                relativeTimeRange:
+                  from: 1800
+                  to: 0
+                datasourceUid: prometheus
+                model:
+                  editorMode: code
+                  # Reconciles per app over 30 minutes, not the raw sum the August detector
+                  # used (`… == 0`). A sum is never quite zero while webhooks or manual
+                  # refreshes still trigger the odd reconcile, so a near-stall would hide.
+                  # Healthy is ~10 per app (the default 180 s timer); measured minimum over
+                  # 7 days is 8.9. Below 1 means most apps were not looked at in 30 minutes.
+                  expr: sum(increase(argocd_app_reconcile_count[30m])) / count(argocd_app_info)
+                  instant: true
+                  range: false
+                  intervalMs: 1000
+                  maxDataPoints: 43200
+                  refId: A
+              - refId: B
+                relativeTimeRange:
+                  from: 0
+                  to: 0
+                datasourceUid: __expr__
+                model:
+                  type: threshold
+                  expression: A
+                  conditions:
+                    - evaluator:
+                        type: lt
+                        params: [1]
+                  refId: B
+            labels:
+              severity: critical
+              component: argocd
+              # sum() leaves no labels, and the policy tree groups by alertname + cluster.
+              # ArgoCD runs on server3 only.
+              cluster: server3
+            annotations:
+              summary: 'ArgoCD has almost stopped reconciling applications'
+              description: >-
+                Fewer than one reconcile per application in 30 minutes (healthy is ~10), or no
+                ArgoCD metrics at all. Commits are not deploying and the Synced/Healthy badges
+                are stale. Check the application-controller pod on server3
+                (`kubectl --context admin@server3 -n argocd logs statefulset/argocd-application-controller`)
+                and whether `prometheus.io/scrape` is still on it in
+                gitops/helm-values/server3/argocd.yaml.

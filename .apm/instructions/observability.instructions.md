@@ -32,6 +32,10 @@ Full guide: `docs/observability.md`. The traps below have each cost hours.
   startup only. A changed secret needs a pod restart.
 - Alerting: `alerting-notifications` holds the ONE contact point and the WHOLE policy tree.
   `policies:` replaces, never merges.
+- Reloader restarts Grafana on a ConfigMap **update**, not on create. A new `grafana-alerts-*`
+  ConfigMap loads only after a `kubectl rollout restart` — confirm by pod age.
+- Every `argocd_*` series carries `cluster="server3"` (the scrape), not the app's cluster. Join to
+  `argocd_cluster_info` on `dest_server`, as `ConfigMap.grafana.alerts.argocd.yaml` does.
 - Tempo-backed table panels: never `select()` a numeric span attribute — it crashes the panel and
   looks like a time-range bug. String attributes are safe.
 
