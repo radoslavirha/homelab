@@ -75,3 +75,15 @@ variable "kubernetes_provisioner_roles" {
   default     = {}
   description = "Keyed by the Kubernetes auth MOUNT PATH (e.g. kubernetes-server1), which is created by the CLI and only referenced here. `namespaces` must list every namespace a provisioner Job runs in; `token_policies` names policies that also already exist on the CLI. Empty by default: a cluster with no provisioner Jobs declares nothing."
 }
+
+variable "kubernetes_agent_roles" {
+  type = map(object({
+    mount                = string
+    service_account_name = string
+    namespace            = string
+    policy               = string
+    token_ttl            = optional(number, 600)
+  }))
+  default     = {}
+  description = "Keyed by role name, which is also the ACL policy's name. `mount` is a CLI-created Kubernetes auth mount path (e.g. kubernetes-server3), referenced and never managed here. Pass policy content with file() in the cluster instance."
+}

@@ -25,6 +25,7 @@ Every stage in `docs/iac.md` and `gitops/README.md` that requires secrets links 
 - server1/production/development-kb-mcp-authentik
 - \<cluster\>/mealie
 - otel-gateway/auth-token
+- agents/e2e-claude
 - \<cluster\>/influxdb2-grafana
 - Verify all secrets for a cluster before deploying
 - Picking up a rotated secret
@@ -47,6 +48,7 @@ Every stage in `docs/iac.md` and `gitops/README.md` that requires secrets links 
 | `secret/server1/production/development-kb-mcp-authentik` | `client-secret` | *not yet — the in-cluster MCP adapter's first sync* | server1 |
 | `secret/<cluster>/mealie` | `postgres-password`, `oidc-client-secret` | household stage | server1 |
 | `secret/otel-gateway/auth-token` | `token` | observability stage | server1, server2 |
+| `secret/agents/e2e-claude` | `username`, `password`, `totp-secret` | *nothing deploys from it — agent E2E logins only* | *none — read from the operator's machine* |
 | `secret/<cluster>/influxdb2-grafana` | `token` | *provisioned at runtime* | server1 |
 
 `<cluster>` is the short cluster name: `server1`, `server2`, `server3`. *any* means every cluster
@@ -466,6 +468,35 @@ bao kv get secret/otel-gateway/auth-token
 ```
 
 server3 ESO reads this via the `secret/data/*` wildcard in its `read-secrets` policy. server2 (and any additional cluster) ESO needs an explicit read grant — the `<cluster>-external-secrets` policy in [iac.md](iac.md) step 3.d grants `secret/data/otel-gateway/*` in addition to `secret/data/<cluster>/*`.
+
+---
+
+## agents/e2e-claude
+
+**Required before:** nothing — no workload reads it. These are the credentials coding agents log in to
+Authentik with as the E2E test user `claude`: [identity.md](identity.md#the-e2e-test-user).
+
+Read through the `claude-e2e` Kubernetes auth role, whose policy grants read on this one path and
+nothing else (`iac/clusters/server3/vault-config/policies/claude-e2e.hcl`). No ExternalSecret names it.
+Outside the `secret/<cluster>/…` tree on purpose: it belongs to no cluster.
+
+| Key | Value |
+|-----|-------|
+| `username` | `claude` |
+| `password` | the user's Authentik password — random, set when the user is created |
+| `totp-secret` | the base32 `secret=` from the `otpauth://` link in the enrolment QR code |
+
+```bash
+# Admin or editor session. First prompt: the password. Second: the TOTP secret. Neither echoes.
+read -rs P && read -rs T && bao kv put secret/agents/e2e-claude username=claude password="$P" totp-secret="$T"; unset P T
+
+# Verify — keys only. A plain `bao kv get` prints the password to your terminal.
+bao kv get -format=json secret/agents/e2e-claude | jq '.data.data | keys'
+```
+
+**Rotating the password:** change it in Authentik, then `read -rs P && bao kv patch secret/agents/e2e-claude password="$P"; unset P`.
+**Re-enrolling TOTP:** delete the device on the user in Authentik, log in as `claude` to enrol a new
+one, and patch `totp-secret` with the new value the same way.
 
 ---
 

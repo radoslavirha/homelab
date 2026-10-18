@@ -44,7 +44,8 @@ iac/
     vault/              OpenBao Helm install
     apps/               ArgoCD namespace + secret + Helm install + self-management Application
     vault-config/       OpenBao's own configuration via the vault provider (auth methods, policies,
-                        identity groups). Today: OIDC login via Authentik
+                        identity groups). Today: OIDC login via Authentik, and the Kubernetes
+                        auth roles provisioner Jobs and coding agents log in with
   clusters/
     helm-values/        Shared Cilium + Longhorn values (all clusters)
     server1/            bootstrap/ platform/ helm-values/
@@ -464,6 +465,9 @@ Provider `hashicorp/vault` `5.x` and Terraform `>= 1.11`. The client secret is r
 | `oidc_token_ttl` | number | `3600` | Token TTL, seconds |
 | `oidc_token_max_ttl` | number | `28800` | Token max TTL, seconds |
 | `oidc_groups` | map(object) | — | `roles` claim value → `{ policy_name, policy }`. One ACL policy, one external group and one group alias per entry |
+| `kubernetes_provisioner_role_name` | string | `"provisioner"` | Role name created on every mount in `kubernetes_provisioner_roles` |
+| `kubernetes_provisioner_roles` | map(object) | `{}` | CLI-created mount path → `{ service_account_name, namespaces, token_policies, token_ttl }`. Roles only; mounts and policies stay on the CLI |
+| `kubernetes_agent_roles` | map(object) | `{}` | Role name → `{ mount, service_account_name, namespace, policy, token_ttl = 600 }`. One role and one ACL policy of the same name per entry. Today: `claude-e2e`, see [identity.md](identity.md#the-e2e-test-user) |
 
 Outputs: `oidc_mount_accessor`
 

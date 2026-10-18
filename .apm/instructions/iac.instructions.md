@@ -46,8 +46,9 @@ applyTo: "iac/**"
 - Deployed by `iac/clusters/server3/vault/`. The init ceremony is manual — see the header of
   `iac/clusters/server3/vault/main.tf`.
 - `iac/clusters/server3/vault-config/` (module `iac/modules/vault-config/`) holds OpenBao's own
-  configuration. Today that is only OIDC login via Authentik, so it runs **last** on a fresh server3,
-  after GitOps bootstrap. Nothing that must exist before ArgoCD belongs in it without its own toggle.
+  configuration: OIDC login via Authentik, plus Kubernetes auth roles for provisioner Jobs and coding
+  agents (roles only, on CLI-made mounts). It runs **last** on a fresh server3, after GitOps
+  bootstrap. Nothing that must exist before ArgoCD belongs in it without its own toggle.
 - The older auth config is still hand-made (`docs/iac.md` step 3): ESO's `kubernetes-*` mounts,
   `read-secrets`, the provisioner policies, userpass. Bring it under Terraform with `terraform import`,
   **never by recreating a live mount** — a recreated `kubernetes-*` mount breaks every ExternalSecret on

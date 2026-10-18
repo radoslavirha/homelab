@@ -167,6 +167,7 @@ trusting it. Automating it is open work; the script is a stopgap.
 | Secrets inventory and seeding | [docs/secrets.md](docs/secrets.md) |
 | Bootstrap order, Terraform stages, module variables | [docs/iac.md](docs/iac.md) |
 | Identity model, token claims, Headlamp OIDC | [docs/identity.md](docs/identity.md) |
+| Log in to Authentik as the E2E test user `claude`, UI or API | [docs/identity.md](docs/identity.md) § The E2E test user. Never ask the operator for its credentials |
 | Observability stack, Grafana break-glass | [docs/observability.md](docs/observability.md) |
 
 Path-scoped rules load on their own when you read files under `iac/`, `gitops/argocd-manifests/`,

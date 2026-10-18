@@ -1,6 +1,7 @@
 # ── Server3 cluster — vault-config ─────────────────────────────────────────
 # OpenBao's own configuration: auth methods, policies, identity groups. Today that is OIDC
-# login via Authentik, plus the Kubernetes auth roles the provisioner Jobs log in with.
+# login via Authentik, plus the Kubernetes auth roles the provisioner Jobs and coding agents
+# log in with.
 #
 # Runs LAST on a fresh server3: after GitOps bootstrap, once authentik-server3 is Healthy and the
 # blueprint has created the openbao-server3-production provider. The OIDC client secret is
@@ -65,6 +66,19 @@ module "vault_config" {
     "kubernetes-server1" = {
       namespaces     = ["iot", "mongodb", "postgres"]
       token_policies = ["server1-provisioner", "server1-postgres-push"]
+    }
+  }
+
+  # ── Kubernetes auth — agent roles ──────────────────────────────────────────
+  # claude-e2e: coding agents read the Authentik E2E test user's credentials, logging in with a
+  # 10-minute token for the RBAC-less ServiceAccount in
+  # gitops/k8s-manifests/server3/openbao/. Why and how: docs/identity.md § The E2E test user.
+  kubernetes_agent_roles = {
+    "claude-e2e" = {
+      mount                = "kubernetes-server3"
+      service_account_name = "claude-e2e"
+      namespace            = "openbao"
+      policy               = file("${path.root}/policies/claude-e2e.hcl")
     }
   }
 

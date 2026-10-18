@@ -30,6 +30,7 @@ in the private knowledge base (skill `knowledge-base`).
 - Adding an application
 - Adding or changing a role
 - Onboarding a household member
+- The E2E test user
 - The login surface
 - Adding a social source
 - Operational notes
@@ -956,6 +957,77 @@ Both flows are rendered by the blueprint chart from the `onboarding` block in
 [`gitops/helm-values/server3/authentik-blueprints.yaml`](../gitops/helm-values/server3/authentik-blueprints.yaml),
 into their own ConfigMap key — a separate `BlueprintInstance` from the applications graph, so a
 failure in one cannot take the other down.
+
+## The E2E test user
+
+`claude` is an ordinary Authentik user that coding agents log in as for end-to-end tests: a real
+browser driven by Playwright, or curl against an API with a token from the flow executor. The login
+recipe lives in the `verifying-auth-in-browser` skill in homelab-apps. Nothing on the login surface is
+relaxed for it. Password, mandatory MFA and the reputation throttle apply exactly as to anyone else.
+
+**Nobody types its credentials.** The password and the TOTP secret live in KV at
+`secret/agents/e2e-claude` ([secrets.md](secrets.md#agentse2e-claude)). A helper on the operator's
+machine, outside this repo, does three things per run:
+
+1. Mints a 10-minute token for the `claude-e2e` ServiceAccount in `openbao` on server3, with the admin
+   kubeconfig agents already hold.
+2. Logs in to OpenBao as role `claude-e2e` on `kubernetes-server3`. The policy reads that one path, and
+   the token lives 10 minutes with no renewal.
+3. Hands username, password and TOTP secret to the one Playwright or curl process doing the login. The
+   agent's own shell never sees them.
+
+**Why a ServiceAccount, not a stored OpenBao token.** A stored token is a long-lived secret on disk, and
+a periodic one dies after a month unused, which means the operator again. The ServiceAccount has no
+RBAC, so its token is good for this login and nothing else. Minting one needs the admin kubeconfig,
+which can already mint ESO's token and read everything ESO reads, so reusing it opens nothing new.
+Nothing long-lived exists outside OpenBao. The role and policy are the `kubernetes_agent_roles` input of
+the `vault-config` stage. The ServiceAccount is `gitops/k8s-manifests/server3/openbao/`.
+
+**How the TOTP works.** Authentik generated the secret at enrolment and keeps one copy; KV holds the
+other. A code is `HMAC(secret, now / 30 s)`, computed independently on both sides, so no authenticator
+app is involved unless the operator wants to log in as `claude` too (scan the same QR). Authentik
+accepts each 30-second time step **once**:
+
+- **Log in once per run** and reuse the result: Playwright's `storageState`, or the access token.
+- A second login inside the same window is rejected, and the rejection counts toward the `-5`
+  reputation lockout: 24 hours for `claude`. Unlock: § Unlocking someone who tripped it.
+
+**Groups are per use case, assigned in the UI** like every human's. Sandbox and local role groups for
+everyday tests. Production groups only for the applications a test must reach in production, at the
+lowest role that test needs. **Never** `openbao-server3-production-*` (its reader rung reads every
+secret), the proxy gates (`longhorn-*`, `hubble-*`, `traefik-*`), or Grafana and Headlamp admin.
+
+### Setting it up
+
+Once, after `openbao-dashboard-server3` has synced the ServiceAccount and the `vault-config` stage is
+applied.
+
+```
+- [ ] Authentik → Directory → Users → Create: username `claude`, a fresh random password. Not
+      `claude`: that one sits in old agent transcripts.
+- [ ] Add it to the groups the tests need (above).
+- [ ] Log in as `claude` in a private window. MFA enrolment starts: pick the authenticator app.
+- [ ] Read the `otpauth://` link out of the QR code (`zbarimg -q --raw <screenshot>`, from
+      `brew install zbar`) and keep its `secret=` value.
+- [ ] Seed KV: secrets.md § agents/e2e-claude.
+- [ ] Finish enrolment with a code computed from that secret (the helper's `totp`), or scan the QR
+      into your own app as well.
+- [ ] Verify below.
+```
+
+### Verifying
+
+```bash
+export BAO_ADDR=https://vault.server3.homelab.irha.cz
+T=$(kubectl --context admin@server3 -n openbao create token claude-e2e --duration=10m \
+  | bao write -field=token auth/kubernetes-server3/login role=claude-e2e jwt=-)
+BAO_TOKEN=$T bao kv get -format=json secret/agents/e2e-claude | jq '.data.data | keys'  # the three keys
+BAO_TOKEN=$T bao kv get secret/server3/grafana                                         # must be 403
+unset T
+```
+
+Then one real login as `claude` through the skill's Playwright recipe. That is the only check that
+covers the password and the TOTP secret, rather than the plumbing that delivers them.
 
 ## The login surface
 
