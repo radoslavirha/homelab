@@ -1,5 +1,5 @@
 lockfile_version: '1'
-generated_at: '2026-10-14T17:26:44.918754+00:00'
+generated_at: '2026-10-18T12:32:10.541406+00:00'
 apm_version: 0.28.0
 dependencies: []
 deployments:
@@ -182,7 +182,7 @@ deployments:
   owners:
   - .
   active_owner: .
-  content_hash: sha256:110ccf26e88c33fae1be8dcf48f682d08246da404a7686c7def566b767dade51
+  content_hash: sha256:3141267d11c33000f0310a199ecdd67dc1d825fff103f63e8dd3a0b280411d63
 - kind: project-relative
   target: claude
   value: .claude/skills/authentik-blueprints
@@ -200,7 +200,7 @@ deployments:
   owners:
   - .
   active_owner: .
-  content_hash: sha256:c60700f5c18207fbd087331c723ee79b336e22f0bc07ac634eb4673b3e78a27c
+  content_hash: sha256:7d078e49919963f186a810b85979e0a1cfbd6041e1640af538dc699d40960be9
 - kind: project-relative
   target: claude
   value: .claude/skills/network-egress
@@ -218,7 +218,7 @@ deployments:
   owners:
   - .
   active_owner: .
-  content_hash: sha256:8ab704dd8a6bd7db9a4f723c52a3f11443f242af39412ff1ef9cf1bfebe7dbd4
+  content_hash: sha256:aae7c1cc4c664ce79585775553b4736f9e3106be0f670f85ebddabced31e8a33
 - kind: project-relative
   target: claude
   value: .claude/skills/probe-traffic
@@ -236,7 +236,7 @@ deployments:
   owners:
   - .
   active_owner: .
-  content_hash: sha256:5d9f35d8e2417e0ac71469d828ad8f7007c315890293d84da52198d741d3212f
+  content_hash: sha256:1b3fbe7c303e54bb30e9ae7a8bcc435a38aaa334fb41ea7a1b2ddacbed52e669
 - kind: project-relative
   target: claude
   value: .claude/skills/probe-traffic/references/gotchas.md
@@ -245,7 +245,7 @@ deployments:
   owners:
   - .
   active_owner: .
-  content_hash: sha256:fd607e5a5dc650d723d7c89b2b92cd76e55c3568728b6a3c3d0d96c62395c1ac
+  content_hash: sha256:a266f1f9ae2184df5ed19ebce75f8440b10f962eb91c1e16d368e8cdb18139e4
 - kind: project-relative
   target: claude
   value: .claude/skills/probe-traffic/references/lenses.md
@@ -263,7 +263,7 @@ deployments:
   owners:
   - .
   active_owner: .
-  content_hash: sha256:ca8132f4117f8076cd0058e80bf1b6d25d687362211f9de97aa6bc92fccebdff
+  content_hash: sha256:73a68041bcc403b424ad786e0139fd39b27add523affa71291c532dfbf397e7d
 - kind: project-relative
   target: claude
   value: .claude/skills/probe-traffic/references/vantages.md
@@ -420,13 +420,13 @@ local_deployed_file_hashes:
   .claude/rules/authentik.md: sha256:a780414d527696be69e4f631d500638f4c371e05903725526b3aedff533b3b41
   .claude/rules/gitops.md: sha256:c303f8f588cfe32d5fb870fccb8ee30d0018cf35697d6d16930c87e61672bb48
   .claude/rules/iac.md: sha256:65dd240639cd33774a9ece14bdd72806739e8dce4c343cfa04188067e3f5b889
-  .claude/rules/observability.md: sha256:110ccf26e88c33fae1be8dcf48f682d08246da404a7686c7def566b767dade51
-  .claude/skills/authentik-blueprints/SKILL.md: sha256:c60700f5c18207fbd087331c723ee79b336e22f0bc07ac634eb4673b3e78a27c
-  .claude/skills/network-egress/SKILL.md: sha256:8ab704dd8a6bd7db9a4f723c52a3f11443f242af39412ff1ef9cf1bfebe7dbd4
-  .claude/skills/probe-traffic/SKILL.md: sha256:5d9f35d8e2417e0ac71469d828ad8f7007c315890293d84da52198d741d3212f
-  .claude/skills/probe-traffic/references/gotchas.md: sha256:fd607e5a5dc650d723d7c89b2b92cd76e55c3568728b6a3c3d0d96c62395c1ac
+  .claude/rules/observability.md: sha256:3141267d11c33000f0310a199ecdd67dc1d825fff103f63e8dd3a0b280411d63
+  .claude/skills/authentik-blueprints/SKILL.md: sha256:7d078e49919963f186a810b85979e0a1cfbd6041e1640af538dc699d40960be9
+  .claude/skills/network-egress/SKILL.md: sha256:aae7c1cc4c664ce79585775553b4736f9e3106be0f670f85ebddabced31e8a33
+  .claude/skills/probe-traffic/SKILL.md: sha256:1b3fbe7c303e54bb30e9ae7a8bcc435a38aaa334fb41ea7a1b2ddacbed52e669
+  .claude/skills/probe-traffic/references/gotchas.md: sha256:a266f1f9ae2184df5ed19ebce75f8440b10f962eb91c1e16d368e8cdb18139e4
   .claude/skills/probe-traffic/references/lenses.md: sha256:c7aa6e53a0df6b0dadf4abfcd0fbe8a2619e8929352d615edafd25867a6d56c3
-  .claude/skills/probe-traffic/references/targets.md: sha256:ca8132f4117f8076cd0058e80bf1b6d25d687362211f9de97aa6bc92fccebdff
+  .claude/skills/probe-traffic/references/targets.md: sha256:73a68041bcc403b424ad786e0139fd39b27add523affa71291c532dfbf397e7d
   .claude/skills/probe-traffic/references/vantages.md: sha256:21026afc3bc39d113ab3a23393e4faf8376bbc3b7434cb61865f100bf1e99d0b
   .claude/skills/sync-docs/SKILL.md: sha256:7d990e48c0c9c6146743fffe78b99eef32bc6c3630e4a2debd8c7f27b82f9b16
   .claude/skills/sync-docs/references/doc-map.md: sha256:fd0d3c675236a5b8c236a471cd755036bbf7cb04ec147a23a4b192b82c6e3b1f
