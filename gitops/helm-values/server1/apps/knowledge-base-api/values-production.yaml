@@ -110,6 +110,16 @@ templates:
                   "type": "bearer-jwt",
                   "trustedIssuers": [
                       {
+                          "name": "development-kb-mcp",
+                          "issuer": "https://auth.irha.cz/application/o/development-kb-mcp/",
+                          "audience": "knowledge-base-api-{{ .vars.cluster }}-{{ .app.namespace }}",
+                          "subjectKind": "service",
+                          "key": {
+                              "source": "jwks",
+                              "uri": "https://auth.irha.cz/application/o/development-kb-mcp/jwks/"
+                          }
+                      },
+                      {
                           "name": "postman",
                           "issuer": "https://auth.irha.cz/application/o/postman/",
                           "audience": "knowledge-base-api-{{ .vars.cluster }}-{{ .app.namespace }}",

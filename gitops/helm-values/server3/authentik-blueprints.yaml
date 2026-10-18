@@ -542,3 +542,27 @@ applications:
       - { cluster: server1, stage: production }
       - { stage: local }
 
+  - name: development-kb-mcp
+    title: Development KB MCP adapter
+    kind: device
+    # The development knowledge base's MCP adapter, calling knowledge-base-api as ITSELF.
+    # Not hardware: kind device is the matrix's client_credentials client. The adapter may
+    # not forward the token its own MCP client sent -- the MCP authorization spec forbids
+    # token passthrough, and that token's audience is the adapter, not this API.
+    #
+    # reader is the whole grant: the adapter searches and reads. Reindexing (admin) stays
+    # with a human.
+    #
+    # Production for the in-cluster adapter, local for running it on a laptop -- one
+    # client, one secret, one service account in both environments' reader groups. The
+    # secret is read from the provider page; where the in-cluster adapter will read it
+    # from is in docs/secrets.md.
+    #
+    # Token validity is the chart default, minutes=10. Cache the token and re-fetch on
+    # expiry, not per call: every client_credentials request writes the service account row.
+    accesses:
+      - { app: knowledge-base-api, role: reader }
+    environments:
+      - { cluster: server1, stage: production }
+      - { stage: local }
+
