@@ -1,7 +1,7 @@
 # Mealie AI prompt overrides, mounted at OPENAI_CUSTOM_PROMPT_DIR (see Deployment.yaml).
 #
 # ── An override REPLACES the upstream prompt, it does not extend it ─────────
-# Mealie (mealie/services/openai/openai.py, v3.28.0) loads <dir>/<name>.txt
+# Mealie (mealie/services/openai/openai.py, v3.29.0) loads <dir>/<name>.txt
 # INSTEAD of its built-in prompt when that file exists and is non-empty; there
 # is no merging. So each file here is the upstream prompt copied verbatim at the
 # pinned image tag, with local rules appended after it — in each file, everything
@@ -46,7 +46,7 @@ metadata:
     app.kubernetes.io/component: app
     app.kubernetes.io/part-of: mealie
 data:
-  # Upstream: mealie/services/openai/prompts/recipes/compile-source.txt @ v3.28.0
+  # Upstream: mealie/services/openai/prompts/recipes/compile-source.txt @ v3.29.0
   compile-source.txt: |
     You transcribe recipe source material into a single plain-text document. You are not writing a recipe, you are making a faithful record of what the source says, so that a later step can turn it into structured data.
 
@@ -81,7 +81,7 @@ data:
     Page reference:
     - If an image shows a printed page number, record it on its own line, e.g. "Page: 135". If the recipe spans several pages, record each of them. A page number is part of the recipe's attribution, not page layout to leave out.
     - If the page prints the title of the book itself, record it as "Book: <title>". A chapter or section name in the page header is not the book's title; do not record it as one.
-  # Upstream: mealie/services/openai/prompts/recipes/build-recipe.txt @ v3.28.0
+  # Upstream: mealie/services/openai/prompts/recipes/build-recipe.txt @ v3.29.0
   build-recipe.txt: |
     You convert a transcribed recipe source document into structured recipe data.
 
@@ -93,6 +93,7 @@ data:
     - Keep ingredients and instructions in their original order.
     - Preserve section headings by setting the title on the first ingredient or instruction of each section, and leaving it blank on the rest.
     - Keep each ingredient as a single line of text, exactly as written, e.g. "2 cups of onions, chopped".
+    - If a recipe does not contain an explicit list of ingredients, collect and extract the ingredients directly from the instructions.
     - When the source already presents its instructions as discrete steps, keep those steps as they are. Do not split or merge them.
     - When the source narrates cooking continuously, as a video transcript does, group the actions into steps a cook would recognize. Actions done back to back on the same thing belong together: "Drain the pasta, set it aside, and turn off the heat" is one step, not three.
     - Start a new step where the cook's attention shifts: a wait or a cooking time begins, a different component or pan is started, the temperature changes, or something goes into or comes out of the oven.
@@ -122,7 +123,7 @@ data:
     - If the source records a page number, add a note citing it so the cook can find the recipe in the book again. Leave the note's title blank and write it in the recipe's language: in Czech, "Strana 135", or "<book title> strana 135" when the source names the book. For a recipe that spans pages, cite the range, e.g. "Strana 134–135".
     - Use a book title only when the source records one. Never guess the book from the recipe's content.
     - If the user's section already cites the page, do not add a second note.
-  # Upstream: mealie/services/openai/prompts/recipes/parse-recipe-ingredients.txt @ v3.28.0
+  # Upstream: mealie/services/openai/prompts/recipes/parse-recipe-ingredients.txt @ v3.29.0
   # Mealie appends the unit list from the database after this text at call time.
   parse-recipe-ingredients.txt: |
     Parse ingredient strings into components. You will receive a list of one or more ingredients. It is critical that you return the same number of ingredients as given and in the same order.
@@ -143,7 +144,7 @@ data:
     Counted items:
     - When an ingredient has a quantity but names no unit because the food itself is what is counted, e.g. "1 cibule" or "2 vejce", set the unit to "kus", the database's unit for one piece.
     - Do not add "kus" when the text already names a unit ("3 stroužky česneku", "1 hlávka salátu"), or when there is no quantity ("sůl", "pepř podle chuti").
-  # Upstream: mealie/services/openai/prompts/recipes/resolve-organizers.txt @ v3.28.0
+  # Upstream: mealie/services/openai/prompts/recipes/resolve-organizers.txt @ v3.29.0
   # Mealie appends the existing tags, categories and tools after this text at call time.
   resolve-organizers.txt: |
     You assign tags, categories, and tools to a recipe, so it can be organized alongside the rest of a user's collection.
