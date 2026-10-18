@@ -79,7 +79,7 @@ templates:
 
 The syntax is Go `text/template` with Sprig — the same as Helm — so `if`, `default`, `printf` and `toJson` are available. Pipe a secret through `toJson` whenever it may contain a quote or a backslash; `toJson` also adds the surrounding quotes.
 
-**A typo cannot reach a pod.** ESO renders with `missingkey=error`: an unknown `{{ .NAME }}` or a missing OpenBao property fails the ExternalSecret (`SecretSyncedError`, the missing key named in its events) and leaves the previous Secret — and the running pods — untouched. On a first install the pod waits in `ContainerCreating` until the Secret exists; under ArgoCD the ExternalSecret's sync-wave `-1` stops the sync there first.
+**A typo cannot reach a pod.** ESO renders with `missingkey=error`: an unknown `{{ .NAME }}` or a missing OpenBao property fails the ExternalSecret (`SecretSyncedError`, the missing key named in its events) and leaves the previous Secret — and the running pods — untouched. On a first install the pod waits in `ContainerCreating` until the Secret exists; under ArgoCD the ExternalSecret's sync-wave `-10` stops the sync there first (see [Sync waves](#sync-waves)).
 
 **Changes reach the pods through Reloader.** ESO re-renders when the content or a `vars` value changes, and — for a template with secrets — on every `configRender.refreshInterval` (default `1h`), which is how a credential rotated in OpenBao arrives. The file is read once, at pod start, so set `annotations.reloader.stakater.com/auto: "true"` on the app; [Stakater Reloader](https://github.com/stakater/Reloader) then rolls the workload whenever the rendered Secret changes. A refresh that renders the same bytes does not restart anything.
 
@@ -131,6 +131,19 @@ kubectl logs <pod> -c <identifier>-<template>-validate
 The image defaults to `<image.repository>-config-validator:<image.tag>`, so the app and its validator are bumped by the same `deploy.json` change and cannot come from different commits. Override with the map form (`repository`, `tag`, `args`) when that convention does not fit.
 
 The validator mounts the rendered Secret at `/config` itself, so `path` and `subPath` — which describe the *main* container's mount — do not affect it.
+
+## Sync waves
+
+ArgoCD applies the chart's resources in three bands. Everything a pod needs comes first, so a sync hook Job finds it as the workload does:
+
+| Wave | Band | Resources |
+|---|---|---|
+| `-11` | pod prerequisites | ESO `UUID` generator (templates without `secrets`) — before the ExternalSecret that references it |
+| `-10` | pod prerequisites | ExternalSecret (the rendered config Secret), ServiceAccount (`serviceAccount.create`) |
+| `-9` … `-1` | hooks | free for `Sync` hook Jobs, e.g. database migrations |
+| `0` | workload | Deployment / Rollout, Services, HTTPRoute, Middleware |
+
+A hook Job mounts the rendered config and runs as the app's ServiceAccount. Were either at wave `0`, a first install would reject the Job's pod and hang the sync until the Job's deadline. Keep new pod prerequisites in `-11`/`-10` and new hooks in `-9`…`-1`.
 
 ## Runtime environment secrets (`secretRefs`)
 
