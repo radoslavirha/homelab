@@ -35,6 +35,7 @@ templates:
           "server": {
               "httpPort": {{ .app.containerPort }}
           },
+          "publicURL": "{{ .vars.protocol }}://{{ .app.host }}/{{ .app.pathName }}",
           "redirect": {
               "baseURL": "https://qr.irha.cz"
           },

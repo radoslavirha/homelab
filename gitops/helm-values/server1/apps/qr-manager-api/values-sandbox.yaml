@@ -37,6 +37,7 @@ templates:
           "server": {
               "httpPort": {{ .app.containerPort }}
           },
+          "publicURL": "{{ .vars.protocol }}://{{ .app.host }}/{{ .app.pathName }}",
           "redirect": {
               "baseURL": "{{ .vars.protocol }}://{{ .app.host }}/{{ .app.pathName }}/r"
           },
