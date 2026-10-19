@@ -170,6 +170,7 @@ grant. "Remove their access" means removing the *lowest* membership they hold, n
 | `miot-bridge` | none — REST surface operated by hand | admin → editor → reader | server1 × sandbox · production, + local |
 | `interactive-map-feeder` | none — reads of public CHMU data | admin → editor → reader | server1 × sandbox · production, + local |
 | `knowledge-base-api` | none — REST at `api.server1.homelab.irha.cz/kb/knowledge-base`, LAN only; the host in the matrix is nominal | `admin` → `reader` — **two rungs**: reader searches and reads, admin reindexes | server1 production, + local |
+| `kb-development` | none — the knowledge-base MCP server's `/kb/development` endpoint, an OAuth resource server; people log in through `knowledge-base-clients`, so the host in the matrix (`mcp.irha.cz/kb/development`) is nominal | `editor` → `reader` — **two rungs**: reader uses the read tools (search, read), editor is for write tools not built yet; no admin | server1 production, + local |
 | `homelab-dashboard` | `dashboard.server3.homelab.irha.cz` | admin → editor → reader | server3 production, + local |
 | `argocd` | `argocd.server3.homelab.irha.cz` | admin → editor → reader | server3 production |
 | `grafana` | `grafana.irha.cz` | admin → editor → reader | server3 production |
@@ -178,6 +179,7 @@ grant. "Remove their access" means removing the *lowest* membership they hold, n
 | `mealie` | `mealie.irha.cz` — **confidential**, see [Mealie](#mealie) | `admin` → `user` — **two rungs**, because Mealie has only `OIDC_ADMIN_GROUP` and `OIDC_USER_GROUP` | server1 production |
 | `open-webui` | `assistant.irha.cz` — **confidential**, see [Open WebUI](#open-webui) | `admin` → `user` — **two rungs**: `OAUTH_ALLOWED_ROLES` gates who may log in and `OAUTH_ADMIN_ROLES` grants admin, so a middle rung would be a claim nothing reads | server1 production |
 | `postman` | none — a client, not an API | `user` (the access gate only) | one client, every environment |
+| `knowledge-base-clients` | none — `kind: client` shared by every MCP client app (Claude Code first); one registration, so the MCP server trusts one issuer | `user` (the access gate only) | one client: server1 production + local |
 | `interactive-map` | none — an ESP32, `kind: device` | none of its own; holds `interactive-map-feeder.reader` | one client: server1 production + local |
 | `development-kb-mcp` | none — the development knowledge base's MCP adapter calling knowledge-base-api as itself, `kind: device` (an MCP server may not pass its caller's token through) | none of its own; holds `knowledge-base-api.reader` | one client: server1 production + local |
 | `longhorn` | `longhorn.<cluster>.homelab.irha.cz` — **`kind: proxy`**, see [Proxies](#proxies--uis-with-no-login-of-their-own) | `admin` (the access gate only) | server1 · server2 · server3, production |
