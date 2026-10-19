@@ -1,0 +1,29 @@
+# knowledge-base-api accepts calls from the knowledge-base MCP server — the one pod-to-pod
+# ingress in this namespace. Everything else reaches app pods from the node only (kubelet
+# probes, Traefik): CiliumNetworkPolicy.host-ingress.yaml.
+#
+# Why in-cluster and not through Traefik: the MCP server and the API sit in the same
+# namespace, and the LAN route would hairpin out to the node's address and back through
+# Traefik — a CiliumNetworkPolicy to the node's 443 for no gain. The API still demands a
+# token on every route but /health/*: this rule lets the packets in, the token decides.
+#
+# Production only, like both apps. The other half: NetworkPolicy.egress-knowledge-base.yaml.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ingress-knowledge-base-api
+  namespace: production
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: knowledge-base-api
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: knowledge-base
+      ports:
+        - protocol: TCP
+          port: 4000

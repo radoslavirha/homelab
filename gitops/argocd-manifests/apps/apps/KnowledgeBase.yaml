@@ -1,0 +1,57 @@
+# knowledge-base — ApplicationSet (server1 × production only)
+# The knowledge-base MCP server (homelab-apps mcp/knowledge-base): MCP clients (Claude Code,
+# Claude on the web or phone) search and read the knowledge bases in knowledge-base-api through
+# it. One MCP endpoint per knowledge base, all under mcp.irha.cz/kb/ — /kb/development today.
+# Chart: gitops/helm-charts/app/ (the /kb route), plus raw manifests for the one route the chart
+# cannot express (the Protected Resource Metadata path — see the k8s-manifests directory).
+# Production only, like knowledge-base-api, the only place its knowledge bases exist: there is
+# no sandbox element, no values-sandbox.yaml and no sandbox NetworkPolicy.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: knowledge-base
+  namespace: argocd
+spec:
+  generators:
+    - matrix:
+        generators:
+          - list:
+              elements:
+                - cluster: server1
+                  clusterServer: https://192.168.1.200:6443
+          - list:
+              elements:
+                - env: production
+  template:
+    metadata:
+      name: knowledge-base-{{cluster}}-{{env}}
+    spec:
+      project: default
+      sources:
+        - repoURL: https://github.com/radoslavirha/homelab
+          targetRevision: HEAD
+          path: gitops/helm-charts/app
+          helm:
+            releaseName: knowledge-base
+            valueFiles:
+              - $values/gitops/helm-values/server1/apps/knowledge-base/values.yaml
+              - $values/gitops/helm-values/server1/apps/knowledge-base/values-{{env}}.yaml
+              # Every template variable (vars:) is in a file, so whoever edits a config can find it.
+              # Loaded last: an app file cannot shadow a variable by accident.
+              - $values/gitops/helm-values/server1/apps/vars/common.yaml
+              - $values/gitops/helm-values/server1/apps/vars/{{env}}.yaml
+        - repoURL: https://github.com/radoslavirha/homelab
+          targetRevision: HEAD
+          ref: values
+        - repoURL: https://github.com/radoslavirha/homelab
+          targetRevision: HEAD
+          path: gitops/k8s-manifests/{{cluster}}/knowledge-base/{{env}}
+      destination:
+        server: '{{clusterServer}}'
+        namespace: '{{env}}'
+      syncPolicy:
+        syncOptions:
+          - CreateNamespace=true
+        automated:
+          selfHeal: true
+          prune: true
