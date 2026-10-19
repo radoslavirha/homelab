@@ -6,7 +6,7 @@
 # promoted once a sandbox rollout had been watched.
 
 image:
-  tag: "0.29.2"
+  tag: "0.29.3"
 templates:
   config:
     # Read from OpenBao by the chart's ExternalSecret; the template reads .secrets.<name>.
