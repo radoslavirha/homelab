@@ -19,7 +19,7 @@
 
 # Placeholder until the first release: the homelab-apps release workflow rewrites it.
 image:
-  tag: "0.1.0"
+  tag: "0.2.0"
 templates:
   config:
     secrets:
