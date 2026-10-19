@@ -3,7 +3,7 @@
 # .app.* (name, group, component, pathName, containerPort, namespace, host).
 
 image:
-  tag: "0.16.4"
+  tag: "0.16.6"
 templates:
   config:
     content: |
