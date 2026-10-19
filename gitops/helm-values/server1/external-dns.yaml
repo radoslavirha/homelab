@@ -17,6 +17,8 @@ domainFilters:
   - mealie.irha.cz
   # Apex tier: the household assistant (Open WebUI), and a SAN on server1-tls.
   - assistant.irha.cz
+  # Apex tier: the knowledge-base MCP server, and a SAN on server1-tls.
+  - mcp.irha.cz
 
 # TXT registry owner ID — must be unique per cluster to avoid record conflicts
 txtOwnerId: homelab-server1

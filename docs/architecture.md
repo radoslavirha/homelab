@@ -63,6 +63,7 @@ Multi-cluster Kubernetes homelab: three Talos Linux nodes managed with a shared 
 | qr-manager-ui | QR code admin SPA (React + nginx); served at `apps.server1.homelab.irha.cz/qr-manager`; runtime `config.json` via ConfigMap subPath mount; no secrets | server1 | ArgoCD `apps` | — | [base](../gitops/helm-values/server1/apps/qr-manager-ui/values.yaml) · [production](../gitops/helm-values/server1/apps/qr-manager-ui/values-production.yaml) · [sandbox](../gitops/helm-values/server1/apps/qr-manager-ui/values-sandbox.yaml) · [vars](../gitops/helm-values/server1/apps/vars/) · [appset](../gitops/argocd-manifests/apps/apps/QrManagerUi.yaml) | — |
 | [Mealie](https://mealie.io/) | Recipe manager and meal planner at `mealie.irha.cz` (apex tier); **trial**, LAN only. Authentik OIDC login only — local logins off since 2026-09-18 (confidential client, roles `mealie.admin`/`mealie.user`, accounts matched on `preferred_username`). Raw manifests — Mealie ships no official chart and is one container, so the version is the image tag in the Deployment, not a `targetRevision` | server1 | ArgoCD `household` | — | [manifests](../gitops/k8s-manifests/server1/mealie/) · [appset](../gitops/argocd-manifests/apps/household/Mealie.yaml) | — |
 | mealie-postgres | PostgreSQL 17 backing Mealie, one replica inside the `mealie` namespace rather than a fleet-wide instance — a trial should not decide shared-database placement. Moving it later is a dump and a restore | server1 | ArgoCD `household` | — | [manifests](../gitops/k8s-manifests/server1/mealie/) | — |
+| knowledge-base | The knowledge-base MCP server ([homelab-apps `mcp/knowledge-base`](https://github.com/radoslavirha/homelab-apps/tree/main/mcp/knowledge-base)): MCP clients (Claude Code, Claude on the web and the phone) search and read knowledge-base-api's knowledge bases, one MCP endpoint per knowledge base under `mcp.irha.cz/kb/` — `/kb/development` today. Every endpoint is an OAuth resource server: Authentik tokens from the shared `knowledge-base-clients` registration, a role per endpoint (`kb-development.reader`). Calls knowledge-base-api in-cluster as its own client, `development-kb-mcp` — never with the caller's token. **Production only**. Apex tier, tunnel-allowed; public once its DNS record exists | server1 | ArgoCD `apps` | — | [base](../gitops/helm-values/server1/apps/knowledge-base/values.yaml) · [production](../gitops/helm-values/server1/apps/knowledge-base/values-production.yaml) · [vars](../gitops/helm-values/server1/apps/vars/) · [appset](../gitops/argocd-manifests/apps/apps/KnowledgeBase.yaml) · [metadata route](../gitops/k8s-manifests/server1/knowledge-base/production/) | — |
 | [Open WebUI](https://openwebui.com/) | The household assistant at `assistant.irha.cz` (apex tier), LAN only. General-purpose LLM chat front end and the future host for MCP tool servers and automations. Authentik OIDC only — the local login form is off and no local account was ever created (confidential client, roles `open-webui.admin`/`open-webui.user`; the first login bypasses role gating by design upstream). Model connections: the Ollama engine on server2, plus any cloud provider. Raw manifests, so the version is the image tag in the Deployment, not a `targetRevision` | server1 | ArgoCD `household` | — | [manifests](../gitops/k8s-manifests/server1/open-webui/) · [appset](../gitops/argocd-manifests/apps/household/OpenWebUI.yaml) | — |
 | open-webui-postgres | PostgreSQL 17 **with `pgvector`** backing Open WebUI, one replica inside the `open-webui` namespace. Holds the app schema *and* the RAG embeddings (`VECTOR_DB=pgvector`), so there is one datastore to back up rather than a second on-disk vector store. The app issues `CREATE EXTENSION vector` itself on first use. `fsGroup` is 999, not Mealie's 70 — this image is Debian-based, not Alpine | server1 | ArgoCD `household` | — | [manifests](../gitops/k8s-manifests/server1/open-webui/) | — |
 | [Ollama](https://ollama.com/) | CPU-only LLM inference engine at `ollama.server2.homelab.irha.cz`. **No authentication of any kind** — the protection is a Traefik `ipAllowList` middleware pinned to server1's node address, so Open WebUI reaches it and a laptop does not. Models are pulled by hand via `kubectl exec`, deliberately: a PostSync Job pulling 5–20 GB is long and fragile. Idle cost is ~0 — the model unloads after five minutes | server2 | ArgoCD `household` | — | [manifests](../gitops/k8s-manifests/server2/ollama/) · [appset](../gitops/argocd-manifests/apps/household/Ollama.yaml) | — |
@@ -86,7 +87,7 @@ names that are, or may become, publicly reachable.
 | Tier | Shape | Members |
 |------|-------|---------|
 | Infrastructure | `<svc>.<cluster>.homelab.irha.cz` | everything, by default |
-| Apex | `<svc>.irha.cz` | **Published to the internet 2026-09-22:** `auth.irha.cz` (Authentik, server3), `grafana.irha.cz` (server3), `mealie.irha.cz` (server1). **Apex-named but LAN-only:** `qr.irha.cz`, `assistant.irha.cz`. Publishing is per name and opt-in — see [public-exposure.md](public-exposure.md) |
+| Apex | `<svc>.irha.cz` | **Published to the internet 2026-09-22:** `auth.irha.cz` (Authentik, server3), `grafana.irha.cz` (server3), `mealie.irha.cz` (server1). **Apex-named but LAN-only:** `qr.irha.cz`, `assistant.irha.cz`, `mcp.irha.cz` (tunnel-allowed, no public record yet). Publishing is per name and opt-in — see [public-exposure.md](public-exposure.md) |
 
 App routes generated by the `app` chart follow the same rule, with the stage label
 left of the component: `api.server1.homelab.irha.cz` for production,
@@ -100,7 +101,7 @@ component.
 
 | Cluster | `dnsNames` | Secret |
 |---------|-----------|--------|
-| server1 | `server1.homelab.irha.cz`, `*.server1.homelab.irha.cz`, `*.sandbox.server1.homelab.irha.cz`, `qr.irha.cz`, `mealie.irha.cz`, `assistant.irha.cz` | `server1-tls` |
+| server1 | `server1.homelab.irha.cz`, `*.server1.homelab.irha.cz`, `*.sandbox.server1.homelab.irha.cz`, `qr.irha.cz`, `mealie.irha.cz`, `assistant.irha.cz`, `mcp.irha.cz` | `server1-tls` |
 | server2 | `server2.homelab.irha.cz`, `*.server2.homelab.irha.cz`, `*.sandbox.server2.homelab.irha.cz` | `server2-tls` |
 | server3 | `server3.homelab.irha.cz`, `*.server3.homelab.irha.cz`, `auth.irha.cz`, `grafana.irha.cz` | `server3-tls` |
 
@@ -176,6 +177,7 @@ Each backend API has a dedicated Kubernetes ServiceAccount (preparation for futu
 | interactive-map-feeder-api | `api-iot-interactive-map-feeder-api` | production / sandbox | `production` / `sandbox` | server1; feeds map state from external sources |
 | qr-manager-api | `api-iot-qr-manager-api` | production / sandbox | `production` / `sandbox` | server1; manages QR code shortcuts and stores in MongoDB |
 | knowledge-base-api | `api-knowledge-base-knowledge-base-api` | production | `production` | server1; indexes the knowledge base into Postgres and serves search. No projected token: it trusts Authentik issuers only |
+| knowledge-base | `mcp-knowledge-base-knowledge-base` | production | `production` | server1; the MCP server in front of knowledge-base-api. No projected token: it trusts Authentik issuers only |
 
 All ServiceAccounts have `automountServiceAccountToken: false` — tokens are not auto-mounted. When API-to-API communication is enabled, projected tokens will be mounted on-demand via the Deployment spec.
 
@@ -262,7 +264,7 @@ MinIO is the intended S3-compatible backend for Terraform state, and would itsel
 │        wave 3  RootDatabases        (MongoDB)                           │
 │        wave 3  RootDashboards       (Headlamp, Hubble, Longhorn)        │
 │        wave 3  server3/RootIdentity (Authentik + authentik-blueprints)  │
-│        wave 4  RootApps             (miot-bridge, interactive-map-feeder, qr-manager-api, qr-manager-ui, knowledge-base-api) │
+│        wave 4  RootApps             (miot-bridge, interactive-map-feeder, qr-manager-api, qr-manager-ui, knowledge-base-api, knowledge-base) │
 │        wave 4  RootHousehold        (Mealie, Open WebUI + their        │
 │                                      PostgreSQL; Ollama on server2)     │
 │        wave 5  RootNetworkPolicies  (default-deny + egress allow-list)  │

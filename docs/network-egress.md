@@ -54,7 +54,7 @@ production/api-iot-my-api-xxxx:41234 -> 203.0.113.10:8443 (world) Policy denied 
 ```
 
 Swap `production` for `sandbox` as needed. Both namespaces carry an identical policy set, except the
-files of an app that runs in one of them only (`knowledge-base-api`: production).
+files of an app that runs in one of them only (`knowledge-base-api`, `knowledge-base`: production).
 
 ## What is allowed today
 
@@ -96,6 +96,8 @@ every namespace. Verified working in all four namespaces; a `curl --cacert /ca/c
 | `knowledge-base-api` (production only) | Postgres (`postgres` namespace, CNPG) | TCP 5432 | `NetworkPolicy.egress-knowledge-base-api.yaml` |
 | `knowledge-base-api` | Alloy (OTLP) | TCP 4318 | same |
 | `knowledge-base-api` | `192.168.1.201` — server2's Traefik, i.e. Ollama | TCP 443 | `NetworkPolicy.egress-lan-ollama.yaml` |
+| `knowledge-base` — the MCP server (production only) | `knowledge-base-api` pods, in-cluster | TCP 4000 | `NetworkPolicy.egress-knowledge-base.yaml` |
+| `knowledge-base` | Alloy (OTLP) | TCP 4318 | same |
 | `qr-manager-ui` | *(nothing)* | — | static SPA; DNS and internet only, from the namespace-wide rules |
 
 ### Ingress
@@ -104,8 +106,9 @@ Only the node reaches app pods — kubelet health probes and Traefik, which runs
 so both arrive with the same identity. **TCP 4000** (the APIs) and **TCP 80** (`qr-manager-ui`)
 only, via `CiliumNetworkPolicy.host-ingress.yaml`.
 
-There is no pod-to-pod ingress and no metrics scraping — the apps push OTLP rather than being
-scraped. **A new inbound port needs a policy change**, including any UDP listener: the
+There is one pod-to-pod ingress: `knowledge-base-api` admits the `knowledge-base` MCP server on
+TCP 4000 (`NetworkPolicy.ingress-knowledge-base-api.yaml`, production only), its caller in the same
+namespace. No other, and no metrics scraping — the apps push OTLP rather than being scraped. **A new inbound port needs a policy change**, including any UDP listener: the
 miot-bridge UDP listener on 4000 was removed in part because the policy permits TCP only.
 
 ## Changing what is allowed

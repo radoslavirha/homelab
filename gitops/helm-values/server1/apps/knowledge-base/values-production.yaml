@@ -1,0 +1,126 @@
+# knowledge-base — production overrides (the knowledge-base MCP server)
+# Template variables: .vars.* from ../vars/common.yaml + ../vars/production.yaml, chart built-ins
+# .app.* (name, group, component, pathName, containerPort, namespace, host), and .secrets.* from
+# secrets: below.
+#
+# publicURL is https://mcp.irha.cz/kb (the route's host and prefix). Each endpoint's resource
+# identifier is publicURL + its path — https://mcp.irha.cz/kb/development — and MCP clients
+# refuse a server whose metadata names any other URL than the one they connected to.
+#
+# Two Authentik clients, two directions:
+#   - inbound, people: tokens from the shared client registration `knowledge-base-clients`, for
+#     the endpoint's application `kb-development` in this environment
+#     (aud kb-development-server1-production), role kb-development.reader or .editor.
+#   - outbound, the server itself: `development-kb-mcp` (client_credentials) on
+#     knowledge-base-api. The caller's token is never forwarded.
+#
+# knowledge-base-api is called in-cluster, at its ClusterIP Service in the same namespace
+# (NetworkPolicy.egress-knowledge-base.yaml / NetworkPolicy.ingress-knowledge-base-api.yaml).
+
+# Placeholder until the first release: the homelab-apps release workflow rewrites it.
+image:
+  tag: "0.1.0"
+templates:
+  config:
+    secrets:
+      upstreamClientSecret:
+        key: server1/production/development-kb-mcp-authentik
+        property: client-secret
+    content: |
+      {
+          "serviceName": "{{ .app.name }}",
+          "server": {
+              "httpPort": {{ .app.containerPort }}
+          },
+          "publicURL": "{{ .vars.protocol }}://{{ .app.host }}/{{ .app.pathName }}",
+          "mcpServers": {
+              "DEVELOPMENT_KB": {
+                  "path": "/development",
+                  "kb": "dev",
+                  "name": "development-kb",
+                  "title": "Development knowledge base",
+                  "description": "Development knowledge base for the homelab repositories: decisions with the alternatives that were rejected, specs and plans, cross-repository contracts (MQTT topics, REST endpoints, URLs, auth), gotchas, and a mirror of the repositories' own docs.",
+                  "auth": {
+                      "issuer": "https://auth.irha.cz/application/o/knowledge-base-clients/",
+                      "audience": "kb-development-{{ .vars.cluster }}-{{ .app.namespace }}",
+                      "key": {
+                          "source": "jwks",
+                          "uri": "https://auth.irha.cz/application/o/knowledge-base-clients/jwks/"
+                      },
+                      "roles": {
+                          "READER": "kb-development.reader",
+                          "EDITOR": "kb-development.editor"
+                      }
+                  }
+              }
+          },
+          "externalApis": {
+              "KNOWLEDGE_BASE_API": {
+                  "baseURL": "http://api-knowledge-base-knowledge-base-api-http.{{ .app.namespace }}.svc.cluster.local",
+                  "auth": {
+                      "strategy": "token-exchange",
+                      "request": {
+                          "method": "POST",
+                          "url": "https://auth.irha.cz/application/o/token/",
+                          "headers": [
+                              {
+                                  "name": "Content-Type",
+                                  "value": "application/x-www-form-urlencoded"
+                              }
+                          ],
+                          "body": {
+                              "grant_type": "client_credentials",
+                              "client_id": "development-kb-mcp",
+                              "client_secret": {{ .secrets.upstreamClientSecret | toJson }},
+                              "scope": "openid profile email roles"
+                          }
+                      },
+                      "tokenExtractor": "access_token",
+                      "transport": {
+                          "headers": [
+                              {
+                                  "name": "Authorization",
+                                  "credential": "value",
+                                  "prefix": "Bearer "
+                              }
+                          ]
+                      }
+                  },
+                  "resilience": {
+                      "timeout": {
+                          "ms": 10000
+                      },
+                      "retry": {
+                          "count": 1,
+                          "backoffMs": 500
+                      },
+                      "circuitBreaker": {}
+                  },
+                  "retriableStatusCodes": [500, 502, 503, 504, 408]
+              }
+          },
+          "logger": {
+              "enabled": true,
+              "level": "info"
+          },
+          "otel": {
+              "metrics": {
+                  "enabled": true,
+                  "exporter": {
+                      "url": "http://k8s-monitoring-alloy-receiver.monitoring.svc.cluster.local:4318/v1/metrics"
+                  }
+              },
+              "traces": {
+                  "enabled": true,
+                  "exporter": {
+                      "url": "http://k8s-monitoring-alloy-receiver.monitoring.svc.cluster.local:4318/v1/traces"
+                  }
+              },
+              "logs": {
+                  "enabled": false,
+                  "exporter": {
+                      "url": "http://k8s-monitoring-alloy-receiver.monitoring.svc.cluster.local:4318/v1/logs"
+                  }
+              }
+          }
+      }

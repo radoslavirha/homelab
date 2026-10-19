@@ -1,0 +1,40 @@
+# knowledge-base (the MCP server) in-cluster egress: knowledge-base-api and OTLP.
+# Production only, like the app: no sandbox copy — the network-egress skill's
+# single-environment exception.
+# Its other dependency needs no rule here:
+#   - auth.irha.cz:443 (JWKS for callers' tokens, its own client_credentials token)
+#                                              NetworkPolicy.egress-idp.yaml
+#
+# knowledge-base-api: called at its ClusterIP Service in this namespace, which Cilium
+# translates to the pod before policy sees it — so the rule names the pods and their port
+# (4000), not the Service's 80. The other half of this path is
+# NetworkPolicy.ingress-knowledge-base-api.yaml: production is default-deny for ingress too.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-egress-knowledge-base
+  namespace: production
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: knowledge-base
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: knowledge-base-api
+      ports:
+        - protocol: TCP
+          port: 4000
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: alloy-receiver
+      ports:
+        - protocol: TCP
+          port: 4318

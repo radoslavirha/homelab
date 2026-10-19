@@ -34,6 +34,17 @@ data:
         originRequest:
           originServerName: mealie.irha.cz
 
+      # ALLOWED, NOT YET PUBLISHED: public once `cloudflared tunnel route dns homelab-server1
+      # mcp.irha.cz` creates the record (docs/public-exposure.md, step 4). The knowledge-base
+      # MCP server, for MCP clients off the LAN (Claude on the web and the phone app). It
+      # authenticates its own traffic: every endpoint under /kb is an OAuth resource server
+      # (Authentik tokens, a role per endpoint); /health/* and the Protected Resource Metadata
+      # are the only open paths. Its sign-in redirects to auth.irha.cz, published first.
+      - hostname: mcp.irha.cz
+        service: https://traefik.traefik.svc.cluster.local:443
+        originRequest:
+          originServerName: mcp.irha.cz
+
       # THE CATCH-ALL MUST STAY LAST AND MUST STAY http_status:404.
       # A catch-all pointing at Traefik with no `hostname` forwards EVERYTHING and
       # destroys the opt-in property -- on THIS cluster that would publish the

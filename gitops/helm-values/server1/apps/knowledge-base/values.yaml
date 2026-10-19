@@ -1,0 +1,117 @@
+# knowledge-base — shared base values (the knowledge-base MCP server)
+# Env-specific: image.tag, templates.config (content + secrets) → values-production.yaml.
+# Production only (see the ApplicationSet).
+
+# Restart when the ESO-rendered config Secret changes — a vars edit or a credential
+# rotated in OpenBao. The file is read once, at pod start.
+annotations:
+  reloader.stakater.com/auto: "true"
+image:
+  repository: ghcr.io/radoslavirha/knowledge-base
+  pullPolicy: Always
+# Stateless (no MCP sessions, any replica answers any request), so a second replica would be
+# safe; one is enough for one person's agents.
+replicas: 1
+serviceAccount:
+  create: true
+  # No ambient token: automount would give every pod a long-lived,
+  # full-audience one.
+  automountServiceAccountToken: false
+  # Off: it trusts Authentik issuers only (mcpServers.*.auth in values-production.yaml) and
+  # calls no Kubernetes API.
+  projectedToken:
+    enabled: false
+# The other APIs' sizing (measured peak 273Mi over 7 days). Unmeasured for this one: it holds
+# no state and indexes nothing, so it should sit well below — check the working set after a
+# week of use and lower both.
+#
+# Memory requests == limits, CPU sized for scheduling, not bursts, as on the other APIs.
+resources:
+  requests:
+    cpu: 50m
+    memory: 500Mi
+  limits:
+    cpu: 500m
+    memory: 500Mi
+# V8 sizes its heap from what it detects, not the cgroup limit; ~75% of the container limit.
+env:
+  - name: NODE_OPTIONS
+    value: "--max-old-space-size=384"
+# The distroless base declares USER 65532; runAsUser repeats it numerically because kubelet
+# verifies runAsNonRoot against the image's configured user and cannot resolve a username.
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: [ALL]
+labels:
+  component: mcp
+  partOf: knowledge-base
+services:
+  http:
+    enabled: true
+    protocol: TCP
+    port: 80
+    targetPort: 4000
+# https://mcp.irha.cz/kb — apex tier, the name meant to be published (Claude on the web and
+# the phone app reach it through the tunnel). The route is /kb as a whole; the endpoints under
+# it (/development today, later /home, /personal) are the app's own, so a new knowledge base
+# needs no change here. stripPrefix (the chart default) hands the app /development.
+#
+# Every endpoint demands a token (OAuth resource server, Authentik); /health/* is the only open
+# path. The Protected Resource Metadata sits outside /kb by RFC 9728 and has its own route in
+# gitops/k8s-manifests/server1/knowledge-base/production/.
+ingress:
+  enabled: true
+  serviceRef: http
+  hostname: mcp.irha.cz
+  pathName: kb
+# Boot budget: 5s × 12 = 60s; no migrations, nothing to warm.
+startupProbe:
+  httpGet:
+    path: /health/live
+    port: http
+  periodSeconds: 5
+  failureThreshold: 12
+  timeoutSeconds: 2
+# Shallow by design — /health/live never touches the check registry.
+livenessProbe:
+  httpGet:
+    path: /health/live
+    port: http
+  periodSeconds: 10
+  failureThreshold: 3
+  timeoutSeconds: 2
+# No checks registered: knowledge-base-api being down fails the tool call, not readiness.
+readinessProbe:
+  httpGet:
+    path: /health/ready
+    port: http
+  periodSeconds: 5
+  failureThreshold: 3
+  successThreshold: 1
+  timeoutSeconds: 3
+# preStop covers Endpoints removal; the app's own SIGTERM drain covers the window after it.
+terminationGracePeriodSeconds: 30
+lifecycle:
+  preStop:
+    sleep:
+      seconds: 10
+# maxUnavailable: 0 keeps the Ready pod serving until its replacement is Ready.
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxSurge: 1
+    maxUnavailable: 0
+templates:
+  config:
+    file: production.json
+    path: /home/app/config
+    # content and secrets defined per-env

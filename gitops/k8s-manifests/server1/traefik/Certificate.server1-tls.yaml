@@ -43,4 +43,8 @@ spec:
     # inventory than a product name would be: every SAN in this list is public in
     # Certificate Transparency logs.
     - assistant.irha.cz
+    # Apex tier: the knowledge-base MCP server (mcp.irha.cz/kb/<knowledge base>). Named for
+    # the protocol, not one knowledge base: every endpoint lives under it, and the name is
+    # baked into each endpoint's OAuth resource identifier and every client's registration.
+    - mcp.irha.cz
 
