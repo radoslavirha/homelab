@@ -27,7 +27,9 @@ it is. This document is the working reference.
 `mcp.irha.cz` is the knowledge-base MCP server: only `/kb/…` and its OAuth metadata path answer,
 and every MCP call needs an Authentik token. Its checklist ran through Cloudflare's edge from the LAN
 (`curl --resolve`) on 2026-10-19, and from mobile data on 2026-10-20 (health, metadata, LAN-only
-names unreachable); the Claude connector login from mobile data: *pending*.
+names unreachable). Claude's connector, used from the phone on mobile data on 2026-10-20: its calls
+reach Traefik from Anthropic's `160.79.104.0/21` with the address preserved. Its one OAuth login ran
+on the LAN — a hosted connector logs in per Claude account, not per device.
 
 Everything else is LAN-only, including every `*.homelab.irha.cz` name, every REST API, and the apex
 names that exist but have no public DNS record.
