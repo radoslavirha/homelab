@@ -22,8 +22,14 @@ it is. This document is the working reference.
 | `auth.irha.cz` | server3 | `homelab-server3` | 2026-09-22 |
 | `grafana.irha.cz` | server3 | `homelab-server3` | 2026-09-22 |
 | `mealie.irha.cz` | server1 | `homelab-server1` | 2026-09-22 |
+| `mcp.irha.cz` | server1 | `homelab-server1` | 2026-10-19 |
 
-Everything else is LAN-only, including every `*.homelab.irha.cz` name, every API, and the apex
+`mcp.irha.cz` is the knowledge-base MCP server: only `/kb/…` and its OAuth metadata path answer,
+and every MCP call needs an Authentik token. Its checklist ran through Cloudflare's edge from the LAN
+(`curl --resolve`) on 2026-10-19, and from mobile data on 2026-10-20 (health, metadata, LAN-only
+names unreachable); the Claude connector login from mobile data: *pending*.
+
+Everything else is LAN-only, including every `*.homelab.irha.cz` name, every REST API, and the apex
 names that exist but have no public DNS record.
 
 ## How it works

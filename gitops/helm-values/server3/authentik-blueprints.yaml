@@ -260,10 +260,14 @@ applications:
     # client_id `knowledge-base-clients` and asks for `openid profile email roles`: without
     # `profile` the `aud` is not widened to kb-development, without `roles` there is no role.
     accesses: [kb-development]
-    # Matched strictly, port included. A client app that picks a random loopback port has
-    # to be pinned to this one (Claude Code: --callback-port 33418).
+    # Matched strictly, port included.
     redirectUris:
+      # Claude Code. It picks a random loopback port unless pinned (--callback-port 33418).
       - http://localhost:33418/callback
+      # Claude on the web, desktop and phone ("custom connector", client ID only, secret left
+      # blank). Their OAuth runs in Anthropic's cloud, which sends the code here; Anthropic's
+      # connector docs name this one URI for all three.
+      - https://claude.ai/api/mcp/auth_callback
     # The access gate, as on postman: `knowledge-base-clients-user`. Membership means "may
     # hold this token"; what it may do still comes from kb-development's own role group.
     roles:
