@@ -120,6 +120,16 @@ templates:
                           }
                       },
                       {
+                          "name": "knowledge-base-mcp",
+                          "issuer": "https://auth.irha.cz/application/o/knowledge-base-mcp/",
+                          "audience": "knowledge-base-api-{{ .vars.cluster }}-{{ .app.namespace }}",
+                          "subjectKind": "service",
+                          "key": {
+                              "source": "jwks",
+                              "uri": "https://auth.irha.cz/application/o/knowledge-base-mcp/jwks/"
+                          }
+                      },
+                      {
                           "name": "postman",
                           "issuer": "https://auth.irha.cz/application/o/postman/",
                           "audience": "knowledge-base-api-{{ .vars.cluster }}-{{ .app.namespace }}",
