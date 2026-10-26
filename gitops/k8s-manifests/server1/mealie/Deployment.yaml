@@ -79,6 +79,14 @@ spec:
             # container defaults to UTC, which puts "today" an hour off.
             - name: TZ
               value: Europe/Prague
+            # Hours a session may sit idle, not a hard cap: /api/auth/refresh
+            # mints a new token while Mealie is in use (routes/auth/auth.py,
+            # v3.29.0). Upstream's 48 meant a cookbook opened twice a week from
+            # the iPhone home-screen app hit Authentik on nearly every visit.
+            # 720 = 30 days. Revocation is not this number: removing mealie.user
+            # in Authentik stops the next OIDC login, not a live session.
+            - name: TOKEN_TIME
+              value: "720"
             # Already the upstream default since v1.4.0, but stated explicitly:
             # this host answers to the whole LAN and self-registration is not
             # wanted. Users are invited by the admin.
@@ -216,6 +224,18 @@ spec:
             # in Authentik, and OIDC_USER_GROUP is the gate, so a second
             # invite-by-hand step in Mealie buys nothing.
             - name: OIDC_SIGNUP_ENABLED
+              value: "true"
+            # An OIDC login skips the form, so nobody can tick "Remember Me" —
+            # and unticked, set_session_cookie() sends no max-age: a session
+            # cookie that dies when the browser closes. On iOS, swiping away a
+            # home-screen web app IS closing the browser, and Authentik's own
+            # session (default-authentication-login, session_duration=seconds=0)
+            # dies with it, so every cold start was a full password + MFA login.
+            # True gives the cookie max-age = TOKEN_TIME. It is sent on a
+            # Set-Cookie header, so Safari's 7-day cap on document.cookie does
+            # not apply. Authentik's session length is left alone on purpose:
+            # it is fleet-wide and auth.irha.cz is meant to be published.
+            - name: OIDC_REMEMBER_ME
               value: "true"
             # Local logins OFF (2026-09-18). Authentik login was verified working
             # first, and the seeded `changeme@example.com` admin has been deleted,

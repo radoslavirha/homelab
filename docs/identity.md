@@ -658,6 +658,14 @@ Authentik's secrets with it — nobody reaches Mealie's UI until it is back, or 
 directly against Mealie, unaffected by OIDC; that is both the agent layer's connection and the way to
 drive the instance while the IdP is down.
 
+**Sessions outlive the browser** (`OIDC_REMEMBER_ME=true`, `TOKEN_TIME=720`, 2026-10-26). Without
+remember-me an OIDC login gets a cookie with no `max-age`, and Authentik's own session is also
+browser-scoped (`default-authentication-login`, `session_duration=seconds=0`). On iOS, closing a
+home-screen web app closes that browser, so every cold start was a full password + MFA login.
+`TOKEN_TIME` is an idle window — the token refreshes while Mealie is in use — so a member who opens
+it within 30 days never sees Authentik. The cost: removing `mealie.user` in Authentik blocks the next
+OIDC login, not a session already open. Authentik's session length was left alone; it is fleet-wide.
+
 ### Setting up the client secret
 
 Once, after the blueprint has landed. The secret is the only manual step — the blueprint deliberately
