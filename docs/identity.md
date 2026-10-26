@@ -155,8 +155,8 @@ export class QrCodeController {
 Ladders are **per application**: `qr-manager.admin` implies nothing about `miot-bridge`, because the
 groups are per `client_id` and the mapping filters to the issuing one.
 
-`editor` has no routes on any application yet, and `interactive-map-feeder` has no write surface at
-all. The unused rungs cost a group per environment and mean the first write route on any application
+`editor` has no routes on any application yet — knowledge-base-api's write routes will be the
+first — and `interactive-map-feeder` has no write surface at all. The unused rungs cost a group per environment and mean the first write route on any application
 is a values change rather than a re-issue of everyone's groups.
 
 **Removing access got subtler.** Dropping someone from `-admin` leaves them whatever the parents
@@ -169,7 +169,7 @@ grant. "Remove their access" means removing the *lowest* membership they hold, n
 | `qr-manager` | `qr-manager-ui` at `apps.<cluster>…/qr-manager` | admin → editor → reader | server1 × sandbox · production, + local |
 | `miot-bridge` | none — REST surface operated by hand | admin → editor → reader | server1 × sandbox · production, + local |
 | `interactive-map-feeder` | none — reads of public CHMU data | admin → editor → reader | server1 × sandbox · production, + local |
-| `knowledge-base-api` | none — REST at `api.server1.homelab.irha.cz/kb/knowledge-base`, LAN only; the host in the matrix is nominal | `admin` → `reader` — **two rungs**: reader searches and reads, admin reindexes | server1 production, + local |
+| `knowledge-base-api` | none — REST at `api.server1.homelab.irha.cz/kb/knowledge-base`, LAN only; the host in the matrix is nominal | admin → editor → reader: reader searches and reads, editor writes (create a note, write or delete a document), admin reindexes | server1 production, + local |
 | `kb-development` | none — the knowledge-base MCP server's `/kb/development` endpoint, an OAuth resource server; people log in through `knowledge-base-clients`, so the host in the matrix (`mcp.irha.cz/kb/development`) is nominal | `editor` → `reader` — **two rungs**: reader uses the read tools (search, read), editor is for write tools not built yet; no admin | server1 production, + local |
 | `homelab-dashboard` | `dashboard.server3.homelab.irha.cz` | admin → editor → reader | server3 production, + local |
 | `argocd` | `argocd.server3.homelab.irha.cz` | admin → editor → reader | server3 production |
@@ -181,7 +181,8 @@ grant. "Remove their access" means removing the *lowest* membership they hold, n
 | `postman` | none — a client, not an API | `user` (the access gate only) | one client, every environment |
 | `knowledge-base-clients` | none — `kind: client` shared by every MCP client app (Claude Code; Claude on the web, desktop and phone); one registration, so the MCP server trusts one issuer | `user` (the access gate only) | one client: server1 production + local |
 | `interactive-map` | none — an ESP32, `kind: device` | none of its own; holds `interactive-map-feeder.reader` | one client: server1 production + local |
-| `development-kb-mcp` | none — the development knowledge base's MCP adapter calling knowledge-base-api as itself, `kind: device` (an MCP server may not pass its caller's token through) | none of its own; holds `knowledge-base-api.reader` | one client: server1 production + local |
+| `knowledge-base-mcp` | none — the knowledge-base MCP server calling knowledge-base-api as itself, for every knowledge base it serves, `kind: device` (an MCP server may not pass its caller's token through) | none of its own; holds `knowledge-base-api.editor` | one client: server1 production + local |
+| `development-kb-mcp` | none — **retired**, replaced by `knowledge-base-mcp`; nothing uses it, and it is removed in two commits once its successor is verified | none of its own; holds `knowledge-base-api.reader` | one client: server1 production + local |
 | `longhorn` | `longhorn.<cluster>.homelab.irha.cz` — **`kind: proxy`**, see [Proxies](#proxies--uis-with-no-login-of-their-own) | `admin` (the access gate only) | server1 · server2 · server3, production |
 | `hubble` | `hubble.<cluster>.homelab.irha.cz` — **`kind: proxy`**, the Cilium flow UI in `kube-system` | `admin` (the access gate only) | server1 · server2 · server3, production |
 | `traefik` | `traefik.<cluster>.homelab.irha.cz` — **`kind: proxy`**, and the one guarded by an **IngressRoute** rather than an HTTPRoute | `admin` (the access gate only) | server1 · server2 · server3, production |

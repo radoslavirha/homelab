@@ -177,10 +177,13 @@ applications:
     # API checks `knowledge-base-api.*` roles (and each knowledge base's `readers`).
     hostPrefix: apps
     basePath: /knowledge-base-api
-    # reader: search, documents, status. admin: reindex -- a full rebuild saturates
-    # server2's CPU and evicts Open WebUI's chat model, so it is its own rung.
+    # reader: search, documents, status. editor: the write routes -- create a note, write or
+    # delete a document, each one commit to the knowledge base's repo. admin: reindex -- a full
+    # rebuild saturates server2's CPU and evicts Open WebUI's chat model, so it is its own rung.
     roles:
       - name: admin
+        inherits: editor
+      - name: editor
         inherits: reader
       - name: reader
     # Production only: one index, one database. Sandbox would need a database of its own.
@@ -595,6 +598,9 @@ applications:
   - name: development-kb-mcp
     title: Development KB MCP adapter
     kind: device
+    # RETIRED: replaced by knowledge-base-mcp below. Removed in two commits (state: absent,
+    # then the entry) once its successor is verified live.
+    #
     # The development knowledge base's MCP adapter, calling knowledge-base-api as ITSELF.
     # Not hardware: kind device is the matrix's client_credentials client. The adapter may
     # not forward the token its own MCP client sent -- the MCP authorization spec forbids
@@ -612,6 +618,33 @@ applications:
     # expiry, not per call: every client_credentials request writes the service account row.
     accesses:
       - { app: knowledge-base-api, role: reader }
+    environments:
+      - { cluster: server1, stage: production }
+      - { stage: local }
+
+  - name: knowledge-base-mcp
+    title: Knowledge Base MCP server
+    kind: device
+    # The knowledge-base MCP server (homelab-apps mcp/knowledge-base), calling
+    # knowledge-base-api as ITSELF -- for every knowledge base it serves, not one. Not
+    # hardware: kind device is the matrix's client_credentials client. The server may not
+    # forward the token its own MCP client sent -- the MCP authorization spec forbids token
+    # passthrough, and that token's audience is the server, not this API.
+    #
+    # editor is the whole grant: search, read and the write routes. Who may write is decided
+    # one step earlier, by the caller's role on the MCP endpoint (kb-development.editor);
+    # this client only has to be allowed to carry the write through. Reindexing (admin)
+    # stays with a human.
+    #
+    # Production for the in-cluster server, local for running it on a laptop -- one client,
+    # one secret, one service account in both environments' editor groups. The secret is
+    # read from the provider page; where the in-cluster server reads it from is in
+    # docs/secrets.md.
+    #
+    # Token validity is the chart default, minutes=10. Cache the token and re-fetch on
+    # expiry, not per call: every client_credentials request writes the service account row.
+    accesses:
+      - { app: knowledge-base-api, role: editor }
     environments:
       - { cluster: server1, stage: production }
       - { stage: local }
