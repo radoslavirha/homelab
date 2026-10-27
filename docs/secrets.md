@@ -385,8 +385,7 @@ The client secret of the `knowledge-base-mcp` Authentik client (`kind: device`,
 `docs/identity.md` § Devices). The MCP server presents it with `client_credentials` to call
 knowledge-base-api as itself. Authentik generates the secret and keeps the original; this copy
 exists only because a pod cannot read the provider page. The client id is not secret — it is
-`knowledge-base-mcp`, in the blueprint matrix — so only the secret is stored. It replaces
-`development-kb-mcp-authentik`, which nothing reads any more.
+`knowledge-base-mcp`, in the blueprint matrix — so only the secret is stored.
 
 ```bash
 # Authentik UI → Applications → Providers → knowledge-base-mcp → Edit → Client Secret.
