@@ -94,7 +94,7 @@ templates:
           },
           "knowledgeBases": [
               {
-                  "id": "dev",
+                  "id": "development",
                   "source": "GIT",
                   "tsConfig": "english",
                   "models": ["embeddinggemma:300m"],
