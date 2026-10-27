@@ -3,7 +3,7 @@
 # .app.* (name, group, component, pathName, containerPort, namespace, host), and .secrets.* from secrets: below.
 
 image:
-  tag: "0.30.0"
+  tag: "0.30.1"
 templates:
   config:
     # Read from OpenBao by the chart's ExternalSecret; the template reads .secrets.<name>.
