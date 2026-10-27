@@ -233,9 +233,11 @@ applications:
     # Public client + PKCE means there is no secret, which is why this belongs in git with
     # the rest instead of in OpenBao.
     accesses: [qr-manager, miot-bridge, interactive-map-feeder, homelab-dashboard, knowledge-base-api]
-    # Postman's hosted callback, used by the desktop app and the web client alike.
+    # The tools' hosted callbacks: Postman's (desktop app and web client alike), then
+    # Bruno's. Same client, same token -- the tool only decides where the code lands.
     redirectUris:
       - https://oauth.pstmn.io/v1/callback
+      - https://oauth.usebruno.com/callback
     # The access gate, and nothing more -- one group, `postman-user`. An Application with
     # no binding is readable by EVERY user, and this one mints tokens for every API in
     # every environment. Membership means "may hold this token" -- the switch that revokes

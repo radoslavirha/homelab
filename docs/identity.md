@@ -406,6 +406,7 @@ it serves nothing and *calls* the others. An application that declares `accesses
     accesses: [qr-manager, miot-bridge, interactive-map-feeder, homelab-dashboard, knowledge-base-api]
     redirectUris:
       - https://oauth.pstmn.io/v1/callback
+      - https://oauth.usebruno.com/callback
     roles:
       - user
     environments: [...]
@@ -457,6 +458,10 @@ under `auth.IDP.trustedIssuers`. Every API loads it at boot and refuses anonymou
 | Client Secret | *empty* — public client |
 | Callback URL | `https://oauth.pstmn.io/v1/callback` |
 | Scope | `openid profile email roles` — `roles` is **not** implied by `profile` |
+
+**In Bruno** the same client works with the same values; only the callback differs:
+`https://oauth.usebruno.com/callback`. Both callbacks are registered on `postman`, so the slug, the
+`iss` and the `postman-user` gate group are shared by both tools.
 
 ### Setting it up in Postman, step by step
 
