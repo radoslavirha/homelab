@@ -37,7 +37,7 @@ templates:
           "mcpServers": {
               "DEVELOPMENT_KB": {
                   "path": "/development",
-                  "kb": "dev",
+                  "kb": "development",
                   "name": "development-kb",
                   "title": "Development knowledge base",
                   "description": "Development knowledge base for the homelab repositories: decisions with the alternatives that were rejected, specs and plans, cross-repository contracts (MQTT topics, REST endpoints, URLs, auth), gotchas, and a mirror of the repositories' own docs.",
