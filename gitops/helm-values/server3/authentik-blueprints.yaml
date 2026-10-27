@@ -598,6 +598,7 @@ applications:
   - name: development-kb-mcp
     title: Development KB MCP adapter
     kind: device
+    state: absent
     # RETIRED: replaced by knowledge-base-mcp below. Removed in two commits (state: absent,
     # then the entry) once its successor is verified live.
     #
