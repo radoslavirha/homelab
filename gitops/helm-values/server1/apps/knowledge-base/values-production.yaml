@@ -89,7 +89,7 @@ templates:
                   },
                   "resilience": {
                       "timeout": {
-                          "ms": 10000
+                          "ms": 30000
                       },
                       "retry": {
                           "count": 1,
