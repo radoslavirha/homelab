@@ -1,5 +1,5 @@
-# knowledge-base — ApplicationSet (server1 × production only)
-# The knowledge-base MCP server (homelab-apps mcp/knowledge-base): MCP clients (Claude Code,
+# knowledge-base-mcp — ApplicationSet (server1 × production only)
+# The knowledge-base MCP server (homelab-apps mcp/knowledge-base-mcp): MCP clients (Claude Code,
 # Claude on the web or phone) search and read the knowledge bases in knowledge-base-api through
 # it. One MCP endpoint per knowledge base, all under mcp.irha.cz/kb/ — /kb/development today.
 # Chart: gitops/helm-charts/app/ (the /kb route), plus raw manifests for the one route the chart
@@ -9,7 +9,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
-  name: knowledge-base
+  name: knowledge-base-mcp
   namespace: argocd
 spec:
   generators:
@@ -24,7 +24,7 @@ spec:
                 - env: production
   template:
     metadata:
-      name: knowledge-base-{{cluster}}-{{env}}
+      name: knowledge-base-mcp-{{cluster}}-{{env}}
     spec:
       project: default
       sources:
@@ -32,10 +32,10 @@ spec:
           targetRevision: HEAD
           path: gitops/helm-charts/app
           helm:
-            releaseName: knowledge-base
+            releaseName: knowledge-base-mcp
             valueFiles:
-              - $values/gitops/helm-values/server1/apps/knowledge-base/values.yaml
-              - $values/gitops/helm-values/server1/apps/knowledge-base/values-{{env}}.yaml
+              - $values/gitops/helm-values/server1/apps/knowledge-base-mcp/values.yaml
+              - $values/gitops/helm-values/server1/apps/knowledge-base-mcp/values-{{env}}.yaml
               # Every template variable (vars:) is in a file, so whoever edits a config can find it.
               # Loaded last: an app file cannot shadow a variable by accident.
               - $values/gitops/helm-values/server1/apps/vars/common.yaml
@@ -45,7 +45,7 @@ spec:
           ref: values
         - repoURL: https://github.com/radoslavirha/homelab
           targetRevision: HEAD
-          path: gitops/k8s-manifests/{{cluster}}/knowledge-base/{{env}}
+          path: gitops/k8s-manifests/{{cluster}}/knowledge-base-mcp/{{env}}
       destination:
         server: '{{clusterServer}}'
         namespace: '{{env}}'

@@ -96,8 +96,8 @@ every namespace. Verified working in all four namespaces; a `curl --cacert /ca/c
 | `knowledge-base-api` (production only) | Postgres (`postgres` namespace, CNPG) | TCP 5432 | `NetworkPolicy.egress-knowledge-base-api.yaml` |
 | `knowledge-base-api` | Alloy (OTLP) | TCP 4318 | same |
 | `knowledge-base-api` | `192.168.1.201` — server2's Traefik, i.e. Ollama | TCP 443 | `NetworkPolicy.egress-lan-ollama.yaml` |
-| `knowledge-base` — the MCP server (production only) | `knowledge-base-api` pods, in-cluster | TCP 4000 | `NetworkPolicy.egress-knowledge-base.yaml` |
-| `knowledge-base` | Alloy (OTLP) | TCP 4318 | same |
+| `knowledge-base-mcp` — the MCP server (production only) | `knowledge-base-api` pods, in-cluster | TCP 4000 | `NetworkPolicy.egress-knowledge-base-mcp.yaml` |
+| `knowledge-base-mcp` | Alloy (OTLP) | TCP 4318 | same |
 | `qr-manager-ui` | *(nothing)* | — | static SPA; DNS and internet only, from the namespace-wide rules |
 
 ### Ingress

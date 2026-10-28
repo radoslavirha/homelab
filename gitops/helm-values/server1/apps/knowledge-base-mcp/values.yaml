@@ -1,4 +1,4 @@
-# knowledge-base — shared base values (the knowledge-base MCP server)
+# knowledge-base-mcp — shared base values (the knowledge-base MCP server)
 # Env-specific: image.tag, templates.config (content + secrets) → values-production.yaml.
 # Production only (see the ApplicationSet).
 
@@ -7,7 +7,7 @@
 annotations:
   reloader.stakater.com/auto: "true"
 image:
-  repository: ghcr.io/radoslavirha/knowledge-base
+  repository: ghcr.io/radoslavirha/knowledge-base-mcp
   pullPolicy: Always
 # Stateless (no MCP sessions, any replica answers any request), so a second replica would be
 # safe; one is enough for one person's agents.
@@ -67,7 +67,7 @@ services:
 #
 # Every endpoint demands a token (OAuth resource server, Authentik); /health/* is the only open
 # path. The Protected Resource Metadata sits outside /kb by RFC 9728 and has its own route in
-# gitops/k8s-manifests/server1/knowledge-base/production/.
+# gitops/k8s-manifests/server1/knowledge-base-mcp/production/.
 ingress:
   enabled: true
   serviceRef: http

@@ -191,11 +191,11 @@ applications:
       - { cluster: server1, stage: production }
       - { stage: local }
 
-  - name: kb-development
+  - name: knowledge-base-mcp-development
     title: Knowledge Base MCP (development)
     # The knowledge-base MCP server's /kb/development endpoint, as an OAuth resource server:
     # MCP clients present a token whose `aud` names this application. Nobody logs in HERE --
-    # people log in through `knowledge-base-clients` below -- so the redirect derived from
+    # people log in through `knowledge-base-mcp-clients` below -- so the redirect derived from
     # the host is nominal, like knowledge-base-api's. The host is the endpoint's own public
     # URL (apex tier: it is meant to be published), so the nominal values at least name the
     # real resource.
@@ -252,7 +252,7 @@ applications:
       - { cluster: server3, stage: production }
       - { stage: local }
 
-  - name: knowledge-base-clients
+  - name: knowledge-base-mcp-clients
     title: Knowledge Base MCP clients
     kind: client
     # ONE registration shared by every MCP client app (Claude Code first): issuer_mode is
@@ -262,9 +262,9 @@ applications:
     # apps cannot be revoked one by one -- a person is, through the gate group.
     #
     # Public + PKCE, no secret -- Postman's shape. The client app is configured with
-    # client_id `knowledge-base-clients` and asks for `openid profile email roles`: without
-    # `profile` the `aud` is not widened to kb-development, without `roles` there is no role.
-    accesses: [kb-development]
+    # client_id `knowledge-base-mcp-clients` and asks for `openid profile email roles`: without
+    # `profile` the `aud` is not widened to knowledge-base-mcp-development, without `roles` there is no role.
+    accesses: [knowledge-base-mcp-development]
     # Matched strictly, port included.
     redirectUris:
       # Claude Code. It picks a random loopback port unless pinned (--callback-port 33418).
@@ -273,8 +273,40 @@ applications:
       # blank). Their OAuth runs in Anthropic's cloud, which sends the code here; Anthropic's
       # connector docs name this one URI for all three.
       - https://claude.ai/api/mcp/auth_callback
-    # The access gate, as on postman: `knowledge-base-clients-user`. Membership means "may
-    # hold this token"; what it may do still comes from kb-development's own role group.
+    # The access gate, as on postman: `knowledge-base-mcp-clients-user`. Membership means "may
+    # hold this token"; what it may do still comes from knowledge-base-mcp-development's own role group.
+    roles:
+      - user
+    environments:
+      - { cluster: server1, stage: production }
+      - { stage: local }
+
+  # ---------- retired 2026-10-28: renamed to knowledge-base-mcp-development / -clients ----------
+  # Blueprints do not prune, so the old objects are deleted by `state: absent` (two-commit
+  # removal, see the chart). Kept exactly as they were apart from `state`: `roles` and
+  # `environments` are how the chart finds the slugs and groups to delete. Drop both entries
+  # once an apply has landed.
+  - name: kb-development
+    title: Knowledge Base MCP (development)
+    state: absent
+    host: mcp.irha.cz
+    basePath: /kb/development
+    roles:
+      - name: editor
+        inherits: reader
+      - name: reader
+    environments:
+      - { cluster: server1, stage: production }
+      - { stage: local }
+
+  - name: knowledge-base-clients
+    title: Knowledge Base MCP clients
+    kind: client
+    state: absent
+    accesses: [kb-development]
+    redirectUris:
+      - http://localhost:33418/callback
+      - https://claude.ai/api/mcp/auth_callback
     roles:
       - user
     environments:
@@ -600,14 +632,14 @@ applications:
   - name: knowledge-base-mcp
     title: Knowledge Base MCP server
     kind: device
-    # The knowledge-base MCP server (homelab-apps mcp/knowledge-base), calling
+    # The knowledge-base MCP server (homelab-apps mcp/knowledge-base-mcp), calling
     # knowledge-base-api as ITSELF -- for every knowledge base it serves, not one. Not
     # hardware: kind device is the matrix's client_credentials client. The server may not
     # forward the token its own MCP client sent -- the MCP authorization spec forbids token
     # passthrough, and that token's audience is the server, not this API.
     #
     # editor is the whole grant: search, read and the write routes. Who may write is decided
-    # one step earlier, by the caller's role on the MCP endpoint (kb-development.editor);
+    # one step earlier, by the caller's role on the MCP endpoint (knowledge-base-mcp-development.editor);
     # this client only has to be allowed to carry the write through. Reindexing (admin)
     # stays with a human.
     #

@@ -8,7 +8,7 @@
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
-  name: knowledge-base-oauth-metadata
+  name: knowledge-base-mcp-oauth-metadata
   namespace: production
   annotations:
     argocd.argoproj.io/sync-wave: "100"
@@ -28,8 +28,8 @@ spec:
           extensionRef:
             group: traefik.io
             kind: Middleware
-            name: knowledge-base-middleware-oauth-metadata
+            name: knowledge-base-mcp-middleware-oauth-metadata
       backendRefs:
-        - name: mcp-knowledge-base-knowledge-base-http
+        - name: mcp-knowledge-base-knowledge-base-mcp-http
           namespace: production
           port: 80

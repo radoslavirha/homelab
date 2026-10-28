@@ -23,7 +23,7 @@ spec:
     - from:
         - podSelector:
             matchLabels:
-              app.kubernetes.io/name: knowledge-base
+              app.kubernetes.io/name: knowledge-base-mcp
       ports:
         - protocol: TCP
           port: 4000
