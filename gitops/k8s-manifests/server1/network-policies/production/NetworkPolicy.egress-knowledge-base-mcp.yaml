@@ -12,12 +12,12 @@
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: allow-egress-knowledge-base
+  name: allow-egress-knowledge-base-mcp
   namespace: production
 spec:
   podSelector:
     matchLabels:
-      app.kubernetes.io/name: knowledge-base
+      app.kubernetes.io/name: knowledge-base-mcp
   policyTypes:
     - Egress
   egress:
