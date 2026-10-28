@@ -281,38 +281,6 @@ applications:
       - { cluster: server1, stage: production }
       - { stage: local }
 
-  # ---------- retired 2026-10-28: renamed to knowledge-base-mcp-development / -clients ----------
-  # Blueprints do not prune, so the old objects are deleted by `state: absent` (two-commit
-  # removal, see the chart). Kept exactly as they were apart from `state`: `roles` and
-  # `environments` are how the chart finds the slugs and groups to delete. Drop both entries
-  # once an apply has landed.
-  - name: kb-development
-    title: Knowledge Base MCP (development)
-    state: absent
-    host: mcp.irha.cz
-    basePath: /kb/development
-    roles:
-      - name: editor
-        inherits: reader
-      - name: reader
-    environments:
-      - { cluster: server1, stage: production }
-      - { stage: local }
-
-  - name: knowledge-base-clients
-    title: Knowledge Base MCP clients
-    kind: client
-    state: absent
-    accesses: [kb-development]
-    redirectUris:
-      - http://localhost:33418/callback
-      - https://claude.ai/api/mcp/auth_callback
-    roles:
-      - user
-    environments:
-      - { cluster: server1, stage: production }
-      - { stage: local }
-
   - name: argocd
     title: ArgoCD
     # Explicit host, same reasoning as homelab-dashboard: server3 is the control
