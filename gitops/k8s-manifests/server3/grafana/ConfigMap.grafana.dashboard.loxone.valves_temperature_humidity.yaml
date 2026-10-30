@@ -407,11 +407,69 @@ data:
                     }
                   }
                 ]
+              },
+              {
+                "matcher": {
+                  "id": "byFrameRefID",
+                  "options": "C"
+                },
+                "properties": [
+                  {
+                    "id": "displayName",
+                    "value": "24H average ${__field.labels.room}"
+                  },
+                  {
+                    "id": "custom.lineStyle",
+                    "value": {
+                      "dash": [
+                        10,
+                        10
+                      ],
+                      "fill": "dash"
+                    }
+                  },
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "dark-green",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byFrameRefID",
+                  "options": "D"
+                },
+                "properties": [
+                  {
+                    "id": "displayName",
+                    "value": "Fan stop level ${__field.labels.room}"
+                  },
+                  {
+                    "id": "custom.lineStyle",
+                    "value": {
+                      "dash": [
+                        2,
+                        6
+                      ],
+                      "fill": "dot"
+                    }
+                  },
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "dark-orange",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
               }
             ]
           },
           "gridPos": {
-            "h": 15,
+            "h": 11,
             "w": 16,
             "x": 0,
             "y": 16
@@ -448,10 +506,168 @@ data:
               "hide": false,
               "query": "lastKnown = from(bucket:\"${bucket}\")\n  |> range(start: -14d, stop: v.timeRangeStart)\n  |> filter(fn: (r) => r._measurement == \"loxone_desired\")\n  |> filter(fn: (r) => r._field == \"humidity\")\n  |> filter(fn: (r) => r.room =~ /${rooms:regex}/)\n  |> last()\n\ncurrent = from(bucket:\"${bucket}\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"loxone_desired\" )\n  |> filter(fn: (r) => r._field == \"humidity\")\n  |> filter(fn: (r) => r.room =~ /${rooms:regex}/)\n\nunion(tables: [lastKnown, current])\n  |> aggregateWindow(every: 5m, fn: last, createEmpty: true)\n  |> fill(usePrevious: true)",
               "refId": "B"
+            },
+            {
+              "datasource": {
+                "type": "influxdb",
+                "uid": "${datasource}"
+              },
+              "hide": false,
+              "query": "from(bucket:\"${bucket}\")\n|> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n|> filter(fn: (r) => r._measurement == \"loxone_touch\" )\n|> filter(fn: (r) => r._field == \"humidity_avg_24\")\n|> filter(fn: (r) => r.room =~ /${rooms:regex}/)",
+              "refId": "C"
+            },
+            {
+              "datasource": {
+                "type": "influxdb",
+                "uid": "${datasource}"
+              },
+              "hide": false,
+              "query": "from(bucket:\"${bucket}\")\n|> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n|> filter(fn: (r) => r._measurement == \"loxone_touch\" )\n|> filter(fn: (r) => r._field == \"humidity_avg_24\")\n|> filter(fn: (r) => r.room =~ /${rooms:regex}/)\n|> map(fn: (r) => ({r with _value: r._value + 3.0}))",
+              "refId": "D"
             }
           ],
           "title": "Humidity",
           "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "influxdb",
+            "uid": "${datasource}"
+          },
+          "description": "Actual fan state, and what the shower-detection program requests (auto). state=1 with auto=0 means manual.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "custom": {
+                "fillOpacity": 80,
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": false,
+                "lineWidth": 0,
+                "spanNulls": false
+              },
+              "mappings": [
+                {
+                  "options": {
+                    "0": {
+                      "index": 0,
+                      "text": "off"
+                    },
+                    "1": {
+                      "index": 1,
+                      "text": "on"
+                    }
+                  },
+                  "type": "value"
+                }
+              ],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "transparent",
+                    "value": 0
+                  },
+                  {
+                    "color": "blue",
+                    "value": 0.01
+                  }
+                ]
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byFrameRefID",
+                  "options": "A"
+                },
+                "properties": [
+                  {
+                    "id": "displayName",
+                    "value": "Fan ${__field.labels.room}"
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byFrameRefID",
+                  "options": "B"
+                },
+                "properties": [
+                  {
+                    "id": "displayName",
+                    "value": "Auto request ${__field.labels.room}"
+                  },
+                  {
+                    "id": "thresholds",
+                    "value": {
+                      "mode": "absolute",
+                      "steps": [
+                        {
+                          "color": "transparent",
+                          "value": 0
+                        },
+                        {
+                          "color": "orange",
+                          "value": 0.01
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 16,
+            "x": 0,
+            "y": 27
+          },
+          "id": 4,
+          "options": {
+            "alignValue": "left",
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": false
+            },
+            "mergeValues": true,
+            "rowHeight": 0.8,
+            "showValue": "never",
+            "tooltip": {
+              "hideZeros": false,
+              "mode": "single",
+              "sort": "none"
+            }
+          },
+          "pluginVersion": "12.3.0",
+          "targets": [
+            {
+              "datasource": {
+                "type": "influxdb",
+                "uid": "${datasource}"
+              },
+              "query": "from(bucket:\"${bucket}\")\n|> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n|> filter(fn: (r) => r._measurement == \"loxone_fan\" )\n|> filter(fn: (r) => r._field == \"state\")\n|> filter(fn: (r) => r.room =~ /${rooms:regex}/)",
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "influxdb",
+                "uid": "${datasource}"
+              },
+              "hide": false,
+              "query": "from(bucket:\"${bucket}\")\n|> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n|> filter(fn: (r) => r._measurement == \"loxone_fan\" )\n|> filter(fn: (r) => r._field == \"auto\")\n|> filter(fn: (r) => r.room =~ /${rooms:regex}/)",
+              "refId": "B"
+            }
+          ],
+          "title": "Fan",
+          "type": "state-timeline"
         },
         {
           "datasource": {
