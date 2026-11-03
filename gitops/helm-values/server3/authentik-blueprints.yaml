@@ -265,6 +265,11 @@ applications:
     # client_id `knowledge-base-mcp-clients` and asks for `openid profile email roles`: without
     # `profile` the `aud` is not widened to knowledge-base-mcp-development, without `roles` there is no role.
     accesses: [knowledge-base-mcp-development]
+    # Refresh tokens, unlike postman. These clients keep their tokens in Anthropic's cloud (Claude
+    # on the web, desktop, phone) or in Claude Code, never in a page's JavaScript, and without a
+    # refresh token every 30-minute access token expiry is a reconnect prompt. Needs the MCP
+    # server to advertise `offline_access` in its scopes (homelab-apps), or clients never ask for it.
+    refreshToken: true
     # Matched strictly, port included.
     redirectUris:
       # Claude Code. It picks a random loopback port unless pinned (--callback-port 33418).

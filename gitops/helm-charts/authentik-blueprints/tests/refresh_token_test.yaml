@@ -1,0 +1,74 @@
+suite: refreshToken opt-in
+templates:
+  - templates/configmap.yaml
+tests:
+  - it: gives a kind client the refresh_token grant, the offline_access scope and a validity when it opts in
+    set:
+      applications:
+        - name: qr-manager
+          title: QR Manager
+          hostPrefix: apps
+          roles: [reader]
+          environments:
+            - { cluster: server1, stage: production }
+        - name: mcp-clients
+          title: MCP clients
+          kind: client
+          refreshToken: true
+          accesses: [qr-manager]
+          redirectUris: [https://claude.ai/api/mcp/auth_callback]
+          roles: [user]
+          environments:
+            - { cluster: server1, stage: production }
+    asserts:
+      - matchRegex:
+          path: data["homelab-applications.yaml"]
+          pattern: "client_id: mcp-clients\\n[\\s\\S]*?grant_types:\\n\\s+- authorization_code\\n(\\s+#.*\\n)*\\s+- refresh_token\\n"
+      - matchRegex:
+          path: data["homelab-applications.yaml"]
+          pattern: "client_id: mcp-clients\\n[\\s\\S]*?refresh_token_validity: days=30\\n"
+      - matchRegex:
+          path: data["homelab-applications.yaml"]
+          pattern: "client_id: mcp-clients\\n[\\s\\S]*?scope-offline_access\\]\\]"
+
+  - it: leaves a kind client without the opt-in on authorization_code alone
+    set:
+      applications:
+        - name: qr-manager
+          title: QR Manager
+          hostPrefix: apps
+          roles: [reader]
+          environments:
+            - { cluster: server1, stage: production }
+        - name: postman
+          title: Postman
+          kind: client
+          accesses: [qr-manager]
+          redirectUris: [http://localhost:33418/callback]
+          roles: [user]
+          environments:
+            - { cluster: server1, stage: production }
+    asserts:
+      - notMatchRegex:
+          path: data["homelab-applications.yaml"]
+          pattern: "client_id: postman\\n[\\s\\S]*?\\n\\s+- refresh_token\\n"
+      - notMatchRegex:
+          path: data["homelab-applications.yaml"]
+          pattern: "scope-offline_access"
+      - notMatchRegex:
+          path: data["homelab-applications.yaml"]
+          pattern: "refresh_token_validity"
+
+  - it: refuses refreshToken on an api
+    set:
+      applications:
+        - name: qr-manager
+          title: QR Manager
+          hostPrefix: apps
+          refreshToken: true
+          roles: [reader]
+          environments:
+            - { cluster: server1, stage: production }
+    asserts:
+      - failedTemplate:
+          errorMessage: "application \"qr-manager\" sets `refreshToken: true` but is kind \"api\": only kind client can opt in -- api serves a browser SPA that must not hold a long-lived credential, a device renews with client_credentials, and a proxy's session is Authentik's own"
