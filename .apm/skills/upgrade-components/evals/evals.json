@@ -11,7 +11,7 @@
         "Treats an IM whose image is not v1.12.1 and still lists engines as stale",
         "States that rollout restart / deleting a pod alone does not detach the volume on a single-node cluster",
         "Maps the stale IM to its volumes and the pods mounting them before deleting anything",
-        "Asks the operator before the detach and takes a dump-all.sh dump first",
+        "Asks the operator before the detach and takes a manual dump first",
         "Uses cordon, not drain, and uncordons only after every volume reads detached",
         "Stops and waits for the operator to unseal OpenBao when server3 is involved, then force-syncs an ExternalSecret and checks refreshTime moves",
         "Checks miot-bridge subscriptions after EMQX restarts on server1",

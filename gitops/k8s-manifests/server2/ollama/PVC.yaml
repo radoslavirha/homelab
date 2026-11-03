@@ -3,8 +3,7 @@
 #
 # Everything on this volume is re-downloadable: blobs and manifests pulled from
 # ollama.com. Losing it costs bandwidth and a wait, not data. It is NOT backed
-# up, deliberately — ~/homelab-backups/dump-all.sh takes logical dumps of
-# datastores and there is nothing logical here.
+# up, deliberately — there is nothing logical to dump here.
 #
 # ── Why a standalone PVC and not a volumeClaimTemplate ──────────────────────
 # Ollama is a Deployment, not a StatefulSet: no ordinal identity, no clustering,
