@@ -3,7 +3,7 @@
 # own pre-built frontend, so there is no nginx sidecar and no second image.
 #
 # ── The image tag is the version ────────────────────────────────────────────
-# There is no chart and no `targetRevision` to bump, so v3.29.0 below IS the
+# There is no chart and no `targetRevision` to bump, so v3.30.0 below IS the
 # pinned version of this app. Renovate sees it through the `kubernetes` manager
 # pattern for gitops/k8s-manifests/ in renovate.json5 — that manager ships no
 # default patterns, so removing the pattern makes this line silently invisible.
@@ -61,7 +61,7 @@ spec:
       # skips the chown and Mealie cannot write /app/data.
       containers:
         - name: mealie
-          image: ghcr.io/mealie-recipes/mealie:v3.29.0
+          image: ghcr.io/mealie-recipes/mealie:v3.30.0
           ports:
             - name: http
               # 9000 is Mealie's API_PORT default and upstream says not to change
@@ -253,6 +253,10 @@ spec:
               value: "false"
             #
             # ── AI prompt overrides ─────────────────────────────────────────
+            # v3.30.0 REMOVED this variable: prompts live in the database and are
+            # edited in-app. The v3.30.0 migration reads it ONCE to import the files
+            # below as overrides, so it must stay through the first v3.30.0 boot.
+            # Afterwards drop this env var, the mount, and ConfigMap.prompts.yaml.
             # Files here REPLACE the matching built-in prompt (no merging);
             # missing ones fall back to upstream. See ConfigMap.prompts.yaml.
             # Mounted outside /app on purpose: docker/entry.sh runs
