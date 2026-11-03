@@ -34,7 +34,5 @@ spec:
       # that starts feeding it PDFs will find 10Gi small. Longhorn expands online
       # if it turns out to be low.
       #
-      # NOT backed up by anything today: there is no Longhorn backupTarget in this
-      # fleet, and ~/homelab-backups/dump-all.sh takes logical dumps only. Adding
-      # this path to that script is a known follow-up, shared with Mealie's PVC.
+      # NOT backed up by anything: there is no Longhorn backupTarget in this fleet.
       storage: 20Gi

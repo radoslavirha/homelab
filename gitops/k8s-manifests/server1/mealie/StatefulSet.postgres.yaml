@@ -4,10 +4,8 @@
 # ── Why PostgreSQL at all, when Mealie defaults to SQLite ───────────────────
 # Mealie has no supported SQLite -> PostgreSQL migration; PostgreSQL ->
 # PostgreSQL is a pg_dump and a restore. Starting on SQLite would mean either
-# living with it forever or hand-writing a migration later. It also fits the
-# backup path that already exists: ~/homelab-backups/dump-all.sh (outside this
-# repo) already runs pg_dump for Authentik, so this database joins a road that
-# is built, where a SQLite file would need a new one.
+# living with it forever or hand-writing a migration later. It also keeps the
+# data dumpable with plain pg_dump, where a SQLite file would need its own path.
 #
 # ── Why it is HERE and not a fleet-wide PostgreSQL ──────────────────────────
 # A shared PostgreSQL with per-app credential provisioning — the shape the
@@ -136,7 +134,6 @@ spec:
             # in here. Longhorn volumes expand online, so this errs small.
             #
             # NOTE: this volume is NOT covered by any Longhorn backup —
-            # backupTarget is "" fleet-wide and there are no RecurringJobs. Its
-            # only offsite copy is a logical pg_dump, which is a FOLLOW-UP: this
-            # database is not in ~/homelab-backups/dump-all.sh yet.
+            # backupTarget is "" fleet-wide and there are no RecurringJobs. Take a
+            # pg_dump by hand before anything irreversible.
             storage: 5Gi

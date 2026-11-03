@@ -134,24 +134,16 @@ to `argocd.server3.homelab.irha.cz` first.
 
 ## Backups
 
-**Take a dump before anything that cannot be rolled back.** Longhorn has no downgrade path, Kubernetes
-has no downgrade path, and there is no volume-level restore.
+**Nothing backs this up.** Longhorn has no backups: `backupTarget` is `""`, there are no RecurringJobs or Snapshots, and no CSI snapshotter, so
+there is no volume-level restore. Longhorn and Kubernetes have no downgrade path.
 
-```bash
-~/homelab-backups/dump-all.sh     # lives OUTSIDE this repo; credentials come from ./.env
-```
+**Take a dump by hand before anything that cannot be rolled back**, of whatever the change can touch:
+`talosctl etcd snapshot` per cluster, `pg_dump` (Authentik, Mealie, Open WebUI), `mongodump`,
+`influx backup`, `bao operator raft snapshot` (needs OpenBao unsealed, so before, not after).
 
-It dumps etcd on all three clusters, the Authentik Postgres, MongoDB, InfluxDB and an OpenBao raft
-snapshot, writes `SHA256SUMS`, uploads offsite and verifies the remote copy. **It is run by hand —
-nothing schedules it**, so check the date of the newest directory in `~/homelab-backups/` before
-trusting it. Automating it is open work; the script is a stopgap.
-
-- **Not a Longhorn backup.** `backupTarget` is `""`, there are no RecurringJobs or Snapshots, and no
-  CSI snapshotter. These are logical dumps — a rebuild path, not high availability. MinIO was dropped
-  as a backup destination; do not re-propose it.
-- **Not complete.** Prometheus, Loki, Tempo, Grafana and EMQX are excluded on purpose: reconstructible
-  telemetry, provisioned from git, and broker runtime state. Mealie's and Open WebUI's Postgres are not
-  dumped yet. Per-cluster table: [docs/architecture.md](docs/architecture.md).
+- MinIO was dropped as a backup destination; do not re-propose it.
+- Prometheus, Loki, Tempo, Grafana and EMQX need no dump: reconstructible telemetry, provisioned from
+  git, and broker runtime state. Per-cluster table: [docs/architecture.md](docs/architecture.md).
 
 ## Task index
 

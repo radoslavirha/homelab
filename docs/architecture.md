@@ -197,25 +197,21 @@ OpenBao is a prerequisite for External Secrets Operator across all clusters. If 
 
 Longhorn provides durable PersistentVolumes for OpenBao. The overhead (≈500 MB RAM, single replica) is acceptable on server3's 16 GB.
 
-**There are no Longhorn-level backups, but there are offsite logical dumps.** Keep the two apart — they fail differently.
+**There are no backups of any kind.**
 
-*Longhorn side, unchanged:* `backupTarget` is `""` in [longhorn.yaml](../iac/clusters/helm-values/longhorn.yaml), the `default` BackupTarget reports `available: false` on all three clusters, and there are zero RecurringJobs, Backups and Snapshots fleet-wide. The CSI snapshotter is not installed, so `VolumeSnapshot` is not a served resource. **There is no volume-level restore and no point-in-time snapshot of a PVC.**
+`backupTarget` is `""` in [longhorn.yaml](../iac/clusters/helm-values/longhorn.yaml), the `default` BackupTarget reports `available: false` on all three clusters, and there are zero RecurringJobs, Backups and Snapshots fleet-wide. The CSI snapshotter is not installed, so `VolumeSnapshot` is not a served resource. **There is no volume-level restore and no point-in-time snapshot of a PVC.** The offsite logical dumps that briefly existed (September 2026) were a stopgap script and have been retired; nothing replaced them.
 
-*What does exist, since 2026-09-07:* `~/homelab-backups/dump-all.sh` takes application-level dumps and uploads them to Cloudflare R2 (~300 MB), checksummed under `SHA256SUMS` and pruned on a retention window. It is run by hand, not scheduled — so its freshness is only ever as good as the last run.
+What is worth a hand-taken dump before irreversible work:
 
-| Cluster | Covered by the offsite dumps | **Not** covered |
+| Cluster | Worth dumping | Reconstructible (no dump needed) |
 |---|---|---|
-| server1 | InfluxDB2 25Gi · MongoDB 10Gi · etcd | EMQX 20Mi · Mealie data 10Gi · Mealie PostgreSQL 5Gi · Open WebUI data 20Gi · Open WebUI PostgreSQL 10Gi |
-| server2 | etcd | Ollama models 100Gi — re-pullable from upstream, so deliberately excluded |
-| server3 | OpenBao 10Gi (raft snapshot) · Authentik PostgreSQL 10Gi · etcd | Prometheus 20Gi · Loki 20Gi · Tempo 20Gi · Grafana 5Gi |
+| server1 | InfluxDB2 25Gi · MongoDB 10Gi · Mealie data 10Gi + PostgreSQL 5Gi · Open WebUI data 20Gi + PostgreSQL 10Gi · etcd | EMQX 20Mi — broker runtime state, not configuration |
+| server2 | etcd | Ollama models 100Gi — re-pullable from upstream |
+| server3 | OpenBao 10Gi (raft snapshot) · Authentik PostgreSQL 10Gi · etcd | Prometheus 20Gi · Loki 20Gi · Tempo 20Gi (reconstructible telemetry) · Grafana 5Gi (provisioned from git) |
 
-The server3 exclusions are deliberate: Prometheus, Loki and Tempo hold reconstructible telemetry, and Grafana is fully provisioned from git. EMQX's 20Mi is broker runtime state, not configuration.
+Every PVC is single-replica on one node, so a lost disk loses the volume — nothing is copied elsewhere.
 
-Mealie's and Open WebUI's four volumes are the gap that is *not* deliberate — they are simply newer than the script. Both databases are a plain `pg_dump` away from fitting the path that already dumps Authentik's PostgreSQL, and the two data volumes (recipe images; uploads and RAG source documents) need a file copy. Adding all four to `~/homelab-backups/dump-all.sh` is an open follow-up; until then, recipes and chat history exist on one disk only.
-
-Every PVC is still single-replica on one node, so a lost disk still loses the volume — the dumps are a rebuild path, not high availability.
-
-The originally intended design was Longhorn `backupTarget` pointing at MinIO on the same cluster, which is why MinIO appears in the bootstrap notes. **That was dropped, not deferred** — same-cluster backups would not survive the node, which is exactly the failure these single-control-plane clusters are most exposed to. Offsite dumps replaced it; do not re-propose MinIO as a backup destination.
+The originally intended design was Longhorn `backupTarget` pointing at MinIO on the same cluster, which is why MinIO appears in the bootstrap notes. **That was dropped, not deferred** — same-cluster backups would not survive the node, which is exactly the failure these single-control-plane clusters are most exposed to. Do not re-propose MinIO as a backup destination.
 
 Stated so it is not rediscovered under pressure: any Longhorn or Talos upgrade, and any OpenBao upgrade, is currently a one-way door. Take a manual snapshot or dump first — there is nothing to roll back to.
 

@@ -32,7 +32,5 @@ spec:
       # 10Gi — sized for recipe images at a few hundred KB each. Longhorn
       # expands online if it turns out to be low.
       #
-      # NOT backed up by anything today: there is no Longhorn backupTarget in
-      # this fleet, and ~/homelab-backups/dump-all.sh takes logical dumps only.
-      # Adding /app/data to that script is a known follow-up.
+      # NOT backed up by anything: there is no Longhorn backupTarget in this fleet.
       storage: 10Gi

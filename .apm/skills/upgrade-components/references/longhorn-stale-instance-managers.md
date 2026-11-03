@@ -32,7 +32,7 @@ the VolumeAttachment is kept, and the volume never detaches — server3 Grafana 
 ```
 Stale IM cleanup:
 - [ ] 1. Detection run on server1, server2, server3; stale IMs and their volumes listed
-- [ ] 2. Operator agreed to the downtime; fresh dump-all.sh dump taken
+- [ ] 2. Operator agreed to the downtime; fresh manual dump taken
 - [ ] 3. Per cluster (server2 → server1 → server3): cordon → delete pods → all detached → uncordon
 - [ ] 4. server3: OpenBao unsealed by the operator; one ExternalSecret per cluster force-synced
 - [ ] 4. server1: miot-bridge subscriptions checked after EMQX restart
@@ -70,11 +70,7 @@ No stale IM anywhere → done; skip the rest.
 
 Every listed pod goes down for 15–40 s, datastores included, and on server3 OpenBao seals. **Ask the
 operator first**, and only proceed once they confirm they can unseal OpenBao now if server3 is on the
-list. Then take a dump (AGENTS.md § Backups) — it needs OpenBao unsealed, so do it before, not after:
-
-```bash
-~/homelab-backups/dump-all.sh
-```
+list. Then take a dump (AGENTS.md § Backups) — it needs OpenBao unsealed, so do it before, not after.
 
 ## 3. Detach, one cluster at a time
 

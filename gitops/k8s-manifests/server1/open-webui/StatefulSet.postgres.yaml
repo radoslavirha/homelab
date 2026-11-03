@@ -161,7 +161,6 @@ spec:
             # volumes expand online, so this errs small.
             #
             # NOTE: this volume is NOT covered by any Longhorn backup --
-            # backupTarget is "" fleet-wide and there are no RecurringJobs. Its
-            # only offsite copy is a logical pg_dump, and adding this database to
-            # ~/homelab-backups/dump-all.sh (outside this repo) is a FOLLOW-UP.
+            # backupTarget is "" fleet-wide and there are no RecurringJobs. Take a
+            # pg_dump by hand before anything irreversible.
             storage: 10Gi
