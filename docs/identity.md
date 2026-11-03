@@ -423,6 +423,13 @@ What the chart does with it:
 - **No `refresh_token`.** Nothing here introspects; every verifier checks the signature offline, so
   expiry is the only revocation there is, and a refresh token would make a credential worth N APIs
   effectively permanent. Log in again when it expires.
+  The exception is `refreshToken: true` (kind `client` only), set on `knowledge-base-mcp-clients`:
+  its tokens live in Anthropic's cloud or in Claude Code, not in a page's JavaScript, and a 30-minute
+  login there meant a reconnect prompt every half hour. It adds the `refresh_token` grant, binds the
+  `offline_access` scope mapping and sets `refresh_token_validity` (`refreshTokenValidity`, default
+  `days=30`, rotated on use, so an idle limit). Revocation becomes: disable the user or drop them from
+  the gate group, and the next refresh is refused. The client still has to ask for `offline_access`,
+  which it does only if the MCP server advertises it in its scopes (homelab-apps).
 - **No `meta_launch_url`, no logout URI, no host.** The callback belongs to the tool, via `redirectUris`.
 
 **One client, every environment.** A `client` or `device` entry renders exactly one Application whose

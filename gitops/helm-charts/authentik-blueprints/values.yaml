@@ -32,6 +32,11 @@ signingKeyName: authentik Self-signed Certificate
 accessCodeValidity: minutes=1
 accessTokenValidity: minutes=30
 
+# Refresh token lifetime for a kind: client that sets `refreshToken: true` (MCP client apps,
+# whose tokens never sit in a browser). Authentik rotates the token on every use, so this
+# is the idle limit: an app unused for this long needs a fresh browser login.
+refreshTokenValidity: days=30
+
 # Token lifetime for kind: device providers, overridable per device with
 # `accessTokenValidity`.
 #

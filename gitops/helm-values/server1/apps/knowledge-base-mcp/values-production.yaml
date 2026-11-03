@@ -7,6 +7,10 @@
 # identifier is publicURL + its path — https://mcp.irha.cz/kb/development — and MCP clients
 # refuse a server whose metadata names any other URL than the one they connected to.
 #
+# `scopes` adds offline_access to the default four: advertised in the metadata and the 401 challenge,
+# it is what makes Claude's connectors ask Authentik for a refresh token (blueprint `refreshToken: true`
+# on knowledge-base-mcp-clients); without it every 30-minute access token expiry is a reconnect.
+#
 # Two Authentik clients, two directions:
 #   - inbound, people: tokens from the shared client registration `knowledge-base-mcp-clients`, for
 #     the endpoint's application `knowledge-base-mcp-development` in this environment
@@ -51,7 +55,8 @@ templates:
                       "roles": {
                           "READER": "knowledge-base-mcp-development.reader",
                           "EDITOR": "knowledge-base-mcp-development.editor"
-                      }
+                      },
+                      "scopes": ["openid", "profile", "email", "roles", "offline_access"]
                   }
               }
           },

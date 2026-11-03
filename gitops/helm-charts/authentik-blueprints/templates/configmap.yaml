@@ -294,6 +294,9 @@ data:
       {{- if and $a.confidential (ne $kind "api") }}
         {{- fail (printf "application %q sets `confidential: true` but is kind %q: only kind api can be confidential -- client is deliberately always public (see its own reasoning in values), device is already confidential by definition, and a proxy's OAuth2 side is set by Authentik itself" $a.name $kind) }}
       {{- end }}
+      {{- if and $a.refreshToken (ne $kind "client") }}
+        {{- fail (printf "application %q sets `refreshToken: true` but is kind %q: only kind client can opt in -- api serves a browser SPA that must not hold a long-lived credential, a device renews with client_credentials, and a proxy's session is Authentik's own" $a.name $kind) }}
+      {{- end }}
       {{- if eq $kind "api" }}
         {{- if $a.accesses }}
           {{- fail (printf "application %q declares `accesses` but is kind api: an application that calls other applications' APIs is kind client (a human drives it) or kind device (a machine does)" $a.name) }}
@@ -845,7 +848,7 @@ data:
         {{- else }}
           grant_types:
             - authorization_code
-          {{- if $app.accesses }}
+          {{- if and $app.accesses (not $app.refreshToken) }}
             # No refresh_token, deliberately. This client's token is addressed to several
             # APIs at once and nothing in this design introspects -- every verifier checks
             # the signature offline -- so expiry is the ONLY revocation there is. A refresh
@@ -854,6 +857,14 @@ data:
             # and it is what keeps removing someone from a group meaningful.
           {{- else }}
             - refresh_token
+            {{- if $app.refreshToken }}
+            # Opted in with `refreshToken: true` (kind client only). The caller is an MCP
+            # client app whose tokens live in Anthropic's cloud or in Claude Code, not in a
+            # page's JavaScript, and a 30-minute login there means a reconnect prompt every
+            # half hour. The offline_access scope mapping below is what makes Authentik
+            # actually return the token. Revocation: disable the user, or drop them from the
+            # gate group -- the next refresh is refused.
+            {{- end }}
           {{- end }}
         {{- end }}
         {{- if not $isDevice }}
@@ -877,6 +888,9 @@ data:
           access_token_validity: {{ default $root.Values.deviceAccessTokenValidity $app.accessTokenValidity }}
         {{- else }}
           access_token_validity: {{ default $root.Values.accessTokenValidity $app.accessTokenValidity }}
+          {{- if $app.refreshToken }}
+          refresh_token_validity: {{ default $root.Values.refreshTokenValidity $app.refreshTokenValidity }}
+          {{- end }}
         {{- end }}
           {{- /* For a `local` environment $base is http://localhost:<port>, so these are
              the loopback URIs and there is no separate special case below.
@@ -932,6 +946,11 @@ data:
             {{- range $scope := $root.Values.scopes }}
             - !Find [authentik_providers_oauth2.scopemapping, [managed, goauthentik.io/providers/oauth2/scope-{{ $scope }}]]
             {{- end }}
+        {{- if $app.refreshToken }}
+            {{- /* Authentik returns a refresh_token only when the request asked for this scope
+               AND the provider has the mapping bound. */}}
+            - !Find [authentik_providers_oauth2.scopemapping, [managed, goauthentik.io/providers/oauth2/scope-offline_access]]
+        {{- end }}
         {{- if $app.accesses }}
             {{- /* This client's OWN copies, carrying its audience list and its role table.
                Not the shared pair -- binding both would duplicate `aud`. */}}
