@@ -143,13 +143,10 @@ lifecycle:
   preStop:
     sleep:
       seconds: 10
-# At replicas: 1 this is what makes a rollout gapless — the new pod must pass readiness
-# before the old one is torn down.
+# Not a rolling update: two pods overlapping share one MQTT client id, so EMQX kicks each off in
+# turn, and the bridge runs as a single pod by design. A rollout costs about 30 s of downtime.
 strategy:
-  type: RollingUpdate
-  rollingUpdate:
-    maxSurge: 1
-    maxUnavailable: 0
+  type: Recreate
 templates:
   config:
     file: production.json
