@@ -38,7 +38,8 @@ templates:
               "password": "{{ .secrets.mqttPassword }}",
               "topicPrefix": "{{ .app.group }}/",
               "notifications": {
-                  "enabled": true
+                  "enabled": true,
+                  "publishIntervalMs": 3000
               }
           },
           "polling": {
