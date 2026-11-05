@@ -7,7 +7,7 @@
 # root and "Try it out" drops the /kb/knowledge-base prefix.
 #
 # The repository to index is never named here: the repo is public and the name is private.
-# It comes from OpenBao (githubRepository, githubRepositoryLoxone below) and is rendered into the config.
+# It comes from OpenBao (githubRepositoryDevelopment, githubRepositoryLoxone below) and is rendered into the config.
 #
 # Embedding templates use single braces ({title}, {text}, {query}): the app fills them in,
 # and Go templates leave them alone. Changing a template or a model changes every vector —
@@ -34,7 +34,7 @@ templates:
         property: github-private-key
       # owner/name of the development knowledge base's repository. A missing property fails
       # this app's config render — docs/secrets.md.
-      githubRepository:
+      githubRepositoryDevelopment:
         key: server1/production/knowledge-base-api-github
         property: repository
       # owner/name of the loxone knowledge base's repository, same rule.
@@ -109,7 +109,7 @@ templates:
                   "models": ["embeddinggemma:300m"],
                   "readers": ["knowledge-base-api.reader"],
                   "git": {
-                      "repository": {{ .secrets.githubRepository | toJson }}
+                      "repository": {{ .secrets.githubRepositoryDevelopment | toJson }}
                   }
               },
               {

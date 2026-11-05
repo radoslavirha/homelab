@@ -375,7 +375,7 @@ bao kv get -format=json secret/server1/production/knowledge-base-api-github | jq
 
 `repository` is the `owner/name` of the `development` knowledge base's Git repository and
 `repository-loxone` that of the `loxone` one. The names are private and this repo is public, so they
-live only here. The config template reads them as `.secrets.githubRepository` and
+live only here. The config template reads them as `.secrets.githubRepositoryDevelopment` and
 `.secrets.githubRepositoryLoxone`; a missing property fails this app's config render, so the pod does
 not start. To add or change one on an entry that already exists without touching the other keys:
 
