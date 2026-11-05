@@ -3,10 +3,12 @@ name: notify-knowledge-base
 # After a push to main that touches docs, ask the private knowledge base to
 # refresh its copy of this repo's docs.
 #
-# Identity: the knowledge-base-updater GitHub App, installed on the knowledge
-# base repository and nowhere else. Its token can reach only that repository,
-# and the workflow learns the repository's name from the installation itself,
-# so the name appears neither in this public repo nor in its logs.
+# Identity: the knowledge-base-updater GitHub App. The target repository comes
+# from the Actions secret KB_UPDATER_REPOSITORY (owner/name). When that secret
+# is set, the token is narrowed to that one repository. When it is unset, the
+# App must be installed on exactly one repository and the workflow learns its
+# name from the installation itself. Either way the name appears neither in
+# this public repo nor in its logs.
 on:
   push:
     branches: [main]
@@ -42,17 +44,25 @@ jobs:
           client-id: ${{ vars.KB_UPDATER_APP_CLIENT_ID }}
           private-key: ${{ secrets.KB_UPDATER_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
+          # Empty (secret unset) keeps today's scope: the whole installation.
+          repositories: ${{ secrets.KB_UPDATER_REPOSITORY }}
 
       - name: Dispatch source-updated
         if: steps.config.outputs.enabled == 'true'
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          KB_UPDATER_REPOSITORY: ${{ secrets.KB_UPDATER_REPOSITORY }}
         run: |
-          target=$(gh api installation/repositories --jq '.repositories[].full_name')
-          echo "::add-mask::$target"
-          if [ "$(printf '%s\n' "$target" | wc -l)" -ne 1 ] || [ -z "$target" ]; then
-            echo "::error::knowledge-base-updater must be installed on exactly one repository."
-            exit 1
+          if [ -n "$KB_UPDATER_REPOSITORY" ]; then
+            target="$KB_UPDATER_REPOSITORY"
+            echo "::add-mask::$target"
+          else
+            target=$(gh api installation/repositories --jq '.repositories[].full_name')
+            echo "::add-mask::$target"
+            if [ "$(printf '%s\n' "$target" | wc -l)" -ne 1 ] || [ -z "$target" ]; then
+              echo "::error::knowledge-base-updater must be installed on exactly one repository; if it covers more than one, set the KB_UPDATER_REPOSITORY secret (owner/name)."
+              exit 1
+            fi
           fi
           gh api "repos/$target/dispatches" \
             -f event_type=source-updated \
