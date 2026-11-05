@@ -212,6 +212,21 @@ applications:
       - { cluster: server1, stage: production }
       - { stage: local }
 
+  - name: knowledge-base-mcp-loxone
+    title: Knowledge Base MCP (loxone)
+    # The /kb/loxone endpoint, shaped exactly like knowledge-base-mcp-development above: an
+    # OAuth resource server nobody logs in to, with a nominal redirect naming the real resource.
+    host: mcp.irha.cz
+    basePath: /kb/loxone
+    # reader: the read tools (search, read). editor: the write tools. No admin rung.
+    roles:
+      - name: editor
+        inherits: reader
+      - name: reader
+    environments:
+      - { cluster: server1, stage: production }
+      - { stage: local }
+
   - name: postman
     title: Postman
     kind: client
@@ -263,8 +278,8 @@ applications:
     #
     # Public + PKCE, no secret -- Postman's shape. The client app is configured with
     # client_id `knowledge-base-mcp-clients` and asks for `openid profile email roles`: without
-    # `profile` the `aud` is not widened to knowledge-base-mcp-development, without `roles` there is no role.
-    accesses: [knowledge-base-mcp-development]
+    # `profile` the `aud` is not widened to the endpoints' applications, without `roles` there is no role.
+    accesses: [knowledge-base-mcp-development, knowledge-base-mcp-loxone]
     # Refresh tokens, unlike postman. These clients keep their tokens in Anthropic's cloud (Claude
     # on the web, desktop, phone) or in Claude Code, never in a page's JavaScript, and without a
     # refresh token every 30-minute access token expiry is a reconnect prompt. Needs the MCP
@@ -279,7 +294,7 @@ applications:
       # connector docs name this one URI for all three.
       - https://claude.ai/api/mcp/auth_callback
     # The access gate, as on postman: `knowledge-base-mcp-clients-user`. Membership means "may
-    # hold this token"; what it may do still comes from knowledge-base-mcp-development's own role group.
+    # hold this token"; what it may do still comes from each endpoint application's own role group.
     roles:
       - user
     environments:
@@ -612,7 +627,7 @@ applications:
     # passthrough, and that token's audience is the server, not this API.
     #
     # editor is the whole grant: search, read and the write routes. Who may write is decided
-    # one step earlier, by the caller's role on the MCP endpoint (knowledge-base-mcp-development.editor);
+    # one step earlier, by the caller's role on the MCP endpoint (knowledge-base-mcp-<kb>.editor);
     # this client only has to be allowed to carry the write through. Reindexing (admin)
     # stays with a human.
     #

@@ -374,12 +374,14 @@ bao kv put secret/<cluster>/open-webui \
 #    knowledge-base-api's GitHub App credentials (apps stage; server1 production only).
 #      Only that app's pod waits on it — nothing else fails without it. Both values come
 #      from the App's settings page; generate a NEW private key there. `repository` is the
-#      development knowledge base's owner/name. See docs/secrets.md.
+#      development knowledge base's owner/name, `repository-loxone` the loxone one's.
+#      See docs/secrets.md.
 #      Its database password is NOT seeded: ESO generates it (server1/postgres).
 bao kv put secret/server1/production/knowledge-base-api-github \
   github-client-id=<client-id> \
   github-private-key=@<downloaded-key.pem> \
-  repository=<owner>/<name>
+  repository=<owner>/<name> \
+  repository-loxone=<owner>/<name>
 
 #    Verify all secrets are present before continuing:
 bao kv list secret/<cluster>
