@@ -15,6 +15,7 @@
 #   - inbound, people: tokens from the shared client registration `knowledge-base-mcp-clients`, for
 #     the endpoint's application `knowledge-base-mcp-development` in this environment
 #     (aud knowledge-base-mcp-development-server1-production), role knowledge-base-mcp-development.reader or .editor.
+#     Same shape for each endpoint: knowledge-base-mcp-loxone for /loxone.
 #   - outbound, the server itself: `knowledge-base-mcp` (client_credentials, role
 #     knowledge-base-api.editor) on knowledge-base-api, for every knowledge base it serves. The
 #     caller's token is never forwarded.
@@ -55,6 +56,26 @@ templates:
                       "roles": {
                           "READER": "knowledge-base-mcp-development.reader",
                           "EDITOR": "knowledge-base-mcp-development.editor"
+                      },
+                      "scopes": ["openid", "profile", "email", "roles", "offline_access"]
+                  }
+              },
+              "LOXONE_KB": {
+                  "path": "/loxone",
+                  "kb": "loxone",
+                  "name": "loxone-kb",
+                  "title": "Loxone knowledge base",
+                  "description": "Loxone home automation knowledge base: block behaviour, wiring, measured data and integration with other systems.",
+                  "auth": {
+                      "issuer": "https://auth.irha.cz/application/o/knowledge-base-mcp-clients/",
+                      "audience": "knowledge-base-mcp-loxone-{{ .vars.cluster }}-{{ .app.namespace }}",
+                      "key": {
+                          "source": "jwks",
+                          "uri": "https://auth.irha.cz/application/o/knowledge-base-mcp-clients/jwks/"
+                      },
+                      "roles": {
+                          "READER": "knowledge-base-mcp-loxone.reader",
+                          "EDITOR": "knowledge-base-mcp-loxone.editor"
                       },
                       "scopes": ["openid", "profile", "email", "roles", "offline_access"]
                   }
