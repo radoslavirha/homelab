@@ -108,6 +108,7 @@ templates:
                   "tsConfig": "english",
                   "models": ["embeddinggemma:300m"],
                   "readers": ["knowledge-base-api.reader"],
+                  "conventionsPath": "README.md",
                   "git": {
                       "repository": {{ .secrets.githubRepositoryDevelopment | toJson }}
                   }
