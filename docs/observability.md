@@ -874,8 +874,9 @@ contradicted the design:
   12 minutes later, gone only when the next sync started. A sync started from the UI had no
   retries, left the failed Job in place, and "Job failed" fired. **For hooks, "ArgoCD sync failed"
   is the alert that counts**; "Job failed" is for Jobs no sync deletes. Read the last attempt's
-  log in the cluster first. Loki has the output of earlier attempts only from the moment Alloy
-  opened the log file, so the first seconds, or a fast Job's entire output, can be missing.
+  log in the cluster first. On server1 Loki has the earlier attempts' whole output
+  (`onlyGatherNewLogLines: false`, on persistent positions). On server2 and server3 Alloy still
+  seeks to the end of a new file, so the first seconds, or a fast Job's entire output, can be missing.
 - **The counter counts operations, not attempts.** `argocd_app_sync_total` takes the operation's
   *final* phase. A failed attempt followed by a successful retry adds one `Succeeded` and no
   `Failed`, so it raises nothing.

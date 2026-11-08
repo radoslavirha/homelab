@@ -27,6 +27,13 @@ collectors:
             hostPath:
               path: /var/lib/alloy
 
+# Read a log file from its start when Alloy has no position for it. The default (true) seeks to the
+# end, so a new pod loses whatever it wrote before the tailer opened the file, up to about 5 s: all
+# of a fast hook Job's output, and the error of a container that fails at startup.
+# Depends on the persistent storage above. Without it, every Alloy replacement re-reads every log.
+podLogsViaLoki:
+  onlyGatherNewLogLines: false
+
 destinations:
   server3:
     type: otlp

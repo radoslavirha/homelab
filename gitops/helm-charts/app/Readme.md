@@ -161,7 +161,7 @@ migration:
 | `activeDeadlineSeconds` | `600` | Fails a stuck Job |
 | `resources` | the app's `resources` | Replaces them as a block |
 
-**A failure stops the rollout.** The Job has `backoffLimit: 0`, but ArgoCD retries the sync 5 times and each retry recreates the Job, so a failing command runs up to 6 times and must be safe to repeat. After that the sync ends `Failed`, the old pods keep serving and the app stays OutOfSync, because the workload at wave `0` was never applied. `BeforeHookCreation` deletes the previous attempt's Job on each retry; the last attempt's Job and pod stay until the next sync, so read its log in the cluster first. Loki has the output only from the moment Alloy opened the log file, so the first seconds, or a fast Job's entire output, can be missing. Read `status.operationState.syncResult`, not the `Synced` badge.
+**A failure stops the rollout.** The Job has `backoffLimit: 0`, but ArgoCD retries the sync 5 times and each retry recreates the Job, so a failing command runs up to 6 times and must be safe to repeat. After that the sync ends `Failed`, the old pods keep serving and the app stays OutOfSync, because the workload at wave `0` was never applied. `BeforeHookCreation` deletes the previous attempt's Job on each retry; the last attempt's Job and pod stay until the next sync, so read its log in the cluster first. Loki has the earlier attempts' output too, on server1, where apps run. Read `status.operationState.syncResult`, not the `Synced` badge.
 
 The pod is labelled `app.kubernetes.io/name` and `app.kubernetes.io/component: migration`, without `instance`: the app's NetworkPolicies apply, its Services do not route to it.
 
