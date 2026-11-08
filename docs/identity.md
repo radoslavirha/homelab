@@ -988,26 +988,16 @@ browser driven by Playwright, or curl against an API with a token from the flow 
 recipe lives in the `verifying-auth-in-browser` skill in homelab-apps. Nothing on the login surface is
 relaxed for it. Password, mandatory MFA and the reputation throttle apply exactly as to anyone else.
 
-**Nobody types its credentials.** The password and the TOTP secret live in KV at
-`secret/agents/e2e-claude` ([secrets.md](secrets.md#agentse2e-claude)). A helper on the operator's
-machine, outside this repo, does three things per run:
+**Nobody types its credentials.** The password and the TOTP secret live in a local secret store on the
+operator's machine. A helper there, outside this repo, reads them per run and hands username, password
+and TOTP secret to the one Playwright or curl process doing the login. The agent's own shell never sees
+them. The helper's header comment says how to seed or rotate them.
 
-1. Mints a 10-minute token for the `claude-e2e` ServiceAccount in `openbao` on server3, with the admin
-   kubeconfig agents already hold.
-2. Logs in to OpenBao as role `claude-e2e` on `kubernetes-server3`. The policy reads that one path, and
-   the token lives 10 minutes with no renewal.
-3. Hands username, password and TOTP secret to the one Playwright or curl process doing the login. The
-   agent's own shell never sees them.
+**Why a local store, not OpenBao.** OpenBao seals on every server3 reboot, and E2E should not stop with
+it. The trade: the credentials exist on one machine, with no audit trail of reads.
 
-**Why a ServiceAccount, not a stored OpenBao token.** A stored token is a long-lived secret on disk, and
-a periodic one dies after a month unused, which means the operator again. The ServiceAccount has no
-RBAC, so its token is good for this login and nothing else. Minting one needs the admin kubeconfig,
-which can already mint ESO's token and read everything ESO reads, so reusing it opens nothing new.
-Nothing long-lived exists outside OpenBao. The role and policy are the `kubernetes_agent_roles` input of
-the `vault-config` stage. The ServiceAccount is `gitops/k8s-manifests/server3/openbao/`.
-
-**How the TOTP works.** Authentik generated the secret at enrolment and keeps one copy; KV holds the
-other. A code is `HMAC(secret, now / 30 s)`, computed independently on both sides, so no authenticator
+**How the TOTP works.** Authentik generated the secret at enrolment and keeps one copy; the local store
+holds the other. A code is `HMAC(secret, now / 30 s)`, computed independently on both sides, so no authenticator
 app is involved unless the operator wants to log in as `claude` too (scan the same QR). Authentik
 accepts each 30-second time step **once**:
 
@@ -1022,8 +1012,7 @@ secret), the proxy gates (`longhorn-*`, `hubble-*`, `traefik-*`), or Grafana and
 
 ### Setting it up
 
-Once, after `openbao-dashboard-server3` has synced the ServiceAccount and the `vault-config` stage is
-applied.
+Once.
 
 ```
 - [ ] Authentik → Directory → Users → Create: username `claude`, a fresh random password. Not
@@ -1032,31 +1021,76 @@ applied.
 - [ ] Log in as `claude` in a private window. MFA enrolment starts: pick the authenticator app.
 - [ ] Read the `otpauth://` link out of the QR code (`zbarimg -q --raw <screenshot>`, from
       `brew install zbar`) and keep its `secret=` value.
-- [ ] Seed KV: secrets.md § agents/e2e-claude.
+- [ ] Seed the local store: the helper's header comment.
 - [ ] Finish enrolment with the code from `claude-e2e totp`, NOT from a phone app. Want `claude`
       in your app too? Scan the same QR afterwards.
 - [ ] Verify below.
 ```
 
-**Why the helper's code and not the phone's.** Only a code computed from the KV copy proves KV holds
-*this* device's secret. On 2026-10-18 the QR changed between the screenshot and the phone scan, so
-enrolment succeeded with the phone's secret while KV held another. Every agent login then passed the
-password and failed at MFA. Each failure costs reputation, so stop after one and compare
+**Why the helper's code and not the phone's.** Only a code computed from the stored copy proves the
+store holds *this* device's secret. On 2026-10-18 the QR changed between the screenshot and the phone
+scan, so enrolment succeeded with the phone's secret while the stored copy was another. Every agent
+login then passed the password and failed at MFA. Each failure costs reputation, so stop after one and compare
 `claude-e2e totp` with the app: different codes mean re-enrol.
 
 ### Verifying
 
-```bash
-export BAO_ADDR=https://vault.server3.homelab.irha.cz
-T=$(kubectl --context admin@server3 -n openbao create token claude-e2e --duration=10m \
-  | bao write -field=token auth/kubernetes-server3/login role=claude-e2e jwt=-)
-BAO_TOKEN=$T bao kv get -format=json secret/agents/e2e-claude | jq '.data.data | keys'  # the three keys
-BAO_TOKEN=$T bao kv get secret/server3/grafana                                         # must be 403
-unset T
+One real login as `claude` through the skill's Playwright recipe. That is the only check that covers
+the password, the TOTP secret and the helper that delivers them.
+
+### The no-roles user `claude-norole`
+
+`claude-norole` is a second permanent user for **negative tests**: proof that someone who can log in
+but holds no application role is refused. `claude` cannot do this job, because its groups are assigned
+per use case and drift. Everything else matches `claude`: password, mandatory MFA, the reputation
+throttle, the same local store and helper. The helper selects it with a leading flag:
+`claude-e2e --user noroles run -- <cmd>`.
+
+**Where the refusal happens** depends on the client the login goes through:
+
+| Login through | Result for `claude-norole` |
+|---|---|
+| The application's own client | Authentik's *Permission denied*, from the application's role-group bindings. No token is issued and the app never sees the user |
+| A shared `kind: client` application, as a member of its gate group | A token with no roles for the target API, which answers `403` |
+
+**Group rule: client gate groups only.** A gate group decides who may hold a token and grants nothing at
+any API: `knowledge-base-mcp-clients-user`, `postman-user`. Never a role group (`<slug>-reader`,
+`-editor`, `-admin`, which become the `<app>.reader`, `.editor`, `.admin` claims), and never a proxy gate
+(`longhorn-*`, `hubble-*`, `traefik-*`), which grants the UI itself. One role group and the negative
+tests for that application prove nothing. Without the gate group the opposite happens: login stops at
+Authentik and the app's `403` is never reached. A new shared client therefore needs `claude-norole`
+added to its gate group, in the UI like every membership.
+
+**Its own lockout counter.** The reputation score is keyed on the username, so `claude-norole` and
+`claude` fail independently: five failures lock out only the user that failed, for 24 hours. Unlock it
+with identifier `claude-norole` in § Unlocking someone who tripped it. Log in once per run, as for
+`claude`.
+
+#### Setting it up
+
+Once.
+
+```
+- [ ] Authentik → Directory → Users → Create: username `claude-norole`, a fresh random password, not
+      the username and not the password of `claude`.
+- [ ] Add it to the client gate groups the tests need (above), and to no other group.
+- [ ] Log in as `claude-norole` in a private window. MFA enrolment starts: pick the authenticator app.
+- [ ] Read the `otpauth://` link out of the QR code (`zbarimg -q --raw <screenshot>`, from
+      `brew install zbar`) and keep its `secret=` value.
+- [ ] Seed the local store: the helper's header comment.
+- [ ] Finish enrolment with the code from `claude-e2e --user noroles totp`, NOT from a phone app. Want
+      `claude-norole` in your app too? Scan the same QR afterwards.
+- [ ] Verify below.
 ```
 
-Then one real login as `claude` through the skill's Playwright recipe. That is the only check that
-covers the password and the TOTP secret, rather than the plumbing that delivers them.
+The helper's code is the only proof that the store holds *this* device's secret, for the reason under
+§ Setting it up above. If a login passes the password and fails at MFA, stop after one failure and
+compare `claude-e2e --user noroles totp` with the app: different codes mean re-enrol.
+
+#### Verifying
+
+Wait for the next 30-second window after enrolment, then log in once through the skill's recipe with
+`claude-e2e --user noroles run -- <cmd>` and assert the refusal from the table above.
 
 ## The login surface
 
