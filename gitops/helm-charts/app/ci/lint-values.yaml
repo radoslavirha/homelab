@@ -25,3 +25,5 @@ templates:
         property: password
     content: |
       {"url": "https://{{ .app.host }}/{{ .app.pathName }}", "password": {{ .secrets.password | toJson }}}
+migration:
+  enabled: true

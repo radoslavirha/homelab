@@ -106,6 +106,24 @@
 {{- end -}}
 {{- end -}}
 
+{{/* Validates migration. A typo here would silently fall back to a default, or disable
+     the deadline a stuck Job relies on.
+     Input is dictionary with migration: dictionary, applicationName: string
+*/}}
+{{- define "app.validators.migration" -}}
+{{- $allowed := list "enabled" "command" "args" "activeDeadlineSeconds" "resources" -}}
+{{- range $key, $_ := .migration -}}
+{{- if not (has $key $allowed) -}}
+{{- fail (printf "Unknown key '%s'. Allowed keys are: %s. [migration]." $key (join ", " $allowed)) -}}
+{{- end -}}
+{{- end -}}
+{{- range $key := list "command" "args" -}}
+{{- if and (hasKey $.migration $key) (not (kindIs "slice" (get $.migration $key))) -}}
+{{- fail (printf "migration.%s must be a list. [migration]." $key) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
 {{/* Validates template.
      Input is dictionary with name: string, template: dictionary, applicationName: string
 */}}
