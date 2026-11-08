@@ -129,9 +129,9 @@ data:
                 pod log in the cluster first: `kubectl --context admin@{{ $labels.cluster }}
                 -n {{ $labels.dest_namespace }} get pods --sort-by=.metadata.creationTimestamp`,
                 then `kubectl logs` the newest failed pod. The last attempt normally stays until
-                the next sync; earlier attempts are deleted by each retry. Loki keeps their output
-                only from the moment Alloy opened the log file, so the first seconds, or a fast
-                Job's entire output, can be missing:
+                the next sync; earlier attempts are deleted by each retry. On server1 Loki keeps
+                their whole output. On other clusters the first seconds, or a fast Job's entire
+                output, can be missing:
                 {k8s_cluster_name="{{ $labels.cluster }}", k8s_namespace_name="{{ $labels.dest_namespace }}"}.
 
           # ---------------------------------------------------------------------------
