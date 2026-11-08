@@ -1,0 +1,111 @@
+{{- $applicationName := .Release.Name -}}
+{{- $application := .Values -}}
+{{- $migration := $application.migration | default dict -}}
+{{- if $migration.enabled }}
+{{- include "app.validators.migration" (dict "migration" $migration "applicationName" $applicationName) }}
+{{- $ctx := dict "application" $application "name" $applicationName "release" $.Release "chart" $.Chart -}}
+{{- $resources := $migration.resources | default $application.resources | default dict -}}
+{{- $requests := $resources.requests | default dict -}}
+{{- $limits := $resources.limits | default dict -}}
+{{- $serviceAccount := $application.serviceAccount | default dict -}}
+{{- $args := $migration.args -}}
+{{- if not $args -}}
+{{- /* The distroless entrypoint is node, so args is node's argv: the same preload as the
+       server's CMD, then the app's command entry point. */}}
+{{- $args = concat (list "--import" "/home/app/dist/otel/instrument.js" "dist/cli.js") ($migration.command | default (list "migrate" "up")) -}}
+{{- end }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "app.identifier" $ctx | trunc 53 | trimSuffix "-" }}-migration
+  labels: {{ include "app.meta.labels" $ctx | nindent 4 }}
+  annotations:
+    {{- /* Sync, not PreSync: a PreSync hook runs before the wave -10 ExternalSecret, so the
+           Job would get the old config or none. Wave -1 is the last of the hook band, right
+           before the workload at 0: a failed Job stops the sync with the old pods serving. */}}
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/sync-wave: "-1"
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  {{- /* No Job-level retries: ArgoCD already retries a failed sync, recreating the Job. */}}
+  backoffLimit: 0
+  activeDeadlineSeconds: {{ $migration.activeDeadlineSeconds | default 600 }}
+  template:
+    metadata:
+      labels:
+        {{- /* name without instance: the app's NetworkPolicies select on name alone and apply
+               here, while its Services select name + instance and must not route to this pod. */}}
+        app.kubernetes.io/name: {{ $applicationName }}
+        app.kubernetes.io/component: migration
+      {{- /* Same log attributes as the workload's pods, see deployment.yaml. */}}
+      {{- $otelResource := dict "resource.opentelemetry.io/service.name" $applicationName }}
+      {{- with $application.image.tag }}
+      {{- $_ := set $otelResource "resource.opentelemetry.io/service.version" (. | toString) }}
+      {{- end }}
+      {{- with merge (deepCopy ($application.podAnnotations | default dict)) $otelResource }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      restartPolicy: Never
+      {{- if or $serviceAccount.create $serviceAccount.name }}
+      serviceAccountName: {{ include "app.serviceAccountName" $ctx }}
+      {{- end }}
+      {{- with $application.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $application.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: migration
+          image: {{ $application.image.repository }}:{{ include "app.defaults.tag" $application.image.tag }}
+          imagePullPolicy: {{ $application.image.pullPolicy | default "IfNotPresent" }}
+          args:
+            {{- toYaml $args | nindent 12 }}
+          {{- with $application.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          resources:
+            requests:
+              cpu: {{ $requests.cpu | default "250m" | quote }}
+              memory: {{ $requests.memory | default "250Mi" | quote }}
+            limits:
+              cpu: {{ $limits.cpu | default "500m" | quote }}
+              memory: {{ $limits.memory | default "500Mi" | quote }}
+          {{- if $application.secretRefs | default list | len }}
+          envFrom:
+            {{- range $secretRef := $application.secretRefs | default list }}
+            - secretRef:
+                name: {{ $secretRef.name }}
+            {{- end }}
+          {{- end }}
+          {{- if $application.env | default list | len }}
+          env:
+            {{- toYaml $application.env | nindent 12 }}
+          {{- end }}
+          {{- if $application.templates | default dict | len }}
+          volumeMounts:
+            {{- include "app.template.volumeMounts" (dict "ctx" $ctx "application" $application) | nindent 12 }}
+          {{- end }}
+      {{- with $application.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $application.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $application.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if $application.templates | default dict | len }}
+      volumes:
+        {{- include "app.template.volumes" (dict "ctx" $ctx "application" $application) | nindent 8 }}
+      {{- end }}
+{{- end }}

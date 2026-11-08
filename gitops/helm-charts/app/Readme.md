@@ -140,10 +140,30 @@ ArgoCD applies the chart's resources in three bands. Everything a pod needs come
 |---|---|---|
 | `-11` | pod prerequisites | ESO `UUID` generator (templates without `secrets`) — before the ExternalSecret that references it |
 | `-10` | pod prerequisites | ExternalSecret (the rendered config Secret), ServiceAccount (`serviceAccount.create`) |
-| `-9` … `-1` | hooks | free for `Sync` hook Jobs, e.g. database migrations |
+| `-9` … `-1` | hooks | `Sync` hook Jobs: the [migration Job](#migration-job-migration) at `-1`, the rest free |
 | `0` | workload | Deployment / Rollout, Services, HTTPRoute, Middleware |
 
 A hook Job mounts the rendered config and runs as the app's ServiceAccount. Were either at wave `0`, a first install would reject the Job's pod and hang the sync until the Job's deadline. Keep new pod prerequisites in `-11`/`-10` and new hooks in `-9`…`-1`.
+
+## Migration Job (`migration`)
+
+`migration.enabled: true` adds a Job that runs before the workload on **every** sync, values-only changes included. It is a `Sync` hook at wave `-1`, so the rendered config and the ServiceAccount exist first. Its pod uses the app's image, config mounts, `env`, `secretRefs`, ServiceAccount, security contexts and scheduling. It does not get the projected ServiceAccount token.
+
+```yaml
+migration:
+  enabled: true
+```
+
+| Key | Default | |
+|---|---|---|
+| `command` | `[migrate, up]` | What the app's `dist/cli.js` runs: `node --import /home/app/dist/otel/instrument.js dist/cli.js <command>` |
+| `args` | none | Replaces node's whole argv and wins over `command` |
+| `activeDeadlineSeconds` | `600` | Fails a stuck Job |
+| `resources` | the app's `resources` | Replaces them as a block |
+
+**A failure stops the rollout.** The Job has `backoffLimit: 0`, but ArgoCD retries the sync 5 times and each retry recreates the Job, so a failing command runs up to 6 times and must be safe to repeat. After that the sync ends `Failed`, the old pods keep serving and the app stays OutOfSync, because the workload at wave `0` was never applied. `BeforeHookCreation` deletes the failed Job on each retry, so its output survives in Loki, not in the cluster. Read `status.operationState.syncResult`, not the `Synced` badge.
+
+The pod is labelled `app.kubernetes.io/name` and `app.kubernetes.io/component: migration`, without `instance`: the app's NetworkPolicies apply, its Services do not route to it.
 
 ## Runtime environment secrets (`secretRefs`)
 

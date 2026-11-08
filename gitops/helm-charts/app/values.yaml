@@ -308,6 +308,22 @@
 #       - SECRET_MQTT_MIOT_BRIDGE_USERNAME
 #       - SECRET_MQTT_MIOT_BRIDGE_PASSWORD
 
+# # migration renders a Job that runs one-off work before the workload, on EVERY sync:
+# # an ArgoCD Sync hook at wave -1, from the app's own image, with its config, environment,
+# # ServiceAccount and security contexts. A failed Job fails the sync and the old pods keep
+# # serving; what it runs must be safe to repeat. Off by default.
+# migration:
+#   enabled: false
+#   # migration.command is what the app's dist/cli.js runs. Defaults to [migrate, up].
+#   command: [migrate, up]
+#   # migration.args replaces node's whole argv and wins over command. For a one-off or a
+#   # placeholder, not for an app with a command entry point.
+#   args: []
+#   # migration.activeDeadlineSeconds fails a stuck Job. Defaults to 600.
+#   activeDeadlineSeconds: 600
+#   # migration.resources replaces the app's resources for the Job. Defaults to them.
+#   resources: {}
+
 # # rollout is the Argo Rollouts configuration. Defaults to standard Deployment when not set or enabled: false.
 # rollout:
 #   # rollout.enabled controls whether an Argo Rollout is emitted instead of a Deployment.
