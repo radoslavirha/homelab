@@ -16,7 +16,7 @@ image:
 # only parses the rendered config. No database contact.
 migration:
   enabled: true
-  args: ["-e", "JSON.parse(require('node:fs').readFileSync('/home/app/config/production.json', 'utf8'))"]
+  args: ["-e", "process.exit(1)"]
 # The qr-manager-ui origin for this stage (its HTTPRoute host). Only the origin differs per
 # stage; the rest of ingress.cors is in values.yaml and merges in.
 ingress:
