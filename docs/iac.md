@@ -471,7 +471,7 @@ Provider `hashicorp/vault` `5.x` and Terraform `>= 1.11`. The client secret is r
 | `oidc_groups` | map(object) | — | `roles` claim value → `{ policy_name, policy }`. One ACL policy, one external group and one group alias per entry |
 | `kubernetes_provisioner_role_name` | string | `"provisioner"` | Role name created on every mount in `kubernetes_provisioner_roles` |
 | `kubernetes_provisioner_roles` | map(object) | `{}` | CLI-created mount path → `{ service_account_name, namespaces, token_policies, token_ttl }`. Roles only; mounts and policies stay on the CLI |
-| `kubernetes_agent_roles` | map(object) | `{}` | Role name → `{ mount, service_account_name, namespace, policy, token_ttl = 600 }`. One role and one ACL policy of the same name per entry. Today: `claude-e2e`, see [identity.md](identity.md#the-e2e-test-user) |
+| `kubernetes_agent_roles` | map(object) | `{}` | Role name → `{ mount, service_account_name, namespace, policy, token_ttl = 600 }`. One role and one ACL policy of the same name per entry. Unused today |
 
 Outputs: `oidc_mount_accessor`
 

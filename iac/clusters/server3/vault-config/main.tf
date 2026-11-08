@@ -69,19 +69,6 @@ module "vault_config" {
     }
   }
 
-  # ── Kubernetes auth — agent roles ──────────────────────────────────────────
-  # claude-e2e: coding agents read the Authentik E2E test user's credentials, logging in with a
-  # 10-minute token for the RBAC-less ServiceAccount in
-  # gitops/k8s-manifests/server3/openbao/. Why and how: docs/identity.md § The E2E test user.
-  kubernetes_agent_roles = {
-    "claude-e2e" = {
-      mount                = "kubernetes-server3"
-      service_account_name = "claude-e2e"
-      namespace            = "openbao"
-      policy               = file("${path.root}/policies/claude-e2e.hcl")
-    }
-  }
-
   # Keys are `roles` claim values from the Authentik ladder (docs/identity.md). An admin's token
   # carries all three, so an admin holds all three policies.
   oidc_groups = {
