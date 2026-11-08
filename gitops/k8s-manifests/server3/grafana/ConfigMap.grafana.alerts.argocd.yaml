@@ -125,8 +125,13 @@ data:
                 spent and the same commit is not tried again, so it stays broken until a new
                 commit or a manual sync. Read the operation message first:
                 `kubectl --context admin@server3 -n argocd get application {{ $labels.name }}
-                -o jsonpath='{.status.operationState.message}'`. If a hook Job failed, it may
-                already be gone — each retry deletes it — and then its output is only in Loki:
+                -o jsonpath='{.status.operationState.message}'`. If a hook Job failed, read its
+                pod log in the cluster first: `kubectl --context admin@{{ $labels.cluster }}
+                -n {{ $labels.dest_namespace }} get pods --sort-by=.metadata.creationTimestamp`,
+                then `kubectl logs` the newest failed pod. The last attempt normally stays until
+                the next sync; earlier attempts are deleted by each retry. Loki keeps their output
+                only from the moment Alloy opened the log file, so the first seconds, or a fast
+                Job's entire output, can be missing:
                 {k8s_cluster_name="{{ $labels.cluster }}", k8s_namespace_name="{{ $labels.dest_namespace }}"}.
 
           # ---------------------------------------------------------------------------
