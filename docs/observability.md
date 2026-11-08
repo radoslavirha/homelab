@@ -866,13 +866,16 @@ contradicted the design:
   — and Grafana renders an invalid template as plain text, so the instance carried the literal
   template as its severity and matched neither route. Annotations keep `$labels` intact. In a
   label template write `.Labels.<name>`.
-- **A failed hook Job often does not stay around.** ArgoCD v3.5 attached `retry: {limit: 5}` to
+- **A failed hook Job is replaced on every retry.** ArgoCD v3.5 attached `retry: {limit: 5}` to
   the automated and API-patched syncs here even though `spec.syncPolicy` has none, and each
   retry's `BeforeHookCreation` deletes the failed Job before recreating it. When the retries run
-  out the operation ends `Failed` (`retried 5 times`) with **no Job left**, so "Job failed"
-  catches the hook only during a backoff gap. A sync started from the UI had no retries, left the
-  failed Job in place, and "Job failed" fired. **For hooks, "ArgoCD sync failed" is the alert that counts**; "Job
-  failed" is for Jobs no sync deletes. The hook's output survives only in Loki.
+  out the operation ends `Failed` (`retried 5 times`), and the last attempt's Job and pod stay
+  until the next sync's `BeforeHookCreation`: on 2026-11-08 the final failed pod was still there
+  12 minutes later, gone only when the next sync started. A sync started from the UI had no
+  retries, left the failed Job in place, and "Job failed" fired. **For hooks, "ArgoCD sync failed"
+  is the alert that counts**; "Job failed" is for Jobs no sync deletes. Read the last attempt's
+  log in the cluster first. Loki has the output of earlier attempts only from the moment Alloy
+  opened the log file, so the first seconds, or a fast Job's entire output, can be missing.
 - **The counter counts operations, not attempts.** `argocd_app_sync_total` takes the operation's
   *final* phase. A failed attempt followed by a successful retry adds one `Succeeded` and no
   `Failed`, so it raises nothing.
