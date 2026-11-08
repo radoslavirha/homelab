@@ -3,6 +3,30 @@
 cluster:
   name: server1
 
+# Keep Alloy's storage, including the log tail positions, across container replacements.
+# The default /tmp/alloy lives in the container's writable layer, so every replacement forgets
+# where each log file was. server1 only: hook Jobs run here, and a Job's first seconds of output
+# are lost while podLogsViaLoki.onlyGatherNewLogLines is true. Turning that off is only safe once
+# positions persist, otherwise each Alloy replacement re-reads every log on the node.
+#
+# hostPath has no `type` on purpose. Talos runs the kubelet in its own mount namespace with no view
+# of /var/lib/alloy, so a type check would run against the wrong filesystem. With no type, containerd
+# creates the directory on the host, as it did for /var/lib/docker/containers in this DaemonSet.
+collectors:
+  alloy-receiver:
+    alloy:
+      storagePath: /var/lib/alloy
+      mounts:
+        extra:
+          - name: alloy-storage
+            mountPath: /var/lib/alloy
+    controller:
+      volumes:
+        extra:
+          - name: alloy-storage
+            hostPath:
+              path: /var/lib/alloy
+
 destinations:
   server3:
     type: otlp
