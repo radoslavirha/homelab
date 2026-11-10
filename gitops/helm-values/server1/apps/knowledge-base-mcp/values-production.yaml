@@ -39,8 +39,8 @@ templates:
               "httpPort": {{ .app.containerPort }}
           },
           "publicURL": "{{ .vars.protocol }}://{{ .app.host }}/{{ .app.pathName }}",
-          "mcpServers": {
-              "DEVELOPMENT_KB": {
+          "mcpServers": [
+              {
                   "path": "/development",
                   "kb": "development",
                   "name": "development-kb",
@@ -60,7 +60,7 @@ templates:
                       "scopes": ["openid", "profile", "email", "roles", "offline_access"]
                   }
               },
-              "LOXONE_KB": {
+              {
                   "path": "/loxone",
                   "kb": "loxone",
                   "name": "loxone-kb",
@@ -80,7 +80,7 @@ templates:
                       "scopes": ["openid", "profile", "email", "roles", "offline_access"]
                   }
               }
-          },
+          ],
           "externalApis": {
               "KNOWLEDGE_BASE_API": {
                   "baseURL": "http://api-knowledge-base-knowledge-base-api-http.{{ .app.namespace }}.svc.cluster.local",

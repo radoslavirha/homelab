@@ -17,7 +17,7 @@ serviceAccount:
   # No ambient token: automount would give every pod a long-lived,
   # full-audience one.
   automountServiceAccountToken: false
-  # Off: it trusts Authentik issuers only (mcpServers.*.auth in values-production.yaml) and
+  # Off: it trusts Authentik issuers only (mcpServers[].auth in values-production.yaml) and
   # calls no Kubernetes API.
   projectedToken:
     enabled: false
