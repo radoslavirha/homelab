@@ -11,7 +11,7 @@
 # promoted once a sandbox rollout had been watched.
 
 image:
-  tag: "0.10.12"
+  tag: "0.10.13"
 # Placeholder until the app has a command entry point: proves the chart's migration Job and
 # only parses the rendered config. No database contact.
 migration:
