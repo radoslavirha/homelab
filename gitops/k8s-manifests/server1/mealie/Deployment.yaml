@@ -57,7 +57,7 @@ spec:
       # skips the chown and Mealie cannot write /app/data.
       containers:
         - name: mealie
-          image: ghcr.io/mealie-recipes/mealie:v3.30.0
+          image: ghcr.io/mealie-recipes/mealie:v3.31.0
           ports:
             - name: http
               # 9000 is Mealie's API_PORT default and upstream says not to change
