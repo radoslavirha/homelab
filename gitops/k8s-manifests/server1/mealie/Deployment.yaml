@@ -3,7 +3,7 @@
 # own pre-built frontend, so there is no nginx sidecar and no second image.
 #
 # ── The image tag is the version ────────────────────────────────────────────
-# There is no chart and no `targetRevision` to bump, so v3.30.0 below IS the
+# There is no chart and no `targetRevision` to bump, so the tag below IS the
 # pinned version of this app. Renovate sees it through the `kubernetes` manager
 # pattern for gitops/k8s-manifests/ in renovate.json5 — that manager ships no
 # default patterns, so removing the pattern makes this line silently invisible.
